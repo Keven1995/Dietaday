@@ -1,0 +1,17 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:dietapp;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+
+app:
+  jwt:
+    secret: test-secret-that-is-long-enough-for-hmac-sha256
+    expiration-minutes: 60
+  frontend-url: http://localhost:3000
