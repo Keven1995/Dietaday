@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
-import { initialDiets } from '../data'
+import { getDemoDiets } from '../data'
 import { api, getErrorMessage, isDemoMode } from '../lib/api'
 import type { CreateDietRequest, Diet } from '../types'
 import { useAuth } from './AuthContext'
@@ -36,7 +36,7 @@ export function DietProvider({ children }: { children: ReactNode }) {
     setLoading(true)
     setError('')
     try {
-      const data = isDemoMode ? initialDiets : await api<Diet[]>('/diets', { token, signal })
+      const data = isDemoMode ? getDemoDiets() : await api<Diet[]>('/diets', { token, signal })
       if (signal?.aborted || requestId !== requestIdRef.current) return
       setDiets(data)
       setActiveDietId((current) => {

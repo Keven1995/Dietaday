@@ -38,7 +38,7 @@ function TodayMeals({ meals, loading }: { meals: Meal[]; loading: boolean }) {
   return (
     <section>
       <div className="section-heading">
-        <div><span>HOJE</span><h2>Suas refeições</h2></div>
+        <div><span>HOJE</span><h2>Refeições da dieta</h2></div>
         <Link to="/historico">Ver histórico <ArrowRight size={16} /></Link>
       </div>
       {loading ? <p className="loading-text">Carregando refeições...</p> : meals.length ? (
@@ -46,7 +46,11 @@ function TodayMeals({ meals, loading }: { meals: Meal[]; loading: boolean }) {
           {meals.map((meal, index) => (
             <article className="meal-row" key={meal.id}>
               <div className={`meal-icon tone-${index}`}><Camera size={19} /></div>
-              <div><span>{meal.mealType}</span><h3>{meal.description}</h3></div>
+              <div className="meal-content">
+                <span>{meal.mealType}</span>
+                <h3>{meal.description}</h3>
+                <div className="meal-author"><i aria-hidden="true">{getInitials(meal.authorName)}</i><small>{meal.authorName}</small></div>
+              </div>
               <time dateTime={meal.createdAt}>{mealTime(meal.createdAt)}</time>
             </article>
           ))}
