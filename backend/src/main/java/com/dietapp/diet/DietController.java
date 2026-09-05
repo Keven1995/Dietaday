@@ -51,14 +51,14 @@ public class DietController {
         service.delete(dietId);
     }
 
-    @PostMapping("/{dietId}/members/invite")
-    @ResponseStatus(HttpStatus.CREATED)
-    public MemberResponse invite(@PathVariable UUID dietId, @Valid @RequestBody InviteRequest request) {
-        return MemberResponse.from(service.invite(dietId, request.email()));
-    }
-
     @GetMapping("/{dietId}/members")
     public List<MemberResponse> members(@PathVariable UUID dietId) {
         return service.listMembers(dietId).stream().map(MemberResponse::from).toList();
+    }
+
+    @PostMapping("/{dietId}/leave")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void leave(@PathVariable UUID dietId, @Valid @RequestBody LeaveDietRequest request) {
+        service.leave(dietId, request.successorId());
     }
 }

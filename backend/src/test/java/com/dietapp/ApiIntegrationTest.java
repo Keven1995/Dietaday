@@ -132,11 +132,10 @@ class ApiIntegrationTest {
         JsonNode member = register("Restricted Member", memberEmail);
         String dietId = createDiet(owner, "Owner Diet");
 
-        mvc.perform(post("/api/diets/{id}/members/invite", dietId)
-                        .header("Authorization", bearer(owner))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new EmailRequest(memberEmail))))
-                .andExpect(status().isCreated());
+        String invitationId = invite(owner, dietId, memberEmail);
+        mvc.perform(post("/api/invitations/{id}/accept", invitationId)
+                        .header("Authorization", bearer(member)))
+                .andExpect(status().isNoContent());
 
         mvc.perform(put("/api/diets/{id}", dietId)
                         .header("Authorization", bearer(member))
@@ -177,7 +176,7 @@ class ApiIntegrationTest {
     }
 
     @Test
-    void onlyMembersCanAccessDietAndOwnerCanInviteRegisteredUser() throws Exception {
+    void pendingInvitationDoesNotGrantAccessAndAcceptanceCreatesMembership() throws Exception {
         String ownerEmail = "owner-" + UUID.randomUUID() + "@example.com";
         String memberEmail = "member-" + UUID.randomUUID() + "@example.com";
         JsonNode owner = register("Owner", ownerEmail);
@@ -196,19 +195,52 @@ class ApiIntegrationTest {
         mvc.perform(get("/api/diets/{id}", dietId).header("Authorization", bearer(member)))
                 .andExpect(status().isNotFound());
 
-        mvc.perform(post("/api/diets/{id}/members/invite", dietId)
+        String invitationJson = mvc.perform(post("/api/diets/{id}/invitations", dietId)
                         .header("Authorization", bearer(owner))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new EmailRequest(memberEmail))))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.role").value("MEMBER"));
+                .andExpect(jsonPath("$.id").isNotEmpty())
+                .andExpect(jsonPath("$.dietId").value(dietId))
+                .andExpect(jsonPath("$.dietName").value("Cutting"))
+                .andExpect(jsonPath("$.inviterId").value(owner.get("userId").asText()))
+                .andExpect(jsonPath("$.inviterName").value("Owner"))
+                .andExpect(jsonPath("$.createdAt").isNotEmpty())
+                .andReturn().getResponse().getContentAsString();
+        String invitationId = objectMapper.readTree(invitationJson).get("id").asText();
 
-        mvc.perform(post("/api/diets/{id}/members/invite", dietId)
+        mvc.perform(post("/api/diets/{id}/invitations", dietId)
                         .header("Authorization", bearer(owner))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new EmailRequest(memberEmail))))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.message").value("User is already a member"));
+                .andExpect(jsonPath("$.message").value("A pending invitation already exists for this user"));
+
+        mvc.perform(get("/api/invitations").header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
+
+        mvc.perform(get("/api/invitations").header("Authorization", bearer(member)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(invitationId))
+                .andExpect(jsonPath("$[0].dietId").value(dietId))
+                .andExpect(jsonPath("$[1]").doesNotExist());
+
+        mvc.perform(get("/api/diets/{id}", dietId).header("Authorization", bearer(member)))
+                .andExpect(status().isNotFound());
+
+        mvc.perform(post("/api/invitations/{id}/accept", invitationId)
+                        .header("Authorization", bearer(member)))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(post("/api/invitations/{id}/accept", invitationId)
+                        .header("Authorization", bearer(member)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Invitation has already been answered"));
+
+        mvc.perform(get("/api/invitations").header("Authorization", bearer(member)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
 
         mvc.perform(get("/api/diets/{id}", dietId).header("Authorization", bearer(member)))
                 .andExpect(status().isOk())
@@ -262,6 +294,165 @@ class ApiIntegrationTest {
                 .andExpect(status().isNoContent());
     }
 
+    @Test
+    void onlyInviteeCanAnswerAndDeclineIsFinal() throws Exception {
+        String inviteeEmail = "decline-invitee-" + UUID.randomUUID() + "@example.com";
+        JsonNode owner = register("Decline Owner", "decline-owner-" + UUID.randomUUID() + "@example.com");
+        JsonNode invitee = register("Decline Invitee", inviteeEmail);
+        JsonNode other = register("Other User", "other-" + UUID.randomUUID() + "@example.com");
+        String dietId = createDiet(owner, "Declined Diet");
+        String invitationId = invite(owner, dietId, inviteeEmail);
+
+        mvc.perform(post("/api/invitations/{id}/decline", invitationId)
+                        .header("Authorization", bearer(other)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Only the invited user can answer this invitation"));
+
+        mvc.perform(post("/api/invitations/{id}/accept", invitationId)
+                        .header("Authorization", bearer(owner)))
+                .andExpect(status().isForbidden());
+
+        mvc.perform(post("/api/invitations/{id}/decline", invitationId)
+                        .header("Authorization", bearer(invitee)))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(post("/api/invitations/{id}/decline", invitationId)
+                        .header("Authorization", bearer(invitee)))
+                .andExpect(status().isConflict());
+
+        mvc.perform(get("/api/invitations").header("Authorization", bearer(invitee)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
+        mvc.perform(get("/api/diets/{id}", dietId).header("Authorization", bearer(invitee)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void onlyOwnerCanInviteAndSelfOrExistingMemberCannotBeInvited() throws Exception {
+        String memberEmail = "rules-member-" + UUID.randomUUID() + "@example.com";
+        JsonNode owner = register("Rules Owner", "rules-owner-" + UUID.randomUUID() + "@example.com");
+        JsonNode member = register("Rules Member", memberEmail);
+        JsonNode outsider = register("Rules Outsider", "rules-outsider-" + UUID.randomUUID() + "@example.com");
+        String dietId = createDiet(owner, "Rules Diet");
+
+        mvc.perform(post("/api/diets/{id}/invitations", dietId)
+                        .header("Authorization", bearer(owner))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new EmailRequest(owner.get("email").asText()))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("You cannot invite yourself"));
+
+        String invitationId = invite(owner, dietId, memberEmail);
+        mvc.perform(post("/api/invitations/{id}/accept", invitationId)
+                        .header("Authorization", bearer(member)))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(post("/api/diets/{id}/invitations", dietId)
+                        .header("Authorization", bearer(owner))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new EmailRequest(memberEmail))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("User is already a member"));
+
+        mvc.perform(post("/api/diets/{id}/invitations", dietId)
+                        .header("Authorization", bearer(member))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new EmailRequest(outsider.get("email").asText()))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Only the diet owner can invite users"));
+
+        mvc.perform(post("/api/diets/{id}/invitations", dietId)
+                        .header("Authorization", bearer(outsider))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new EmailRequest(memberEmail))))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void memberLeavesWithoutDeletingMealHistoryOrAuthorship() throws Exception {
+        String memberEmail = "leaving-member-" + UUID.randomUUID() + "@example.com";
+        JsonNode owner = register("Leave Owner", "leave-owner-" + UUID.randomUUID() + "@example.com");
+        JsonNode member = register("Leaving Member", memberEmail);
+        String dietId = createDiet(owner, "Leave Diet");
+        joinDiet(owner, member, dietId, memberEmail);
+
+        mvc.perform(post("/api/diets/{dietId}/meals", dietId)
+                        .header("Authorization", bearer(member))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"mealType":"LUNCH","description":"Meal before leaving",
+                                 "mealDate":"2026-09-04"}
+                                """))
+                .andExpect(status().isCreated());
+
+        leaveDiet(member, dietId, null).andExpect(status().isNoContent());
+
+        mvc.perform(get("/api/diets/{id}", dietId).header("Authorization", bearer(member)))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/diets/{dietId}/meals", dietId).header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].description").value("Meal before leaving"))
+                .andExpect(jsonPath("$[0].authorId").value(member.get("userId").asText()))
+                .andExpect(jsonPath("$[0].authorName").value("Leaving Member"));
+    }
+
+    @Test
+    void ownerTransfersOwnershipAndLeaves() throws Exception {
+        String successorEmail = "successor-" + UUID.randomUUID() + "@example.com";
+        JsonNode owner = register("Transfer Owner", "transfer-owner-" + UUID.randomUUID() + "@example.com");
+        JsonNode successor = register("Successor", successorEmail);
+        String dietId = createDiet(owner, "Transfer Diet");
+        joinDiet(owner, successor, dietId, successorEmail);
+
+        leaveDiet(owner, dietId, UUID.fromString(successor.get("userId").asText()))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(get("/api/diets/{id}", dietId).header("Authorization", bearer(owner)))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/diets/{id}/members", dietId).header("Authorization", bearer(successor)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].userId").value(successor.get("userId").asText()))
+                .andExpect(jsonPath("$[0].role").value("OWNER"))
+                .andExpect(jsonPath("$[1]").doesNotExist());
+    }
+
+    @Test
+    void soleOwnerCannotLeave() throws Exception {
+        JsonNode owner = register("Sole Owner", "sole-owner-" + UUID.randomUUID() + "@example.com");
+        String dietId = createDiet(owner, "Sole Diet");
+
+        leaveDiet(owner, dietId, null)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("The only owner cannot leave the diet"));
+
+        mvc.perform(get("/api/diets/{id}", dietId).header("Authorization", bearer(owner)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void ownerCannotTransferToSelfInvalidUserOrMemberOfAnotherDiet() throws Exception {
+        String memberEmail = "valid-successor-" + UUID.randomUUID() + "@example.com";
+        String outsiderEmail = "other-diet-member-" + UUID.randomUUID() + "@example.com";
+        JsonNode owner = register("Invalid Successor Owner", "invalid-owner-" + UUID.randomUUID() + "@example.com");
+        JsonNode member = register("Valid Successor", memberEmail);
+        JsonNode outsider = register("Other Diet Member", outsiderEmail);
+        String dietId = createDiet(owner, "Successor Rules");
+        String otherDietId = createDiet(outsider, "Other Diet");
+        joinDiet(owner, member, dietId, memberEmail);
+
+        leaveDiet(owner, dietId, UUID.fromString(owner.get("userId").asText()))
+                .andExpect(status().isBadRequest());
+        leaveDiet(owner, dietId, UUID.randomUUID())
+                .andExpect(status().isBadRequest());
+        leaveDiet(owner, dietId, UUID.fromString(outsider.get("userId").asText()))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(get("/api/diets/{id}", dietId).header("Authorization", bearer(owner)))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/diets/{id}", otherDietId).header("Authorization", bearer(outsider)))
+                .andExpect(status().isOk());
+    }
+
     private JsonNode register(String name, String email) throws Exception {
         String response = mvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -282,6 +473,31 @@ class ApiIntegrationTest {
         return objectMapper.readTree(response).get("id").asText();
     }
 
+    private String invite(JsonNode owner, String dietId, String email) throws Exception {
+        String response = mvc.perform(post("/api/diets/{id}/invitations", dietId)
+                        .header("Authorization", bearer(owner))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new EmailRequest(email))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(response).get("id").asText();
+    }
+
+    private void joinDiet(JsonNode owner, JsonNode member, String dietId, String memberEmail) throws Exception {
+        String invitationId = invite(owner, dietId, memberEmail);
+        mvc.perform(post("/api/invitations/{id}/accept", invitationId)
+                        .header("Authorization", bearer(member)))
+                .andExpect(status().isNoContent());
+    }
+
+    private org.springframework.test.web.servlet.ResultActions leaveDiet(
+            JsonNode user, String dietId, UUID successorId) throws Exception {
+        return mvc.perform(post("/api/diets/{id}/leave", dietId)
+                .header("Authorization", bearer(user))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(new LeaveRequest(successorId))));
+    }
+
     private String bearer(JsonNode auth) {
         return "Bearer " + auth.get("token").asText();
     }
@@ -290,4 +506,5 @@ class ApiIntegrationTest {
     private record LoginRequest(String email, String password) {}
     private record DietRequest(String name, String startDate, String endDate) {}
     private record EmailRequest(String email) {}
+    private record LeaveRequest(UUID successorId) {}
 }
