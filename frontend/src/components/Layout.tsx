@@ -1,6 +1,7 @@
 import { CalendarDays, Home, Salad, UserRound, Users } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../state/AuthContext'
+import { InvitationNotifications } from './InvitationNotifications'
 
 const nav = [
   { to: '/', label: 'Início', icon: Home },
@@ -26,6 +27,7 @@ export function Layout() {
 
   return (
     <div className="app-shell">
+      <div className="layout-notifications"><InvitationNotifications /></div>
       <aside className="side-nav">
         <div className="brand">
           <span className="brand-mark">N</span>

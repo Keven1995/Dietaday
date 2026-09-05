@@ -5,29 +5,22 @@ import com.dietapp.common.ConflictException;
 import com.dietapp.common.ForbiddenException;
 import com.dietapp.common.NotFoundException;
 import com.dietapp.security.CurrentUser;
-import com.dietapp.user.User;
-import com.dietapp.user.UserRepository;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Locale;
 import java.util.UUID;
 
 @Service
 public class DietService {
     private final DietRepository diets;
     private final DietMemberRepository members;
-    private final UserRepository users;
     private final CurrentUser currentUser;
 
-    public DietService(DietRepository diets, DietMemberRepository members,
-                       UserRepository users, CurrentUser currentUser) {
+    public DietService(DietRepository diets, DietMemberRepository members, CurrentUser currentUser) {
         this.diets = diets;
         this.members = members;
-        this.users = users;
         this.currentUser = currentUser;
     }
 
@@ -63,25 +56,45 @@ public class DietService {
         diets.deleteById(dietId);
     }
 
-    @Transactional
-    public DietMember invite(UUID dietId, String email) {
-        Diet diet = requireOwner(dietId);
-        User user = users.findByEmailIgnoreCase(email.trim().toLowerCase(Locale.ROOT))
-                .orElseThrow(() -> new NotFoundException("No registered user has this email"));
-        if (members.existsByDietIdAndUserId(dietId, user.getId())) {
-            throw new ConflictException("User is already a member");
-        }
-        try {
-            return members.saveAndFlush(new DietMember(diet, user, DietMember.Role.MEMBER));
-        } catch (DataIntegrityViolationException exception) {
-            throw new ConflictException("User is already a member", exception);
-        }
-    }
-
     @Transactional(readOnly = true)
     public List<DietMember> listMembers(UUID dietId) {
         requireMember(dietId);
         return members.findAllByDietId(dietId);
+    }
+
+    @Transactional
+    public void leave(UUID dietId, UUID successorId) {
+        diets.findForUpdateById(dietId)
+                .orElseThrow(() -> new NotFoundException("Diet not found"));
+
+        DietMember membership = members.findByDietIdAndUserId(dietId, currentUser.id())
+                .orElseThrow(() -> new NotFoundException("Diet not found"));
+        if (membership.getRole() == DietMember.Role.MEMBER) {
+            if (successorId != null) {
+                throw new BadRequestException("A member cannot appoint a successor");
+            }
+            members.delete(membership);
+            return;
+        }
+
+        List<DietMember> currentMembers = members.findAllByDietId(dietId);
+        if (currentMembers.size() == 1) {
+            throw new ConflictException("The only owner cannot leave the diet");
+        }
+        if (successorId == null) {
+            throw new BadRequestException("successorId is required for the owner to leave");
+        }
+        if (successorId.equals(currentUser.id())) {
+            throw new BadRequestException("The owner cannot appoint themselves as successor");
+        }
+
+        DietMember successor = currentMembers.stream()
+                .filter(member -> member.getUser().getId().equals(successorId))
+                .filter(member -> member.getRole() == DietMember.Role.MEMBER)
+                .findFirst()
+                .orElseThrow(() -> new BadRequestException("Successor must be a current member of the diet"));
+        successor.promoteToOwner();
+        members.delete(membership);
     }
 
     private Diet requireOwner(UUID dietId) {

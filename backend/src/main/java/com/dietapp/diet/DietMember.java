@@ -46,4 +46,8 @@ public class DietMember {
     public Diet getDiet() { return diet; }
     public User getUser() { return user; }
     public Role getRole() { return role; }
+
+    public void promoteToOwner() {
+        this.role = Role.OWNER;
+    }
 }

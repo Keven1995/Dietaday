@@ -1,9 +1,34 @@
-import type { Diet, Meal, Member } from './types'
+import type { Diet, Invitation, Meal, Member } from './types'
 
 export const initialDiets: Diet[] = [
   { id: '1', name: 'Equilíbrio diário', startDate: '2026-09-01', endDate: '2026-09-30' },
   { id: '2', name: 'Mais energia', startDate: '2026-10-01', endDate: '2026-10-21' },
 ]
+
+const invitedDemoDiet: Diet = { id: '3', name: 'Hábitos em família', startDate: '2026-09-05', endDate: '2026-10-05' }
+let demoInvitationResponse: 'accepted' | 'declined' | null = null
+const leftDemoDietIds = new Set<string>()
+
+export const initialInvitations: Invitation[] = [
+  { id: 'demo-invitation-1', dietId: invitedDemoDiet.id, dietName: invitedDemoDiet.name, inviterId: '2', inviterName: 'Rafael Lima', createdAt: '2026-09-05T09:00:00Z' },
+]
+
+export function getDemoDiets() {
+  const diets = demoInvitationResponse === 'accepted' ? [...initialDiets, invitedDemoDiet] : initialDiets
+  return diets.filter((diet) => !leftDemoDietIds.has(diet.id))
+}
+
+export function leaveDemoDiet(dietId: string) {
+  leftDemoDietIds.add(dietId)
+}
+
+export function getDemoInvitations() {
+  return demoInvitationResponse ? [] : initialInvitations
+}
+
+export function respondToDemoInvitation(id: string, response: 'accept' | 'decline') {
+  if (id === initialInvitations[0].id) demoInvitationResponse = response === 'accept' ? 'accepted' : 'declined'
+}
 
 export const initialMeals: Meal[] = [
   { id: '1', mealType: 'Café da manhã', description: 'Iogurte natural, banana, aveia e canela', mealDate: '2026-09-04', authorId: '1', authorName: 'Marina Alves', createdAt: '2026-09-04T07:40:00Z' },

@@ -31,6 +31,15 @@ export type Member = {
   role: 'OWNER' | 'MEMBER'
 }
 
+export type Invitation = {
+  id: string
+  dietId: string
+  dietName: string
+  inviterId: string
+  inviterName: string
+  createdAt: string
+}
+
 export type AuthResponse = {
   token: string
   userId: string
@@ -43,4 +52,5 @@ export type RegisterRequest = LoginRequest & { fullName: string }
 export type CreateDietRequest = Omit<Diet, 'id'>
 export type CreateMealRequest = Pick<Meal, 'mealType' | 'description' | 'mealDate' | 'photoUrl'>
 export type InviteMemberRequest = Pick<User, 'email'>
+export type LeaveDietRequest = { successorId: string | null }
 export type UpdateProfileRequest = Pick<User, 'fullName' | 'weightKg' | 'heightCm'>
