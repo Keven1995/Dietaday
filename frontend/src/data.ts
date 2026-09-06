@@ -22,6 +22,10 @@ export function leaveDemoDiet(dietId: string) {
   leftDemoDietIds.add(dietId)
 }
 
+export function deleteDemoDiet(dietId: string) {
+  leftDemoDietIds.add(dietId)
+}
+
 export function getDemoInvitations() {
   return demoInvitationResponse ? [] : initialInvitations
 }

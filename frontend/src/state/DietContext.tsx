@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
-import { getDemoDiets } from '../data'
+import { deleteDemoDiet, getDemoDiets } from '../data'
 import { api, getErrorMessage, isDemoMode } from '../lib/api'
 import type { CreateDietRequest, Diet } from '../types'
 import { useAuth } from './AuthContext'
@@ -12,6 +12,7 @@ type DietContextValue = {
   error: string
   selectDiet: (id: string) => void
   createDiet: (data: CreateDietRequest) => Promise<Diet>
+  deleteDiet: (id: string) => Promise<void>
   reload: () => Promise<void>
 }
 
@@ -77,9 +78,16 @@ export function DietProvider({ children }: { children: ReactNode }) {
     return created
   }
 
+  async function deleteDiet(id: string) {
+    if (!token) throw new Error('Sua sessão expirou. Entre novamente.')
+    if (isDemoMode) deleteDemoDiet(id)
+    else await api<void>(`/diets/${id}`, { method: 'DELETE', token })
+    await loadDiets()
+  }
+
   const activeDiet = diets.find((diet) => diet.id === activeDietId) ?? null
   return (
-    <DietContext.Provider value={{ diets, activeDiet, activeDietId, loading, error, selectDiet, createDiet, reload }}>
+    <DietContext.Provider value={{ diets, activeDiet, activeDietId, loading, error, selectDiet, createDiet, deleteDiet, reload }}>
       {children}
     </DietContext.Provider>
   )
