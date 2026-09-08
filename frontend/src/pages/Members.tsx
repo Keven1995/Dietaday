@@ -5,6 +5,7 @@ import { Button, EmptyState, PageTitle } from '../components/Ui'
 import { initialMembers, leaveDemoDiet } from '../data'
 import { useDietResource } from '../hooks/useDietResource'
 import { api, getErrorMessage, isDemoMode } from '../lib/api'
+import { clearDietCache } from '../lib/resourceCache'
 import { useAuth } from '../state/AuthContext'
 import { useDiets } from '../state/DietContext'
 import type { Invitation, InviteMemberRequest, LeaveDietRequest, Member } from '../types'
@@ -136,6 +137,7 @@ export function Members() {
       if (isDemoMode) leaveDemoDiet(activeDiet.id)
       else await api<void>(`/diets/${activeDiet.id}/leave`, { method: 'POST', token, signal: controller.signal, body: JSON.stringify(request) })
       if (controller.signal.aborted) return
+      if (!isDemoMode && user) clearDietCache(user.id, activeDiet.id)
       await reload()
       if (controller.signal.aborted) return
       navigate('/dietas')

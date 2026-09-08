@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { deleteDemoDiet, getDemoDiets } from '../data'
 import { api, getErrorMessage, isDemoMode } from '../lib/api'
+import { clearDietCache, readCachedResource, writeCachedResource } from '../lib/resourceCache'
 import type { CreateDietRequest, Diet } from '../types'
 import { useAuth } from './AuthContext'
 
@@ -19,33 +20,52 @@ type DietContextValue = {
 const DietContext = createContext<DietContextValue | null>(null)
 
 export function DietProvider({ children }: { children: ReactNode }) {
-  const { token } = useAuth()
-  const [diets, setDiets] = useState<Diet[]>([])
+  const { token, user } = useAuth()
+  const [diets, setDiets] = useState<Diet[]>(() => user ? readCachedResource<Diet[]>(user.id, 'diets')?.data ?? [] : [])
+  const [dietsUserId, setDietsUserId] = useState<string | null>(() => user?.id ?? null)
   const [activeDietId, setActiveDietId] = useState<string | null>(() => localStorage.getItem('Dietaday_active_diet'))
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const requestIdRef = useRef(0)
 
-  async function loadDiets(signal?: AbortSignal) {
+  function keepValidActiveDiet(data: Diet[]) {
+    setActiveDietId((current) => {
+      const next = current && data.some((diet) => diet.id === current) ? current : data[0]?.id ?? null
+      if (next) localStorage.setItem('Dietaday_active_diet', next)
+      else localStorage.removeItem('Dietaday_active_diet')
+      return next
+    })
+  }
+
+  async function loadDiets(signal?: AbortSignal, force = false) {
     const requestId = ++requestIdRef.current
-    if (!token) {
+    if (!token || !user) {
       setDiets([])
+      setDietsUserId(null)
       setLoading(false)
       setError('')
       return
     }
-    setLoading(true)
+    const cached = isDemoMode ? null : readCachedResource<Diet[]>(user.id, 'diets')
+    const cachedHasActiveDiet = !activeDietId || Boolean(cached?.data.some((diet) => diet.id === activeDietId))
+    if (cached) {
+      setDiets(cached.data)
+      setDietsUserId(user.id)
+      if (cachedHasActiveDiet) keepValidActiveDiet(cached.data)
+    } else {
+      setDiets([])
+      setDietsUserId(user.id)
+    }
+    setLoading(!cached)
     setError('')
+    if (!force && cached?.fresh && cachedHasActiveDiet) return
     try {
       const data = isDemoMode ? getDemoDiets() : await api<Diet[]>('/diets', { token, signal })
       if (signal?.aborted || requestId !== requestIdRef.current) return
       setDiets(data)
-      setActiveDietId((current) => {
-        const next = current && data.some((diet) => diet.id === current) ? current : data[0]?.id ?? null
-        if (next) localStorage.setItem('Dietaday_active_diet', next)
-        else localStorage.removeItem('Dietaday_active_diet')
-        return next
-      })
+      setDietsUserId(user.id)
+      if (!isDemoMode) writeCachedResource(user.id, 'diets', data)
+      keepValidActiveDiet(data)
     } catch (err) {
       if (!signal?.aborted && requestId === requestIdRef.current) setError(getErrorMessage(err, 'Não foi possível carregar as dietas.'))
     } finally {
@@ -57,10 +77,10 @@ export function DietProvider({ children }: { children: ReactNode }) {
     const controller = new AbortController()
     void loadDiets(controller.signal)
     return () => controller.abort()
-  }, [token])
+  }, [token, user?.id])
 
   function reload() {
-    return loadDiets()
+    return loadDiets(undefined, true)
   }
 
   function selectDiet(id: string) {
@@ -69,25 +89,39 @@ export function DietProvider({ children }: { children: ReactNode }) {
   }
 
   async function createDiet(data: CreateDietRequest) {
-    if (!token) throw new Error('Sua sessão expirou. Entre novamente.')
+    if (!token || !user) throw new Error('Sua sessão expirou. Entre novamente.')
+    requestIdRef.current += 1
     const created = isDemoMode
       ? { id: crypto.randomUUID(), ...data }
       : await api<Diet>('/diets', { method: 'POST', token, body: JSON.stringify(data) })
-    setDiets((current) => [...current, created])
+    setDiets((current) => {
+      const next = [...current, created]
+      if (!isDemoMode) writeCachedResource(user.id, 'diets', next)
+      return next
+    })
+    setDietsUserId(user.id)
     selectDiet(created.id)
     return created
   }
 
   async function deleteDiet(id: string) {
-    if (!token) throw new Error('Sua sessão expirou. Entre novamente.')
+    if (!token || !user) throw new Error('Sua sessão expirou. Entre novamente.')
+    requestIdRef.current += 1
     if (isDemoMode) deleteDemoDiet(id)
     else await api<void>(`/diets/${id}`, { method: 'DELETE', token })
-    await loadDiets()
+    setDiets((current) => {
+      const next = current.filter((diet) => diet.id !== id)
+      if (!isDemoMode) writeCachedResource(user.id, 'diets', next)
+      return next
+    })
+    if (!isDemoMode) clearDietCache(user.id, id)
+    await loadDiets(undefined, true)
   }
 
-  const activeDiet = diets.find((diet) => diet.id === activeDietId) ?? null
+  const visibleDiets = dietsUserId === user?.id ? diets : []
+  const activeDiet = visibleDiets.find((diet) => diet.id === activeDietId) ?? null
   return (
-    <DietContext.Provider value={{ diets, activeDiet, activeDietId, loading, error, selectDiet, createDiet, deleteDiet, reload }}>
+    <DietContext.Provider value={{ diets: visibleDiets, activeDiet, activeDietId, loading, error, selectDiet, createDiet, deleteDiet, reload }}>
       {children}
     </DietContext.Provider>
   )
