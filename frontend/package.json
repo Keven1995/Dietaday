@@ -2,6 +2,7 @@
   "name": "frontend",
   "private": true,
   "version": "0.0.0",
+  "author": "Keven Lucas Pereira Araujo",
   "type": "module",
   "scripts": {
     "dev": "vite",

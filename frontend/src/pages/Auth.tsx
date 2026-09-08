@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { ArrowRight, Check, Eye, EyeOff, Leaf } from 'lucide-react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { MemoryGame } from '../components/MemoryGame'
+import { CreatorCredit } from '../components/CreatorCredit'
 import { Button } from '../components/Ui'
 import { isDemoMode } from '../lib/api'
 import { prepareApi } from '../lib/serverWakeup'
@@ -158,6 +159,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
           </p>
         </div>}
       </section>
+      <CreatorCredit className="auth-creator-credit" />
     </div>
   )
 }
