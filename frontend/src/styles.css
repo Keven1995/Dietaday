@@ -58,11 +58,26 @@ label, .field-label { display: grid; gap: 7px; color: #34433f; font-size: .86rem
 .demo-note { background: #eef2e9; color: #526b45; }
 .loading-text, .muted-text { padding: 18px 0; color: var(--muted); font-size: .86rem; }
 .empty-action { display: flex; width: max-content; margin: 18px auto 0; }
+.creator-credit { color: var(--green); text-align: center; }
+.creator-credit a { display: block; padding: 14px 16px; border: 1px solid var(--line); border-radius: 15px; background: #f3efe5; transition: border-color .2s, transform .2s; }
+.creator-credit a:hover { border-color: #b9b7ad; transform: translateY(-1px); }
+.creator-credit span, .creator-credit small { display: block; color: var(--muted); }
+.creator-credit span { margin-bottom: 4px; font-size: .62rem; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
+.creator-credit strong { display: flex; align-items: center; justify-content: center; gap: 5px; font-family: 'Manrope', sans-serif; font-size: .78rem; }
+.creator-credit strong svg { width: 13px; height: 13px; }
+.creator-credit small { margin-top: 5px; font-size: .58rem; }
+.app-creator-credit { margin: 0 18px 90px; }
+.side-creator-credit { display: none; }
+
+@media (max-width: 979px) {
+  .main-wrap main > .page { padding-bottom: 35px; }
+}
 
 /* Autenticação */
 .auth-page { min-height: 100vh; background: var(--white); }
 .auth-intro { display: none; }
-.auth-form-wrap { min-height: 100vh; display: grid; place-items: center; padding: 30px 22px; }
+.auth-form-wrap { min-height: calc(100vh - 92px); display: grid; place-items: center; padding: 30px 22px; }
+.auth-creator-credit { max-width: 420px; margin: 0 auto; padding: 0 22px 22px; }
 .auth-form { width: 100%; max-width: 420px; }
 .auth-mobile-brand { margin-bottom: 48px; }
 .auth-form h2 { margin-bottom: 8px; color: var(--green); font-size: 1.8rem; letter-spacing: -.035em; }
@@ -311,6 +326,12 @@ label, .field-label { display: grid; gap: 7px; color: #34433f; font-size: .86rem
   .side-nav nav a:hover, .side-nav nav a.active { background: #ffffff12; color: #fff; }
   .side-nav nav a.active svg { color: #ef8a63; }
   .side-profile { display: flex; align-items: center; gap: 10px; margin-top: auto; padding: 15px 8px 0; border-top: 1px solid #ffffff17; }
+  .side-creator-credit { display: block; margin-top: 14px; }
+  .side-creator-credit a { padding: 11px 9px; border-color: #ffffff17; background: #ffffff0a; }
+  .side-creator-credit a:hover { border-color: #ffffff35; }
+  .side-creator-credit span, .side-creator-credit small { color: #91a8a1; }
+  .side-creator-credit strong { color: #fff; font-size: .68rem; line-height: 1.35; }
+  .app-creator-credit { display: none; }
   .layout-notifications { top: 24px; right: 28px; }
   .side-profile strong, .side-profile small { display: block; max-width: 125px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .side-profile strong { font-size: .75rem; }

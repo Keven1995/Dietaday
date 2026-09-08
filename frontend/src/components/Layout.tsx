@@ -2,6 +2,7 @@ import { CalendarDays, Home, Salad, UserRound, Users } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../state/AuthContext'
 import { InvitationNotifications } from './InvitationNotifications'
+import { CreatorCredit } from './CreatorCredit'
 
 const nav = [
   { to: '/', label: 'Início', icon: Home },
@@ -38,6 +39,7 @@ export function Layout() {
           <div className="avatar" aria-hidden="true">{user?.fullName.charAt(0)}</div>
           <div><strong>{user?.fullName}</strong><small>Conta pessoal</small></div>
         </div>
+        <CreatorCredit className="side-creator-credit" />
       </aside>
       <div className="main-wrap">
         <header className="mobile-header">
@@ -45,6 +47,7 @@ export function Layout() {
           <NavLink to="/perfil" className="avatar" aria-label="Abrir perfil">{user?.fullName.charAt(0)}</NavLink>
         </header>
         <main><Outlet /></main>
+        <CreatorCredit className="app-creator-credit" />
         <nav className="bottom-nav" aria-label="Navegação principal"><NavigationLinks /></nav>
       </div>
     </div>
