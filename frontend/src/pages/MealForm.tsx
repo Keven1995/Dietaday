@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Button, EmptyState, PageTitle } from '../components/Ui'
 import { api, getErrorMessage, isDemoMode } from '../lib/api'
 import { localDateKey } from '../lib/date'
+import { dietResourceKey, updateCachedResource } from '../lib/resourceCache'
 import { useAuth } from '../state/AuthContext'
 import { useDiets } from '../state/DietContext'
 import type { CreateMealRequest, Meal } from '../types'
@@ -56,7 +57,7 @@ function PhotoField({ preview, onChoose, onRemove }: { preview: string; onChoose
 
 export function MealForm() {
   const navigate = useNavigate()
-  const { token } = useAuth()
+  const { token, user } = useAuth()
   const { activeDiet } = useDiets()
   const requestRef = useRef<AbortController | null>(null)
   const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -113,7 +114,8 @@ export function MealForm() {
         photoUrl,
       }
       if (!isDemoMode) {
-        await api<Meal>(`/diets/${activeDiet.id}/meals`, { method: 'POST', token, body: JSON.stringify(request), signal: controller.signal })
+        const created = await api<Meal>(`/diets/${activeDiet.id}/meals`, { method: 'POST', token, body: JSON.stringify(request), signal: controller.signal })
+        if (user) updateCachedResource<Meal[]>(user.id, dietResourceKey(activeDiet.id, 'meals'), (meals) => [created, ...meals])
       }
       if (controller.signal.aborted) return
       setSaved(true)

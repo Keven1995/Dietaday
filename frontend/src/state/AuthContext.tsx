@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { api, isDemoMode, UNAUTHORIZED_EVENT } from '../lib/api'
+import { clearUserCache } from '../lib/resourceCache'
 import type { AuthResponse, RegisterRequest, UpdateProfileRequest, User } from '../types'
 
 type AuthContextValue = {
@@ -85,6 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   function logout() {
+    if (user) clearUserCache(user.id)
     localStorage.removeItem('Dietaday_token')
     localStorage.removeItem('Dietaday_user')
     localStorage.removeItem('Dietaday_active_diet')
