@@ -1,12 +1,15 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { ArrowRight, Check, Eye, EyeOff, Leaf } from 'lucide-react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { MemoryGame } from '../components/MemoryGame'
 import { Button } from '../components/Ui'
 import { isDemoMode } from '../lib/api'
+import { prepareApi } from '../lib/serverWakeup'
 import { useAuth } from '../state/AuthContext'
 import type { RegisterRequest } from '../types'
 
 type AuthMode = 'login' | 'register'
+type PreparationState = 'idle' | 'waiting' | 'ready'
 
 function getRedirectPath(state: unknown) {
   if (typeof state !== 'object' || state === null || !('from' in state)) return '/'
@@ -17,14 +20,26 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
   const { user, login, register } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const mountedRef = useRef(true)
+  const preparationTimerRef = useRef<number | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [preparation, setPreparation] = useState<PreparationState>('idle')
   const [error, setError] = useState('')
   const [form, setForm] = useState<RegisterRequest>({
     fullName: '',
     email: isDemoMode ? 'marina@exemplo.com' : '',
     password: isDemoMode ? '12345678' : '',
   })
+
+  useEffect(() => {
+    mountedRef.current = true
+    void prepareApi().catch(() => undefined)
+    return () => {
+      mountedRef.current = false
+      if (preparationTimerRef.current !== null) window.clearTimeout(preparationTimerRef.current)
+    }
+  }, [])
 
   if (user) return <Navigate to="/" replace />
 
@@ -37,14 +52,37 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
       return
     }
     setLoading(true)
+    let preparationShown = false
     try {
+      if (!isDemoMode) {
+        preparationTimerRef.current = window.setTimeout(() => {
+          if (!mountedRef.current) return
+          preparationShown = true
+          setPreparation('waiting')
+        }, 300)
+        await prepareApi()
+        if (preparationTimerRef.current !== null) window.clearTimeout(preparationTimerRef.current)
+        preparationTimerRef.current = null
+        if (!mountedRef.current) return
+        if (preparationShown) {
+          setPreparation('ready')
+          await new Promise((resolve) => window.setTimeout(resolve, 500))
+          if (!mountedRef.current) return
+        }
+      }
       if (mode === 'login') await login(request.email, request.password)
       else await register(request)
+      if (!mountedRef.current) return
       navigate(getRedirectPath(location.state), { replace: true })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ocorreu um erro inesperado.')
+      if (mountedRef.current) {
+        setPreparation('idle')
+        setError(err instanceof Error ? err.message : 'Ocorreu um erro inesperado.')
+      }
     } finally {
-      setLoading(false)
+      if (preparationTimerRef.current !== null) window.clearTimeout(preparationTimerRef.current)
+      preparationTimerRef.current = null
+      if (mountedRef.current) setLoading(false)
     }
   }
 
@@ -65,7 +103,27 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
         </ul>
       </section>
       <section className="auth-form-wrap">
-        <div className="auth-form">
+        {preparation !== 'idle' ? (
+          <div className="server-wakeup">
+            <div className="brand"><span className="brand-mark">N</span><span>Dietaday</span></div>
+            {preparation === 'ready' ? (
+              <div className="server-ready" role="status" aria-live="polite">
+                <span><Check aria-hidden="true" /></span>
+                <h2>Aplicativo pronto!</h2>
+                <p>Entrando na sua conta...</p>
+              </div>
+            ) : (
+              <>
+                <div className="server-wakeup-copy" role="status" aria-live="polite">
+                  <span className="overline">Só mais um momento</span>
+                  <h2>Preparando aplicativo...</h2>
+                  <p>Enquanto os serviços iniciam, encontre os pares de frutas.</p>
+                </div>
+                <MemoryGame />
+              </>
+            )}
+          </div>
+        ) : <div className="auth-form">
           <div className="brand auth-mobile-brand"><span className="brand-mark">N</span><span>Dietaday</span></div>
           <span className="overline">{isLogin ? 'Bem-vindo de volta' : 'Comece agora'}</span>
           <h2>{isLogin ? 'Entre na sua conta' : 'Crie sua conta'}</h2>
@@ -98,7 +156,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
             {isLogin ? 'Ainda não tem conta?' : 'Já possui uma conta?'}{' '}
             <Link to={isLogin ? '/cadastro' : '/login'}>{isLogin ? 'Cadastre-se' : 'Entrar'}</Link>
           </p>
-        </div>
+        </div>}
       </section>
     </div>
   )
