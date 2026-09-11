@@ -126,6 +126,56 @@ class ApiIntegrationTest {
     }
 
     @Test
+    void mealCreationIsIdempotent() throws Exception {
+        JsonNode owner = register("Offline Owner", "offline-" + UUID.randomUUID() + "@example.com");
+        String dietId = createDiet(owner, "Offline Diet");
+        String operationId = UUID.randomUUID().toString();
+        String request = """
+                {"mealType":"LUNCH","description":"Queued meal","mealDate":"2026-09-08"}
+                """;
+
+        String first = mvc.perform(post("/api/diets/{dietId}/meals", dietId)
+                        .header("Authorization", bearer(owner))
+                        .header("Idempotency-Key", operationId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        mvc.perform(post("/api/diets/{dietId}/meals", dietId)
+                        .header("Authorization", bearer(owner))
+                        .header("Idempotency-Key", operationId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(objectMapper.readTree(first).get("id").asText()));
+
+        mvc.perform(post("/api/diets/{dietId}/meals", dietId)
+                        .header("Authorization", bearer(owner))
+                        .header("Idempotency-Key", operationId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"mealType":"DINNER","description":"Different meal","mealDate":"2026-09-08"}
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Idempotency key has already been used for another request"));
+
+        String otherDietId = createDiet(owner, "Other Offline Diet");
+        mvc.perform(post("/api/diets/{dietId}/meals", otherDietId)
+                        .header("Authorization", bearer(owner))
+                        .header("Idempotency-Key", operationId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Idempotency key has already been used for another request"));
+
+        mvc.perform(get("/api/diets/{dietId}/meals", dietId)
+                        .header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1));
+    }
+
+    @Test
     void memberCannotChangeDietOwnedByAnotherUser() throws Exception {
         String memberEmail = "restricted-member-" + UUID.randomUUID() + "@example.com";
         JsonNode owner = register("Restricted Owner", "restricted-owner-" + UUID.randomUUID() + "@example.com");

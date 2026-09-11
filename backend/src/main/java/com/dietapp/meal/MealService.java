@@ -1,6 +1,7 @@
 package com.dietapp.meal;
 
 import com.dietapp.common.BadRequestException;
+import com.dietapp.common.ConflictException;
 import com.dietapp.common.ForbiddenException;
 import com.dietapp.common.NotFoundException;
 import com.dietapp.diet.Diet;
@@ -9,28 +10,59 @@ import com.dietapp.security.CurrentUser;
 import com.dietapp.user.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.LocalDate;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.UUID;
 
 @Service
 public class MealService {
     private final MealRepository meals;
+    private final MealSyncOperationRepository syncOperations;
     private final DietService diets;
     private final CurrentUser currentUser;
 
-    public MealService(MealRepository meals, DietService diets, CurrentUser currentUser) {
+    public MealService(MealRepository meals, MealSyncOperationRepository syncOperations,
+                       DietService diets, CurrentUser currentUser) {
         this.meals = meals;
+        this.syncOperations = syncOperations;
         this.diets = diets;
         this.currentUser = currentUser;
     }
 
     @Transactional
-    public Meal create(UUID dietId, String mealType, String description, LocalDate mealDate, String photoUrl) {
-        Diet diet = diets.requireMember(dietId);
+    public Meal create(UUID dietId, String mealType, String description, LocalDate mealDate,
+                       String photoUrl, UUID operationId) {
+        Diet diet = operationId == null ? diets.requireMember(dietId) : diets.requireMemberForUpdate(dietId);
         User author = currentUser.require();
-        return meals.save(new Meal(diet, author, mealType, description, mealDate, photoUrl));
+        if (operationId == null) {
+            return meals.save(new Meal(diet, author, mealType, description, mealDate, photoUrl));
+        }
+
+        String requestHash = requestHash(mealType, description, mealDate, photoUrl);
+        var existing = syncOperations.findById(operationId);
+        if (existing.isPresent()) {
+            MealSyncOperation operation = existing.get();
+            if (!operation.getUser().getId().equals(author.getId())
+                    || !operation.getDiet().getId().equals(dietId)
+                    || !operation.getRequestHash().equals(requestHash)) {
+                throw new ConflictException("Idempotency key has already been used for another request");
+            }
+            return operation.getMeal();
+        }
+
+        Meal meal = meals.save(new Meal(diet, author, mealType, description, mealDate, photoUrl));
+        try {
+            syncOperations.saveAndFlush(new MealSyncOperation(operationId, author, diet, meal, requestHash));
+        } catch (DataIntegrityViolationException exception) {
+            throw new ConflictException("Idempotency key has already been used for another request", exception);
+        }
+        return meal;
     }
 
     @Transactional(readOnly = true)
@@ -67,6 +99,17 @@ public class MealService {
     private void requireAuthor(Meal meal) {
         if (!meal.getAuthor().getId().equals(currentUser.id())) {
             throw new ForbiddenException("Only the meal author can perform this action");
+        }
+    }
+
+    private String requestHash(String mealType, String description, LocalDate mealDate, String photoUrl) {
+        String value = mealType.trim() + "\u0000" + description.trim() + "\u0000" + mealDate
+                + "\u0000" + (photoUrl == null || photoUrl.isBlank() ? "" : photoUrl.trim());
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is not available", exception);
         }
     }
 }
