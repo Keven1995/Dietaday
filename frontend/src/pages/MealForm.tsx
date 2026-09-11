@@ -1,39 +1,13 @@
 import { Camera, Check, ImagePlus, X } from 'lucide-react'
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Button, EmptyState, PageTitle } from '../components/Ui'
-import { api, getErrorMessage, isDemoMode } from '../lib/api'
+import { getErrorMessage, isDemoMode } from '../lib/api'
+import { compressPhoto, isPhotoUploadConfigured } from '../lib/cloudinary'
 import { localDateKey } from '../lib/date'
-import { dietResourceKey, updateCachedResource } from '../lib/resourceCache'
 import { useAuth } from '../state/AuthContext'
 import { useDiets } from '../state/DietContext'
-import type { CreateMealRequest, Meal } from '../types'
-
-const cloudName: string | undefined = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME
-const uploadPreset: string | undefined = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET
-
-type CloudinaryResponse = { secure_url?: string; error?: { message?: string } }
-
-function isCloudinaryResponse(value: unknown): value is CloudinaryResponse {
-  return typeof value === 'object' && value !== null
-}
-
-async function uploadPhoto(file: File, signal: AbortSignal) {
-  if (!cloudName || !uploadPreset) {
-    throw new Error('O upload de fotos não está configurado. Defina VITE_CLOUDINARY_CLOUD_NAME e VITE_CLOUDINARY_UPLOAD_PRESET ou remova a foto.')
-  }
-
-  const body = new FormData()
-  body.append('file', file)
-  body.append('upload_preset', uploadPreset)
-  const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, { method: 'POST', body, signal })
-  const value: unknown = await response.json().catch(() => null)
-  const data = isCloudinaryResponse(value) ? value : null
-  if (!response.ok || !data?.secure_url) {
-    throw new Error(data?.error?.message || 'Não foi possível enviar a foto ao Cloudinary.')
-  }
-  return data.secure_url
-}
+import { useOfflineMeals } from '../state/OfflineMealContext'
 
 function PhotoField({ preview, onChoose, onRemove }: { preview: string; onChoose: (event: ChangeEvent<HTMLInputElement>) => void; onRemove: () => void }) {
   return (
@@ -57,19 +31,23 @@ function PhotoField({ preview, onChoose, onRemove }: { preview: string; onChoose
 
 export function MealForm() {
   const navigate = useNavigate()
-  const { token, user } = useAuth()
+  const location = useLocation()
+  const { token } = useAuth()
   const { activeDiet } = useDiets()
-  const requestRef = useRef<AbortController | null>(null)
+  const { enqueue, operations } = useOfflineMeals()
+  const editId = (location.state as { offlineOperationId?: string } | null)?.offlineOperationId
+  const editedOperation = operations.find((operation) => operation.id === editId)
+  const initializedEditRef = useRef<string | null>(null)
   const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [loading, setLoading] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
   const [preview, setPreview] = useState('')
   const [photo, setPhoto] = useState<File | null>(null)
+  const [photoChanged, setPhotoChanged] = useState(false)
   const [form, setForm] = useState({ mealType: 'Café da manhã', description: '' })
 
   useEffect(() => () => {
-    requestRef.current?.abort()
     if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current)
   }, [])
 
@@ -77,22 +55,35 @@ export function MealForm() {
     if (preview) URL.revokeObjectURL(preview)
   }, [preview])
 
+  useEffect(() => {
+    if (!editedOperation || initializedEditRef.current === editedOperation.id) return
+    initializedEditRef.current = editedOperation.id
+    setForm({ mealType: editedOperation.request.mealType, description: editedOperation.request.description })
+    if (editedOperation.photo) {
+      const file = new File([editedOperation.photo], editedOperation.photoName ?? 'refeicao.jpg', { type: editedOperation.photo.type })
+      setPhoto(file)
+      setPreview(URL.createObjectURL(file))
+    }
+  }, [editedOperation])
+
   function choosePhoto(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null
     setPhoto(file)
+    setPhotoChanged(true)
     setPreview(file ? URL.createObjectURL(file) : '')
     setError('')
   }
 
   function removePhoto() {
     setPhoto(null)
+    setPhotoChanged(true)
     setPreview('')
   }
 
   async function submit(event: FormEvent) {
     event.preventDefault()
     setError('')
-    if (!activeDiet || !token) {
+    if ((!activeDiet && !editedOperation) || !token) {
       setError('Selecione uma dieta antes de registrar uma refeição.')
       return
     }
@@ -102,32 +93,33 @@ export function MealForm() {
       return
     }
 
-    const controller = new AbortController()
-    requestRef.current = controller
     setLoading(true)
     try {
-      const photoUrl = photo && !isDemoMode ? await uploadPhoto(photo, controller.signal) : null
-      const request: CreateMealRequest = {
-        mealType: form.mealType,
-        description,
-        mealDate: localDateKey(),
-        photoUrl,
+      if (photo && !isDemoMode && !isPhotoUploadConfigured) {
+        throw new Error('O upload de fotos não está configurado. Remova a foto ou configure o Cloudinary.')
       }
-      if (!isDemoMode) {
-        const created = await api<Meal>(`/diets/${activeDiet.id}/meals`, { method: 'POST', token, body: JSON.stringify(request), signal: controller.signal })
-        if (user) updateCachedResource<Meal[]>(user.id, dietResourceKey(activeDiet.id, 'meals'), (meals) => [created, ...meals])
-      }
-      if (controller.signal.aborted) return
+      const storedPhoto = photo && !isDemoMode ? await compressPhoto(photo) : photo
+      if (!isDemoMode) await enqueue({
+        operationId: editedOperation?.id,
+        dietId: editedOperation?.dietId ?? activeDiet!.id,
+        dietName: editedOperation?.dietName ?? activeDiet!.name,
+        request: {
+          mealType: form.mealType,
+          description,
+          mealDate: editedOperation?.request.mealDate ?? localDateKey(),
+        },
+        photo: editedOperation && !photoChanged ? undefined : storedPhoto,
+      })
       setSaved(true)
       redirectTimerRef.current = setTimeout(() => navigate('/historico'), 500)
     } catch (submitError) {
-      if (!controller.signal.aborted) setError(getErrorMessage(submitError, 'Não foi possível salvar a refeição.'))
+      setError(getErrorMessage(submitError, 'Não foi possível salvar a refeição neste dispositivo.'))
     } finally {
-      if (!controller.signal.aborted) setLoading(false)
+      setLoading(false)
     }
   }
 
-  if (!activeDiet) {
+  if (!activeDiet && !editedOperation) {
     return (
       <div className="page narrow-page">
         <PageTitle eyebrow="NOVO REGISTRO" title="Registrar refeição" />
@@ -139,8 +131,8 @@ export function MealForm() {
 
   return (
     <div className="page narrow-page">
-      <PageTitle eyebrow="NOVO REGISTRO" title="Registrar refeição" />
-      <p className="page-lead">Registro em <strong>{activeDiet.name}</strong>. Uma foto ajuda a lembrar dos detalhes depois.</p>
+      <PageTitle eyebrow={editedOperation ? 'CORRIGIR REGISTRO' : 'NOVO REGISTRO'} title={editedOperation ? 'Editar refeição pendente' : 'Registrar refeição'} />
+      <p className="page-lead">Registro em <strong>{editedOperation?.dietName ?? activeDiet!.name}</strong>. A refeição será salva neste dispositivo e sincronizada quando houver conexão.</p>
       <form className="meal-form card" onSubmit={submit}>
         <label>
           Tipo de refeição
@@ -157,7 +149,7 @@ export function MealForm() {
         {error && <div className="error-message" role="alert">{error}</div>}
         <div className="form-actions">
           <Button type="button" className="ghost" onClick={() => navigate(-1)}>Cancelar</Button>
-          <Button loading={loading}>{saved ? <><Check /> Salvo</> : loading && photo ? 'Enviando...' : 'Salvar refeição'}</Button>
+          <Button loading={loading}>{saved ? <><Check /> Salvo</> : loading && photo ? 'Preparando foto...' : editedOperation ? 'Salvar correção' : 'Salvar refeição'}</Button>
         </div>
       </form>
     </div>

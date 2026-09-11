@@ -12,6 +12,24 @@ type CacheEntry<T> = {
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem' | 'key' | 'length'>
 const memory = new Map<string, CacheEntry<unknown>>()
+const listeners = new Set<(userId: string, resource: string) => void>()
+const revisions = new Map<string, number>()
+const cacheChannel = typeof window !== 'undefined' && 'BroadcastChannel' in window
+  ? new BroadcastChannel('Dietaday_resource_cache')
+  : null
+
+cacheChannel?.addEventListener('message', (event: MessageEvent<{ userId: string; resource: string }>) => {
+  const { userId, resource } = event.data
+  const key = cacheKey(userId, resource)
+  memory.delete(key)
+  revisions.set(key, (revisions.get(key) ?? 0) + 1)
+  notify(userId, resource)
+})
+
+function notify(userId: string, resource: string, broadcast = false) {
+  for (const listener of listeners) listener(userId, resource)
+  if (broadcast) cacheChannel?.postMessage({ userId, resource })
+}
 
 function browserStorage(): StorageLike | null {
   return typeof localStorage === 'undefined' ? null : localStorage
@@ -69,10 +87,11 @@ function prune(storage: StorageLike) {
 export function readCachedResource<T>(userId: string, resource: string, storage = browserStorage()) {
   const key = cacheKey(userId, resource)
   let entry = memory.get(key)
-  if (!entry && storage) {
+  if (storage) {
     try {
       const value: unknown = JSON.parse(storage.getItem(key) ?? '')
-      if (isCacheEntry(value) && value.userId === userId && value.resource === resource) {
+      if (isCacheEntry(value) && value.userId === userId && value.resource === resource
+          && (!entry || value.savedAt >= entry.savedAt)) {
         entry = value
         memory.set(key, value)
       }
@@ -89,18 +108,31 @@ export function readCachedResource<T>(userId: string, resource: string, storage 
   return { data: entry.data as T, fresh: Date.now() - entry.savedAt <= FRESH_FOR_MS }
 }
 
+export function resourceCacheSavedAt(userId: string, resource: string, storage = browserStorage()) {
+  return readCachedResource<unknown>(userId, resource, storage)
+    ? memory.get(cacheKey(userId, resource))?.savedAt ?? 0
+    : 0
+}
+
 export function writeCachedResource<T>(userId: string, resource: string, data: T, storage = browserStorage()) {
   const key = cacheKey(userId, resource)
   const entry: CacheEntry<T> = { userId, resource, savedAt: Date.now(), data }
   memory.set(key, entry)
-  if (!storage) return
-  try {
-    prune(storage)
-    storage.setItem(key, JSON.stringify(entry))
-  } catch {
-    // Do not leave an older entry looking fresh after a failed persistence attempt.
-    storage.removeItem(key)
+  revisions.set(key, (revisions.get(key) ?? 0) + 1)
+  if (storage) {
+    try {
+      prune(storage)
+      storage.setItem(key, JSON.stringify(entry))
+    } catch {
+      // Do not leave an older entry looking fresh after a failed persistence attempt.
+      storage.removeItem(key)
+    }
   }
+  notify(userId, resource, true)
+}
+
+export function resourceCacheRevision(userId: string, resource: string) {
+  return revisions.get(cacheKey(userId, resource)) ?? 0
 }
 
 export function expireCachedResource(userId: string, resource: string, storage = browserStorage()) {
@@ -124,6 +156,11 @@ export function expireCachedResource(userId: string, resource: string, storage =
 export function updateCachedResource<T>(userId: string, resource: string, update: (current: T) => T, storage = browserStorage()) {
   const cached = readCachedResource<T>(userId, resource, storage)
   if (cached) writeCachedResource(userId, resource, update(cached.data), storage)
+}
+
+export function subscribeResourceCache(listener: (userId: string, resource: string) => void) {
+  listeners.add(listener)
+  return () => { listeners.delete(listener) }
 }
 
 export function clearUserCache(userId: string, storage = browserStorage()) {

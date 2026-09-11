@@ -6,6 +6,7 @@ import { useDietResource } from '../hooks/useDietResource'
 import { localDateKey, mealDateKey, mealTime, parseLocalDate } from '../lib/date'
 import { useAuth } from '../state/AuthContext'
 import { useDiets } from '../state/DietContext'
+import { useOfflineMeals } from '../state/OfflineMealContext'
 import type { Meal, Member } from '../types'
 
 const NO_MEALS: Meal[] = []
@@ -41,13 +42,13 @@ function TodayMeals({ meals, loading }: { meals: Meal[]; loading: boolean }) {
         <div><span>HOJE</span><h2>Refeições da dieta</h2></div>
         <Link to="/historico">Ver histórico <ArrowRight size={16} /></Link>
       </div>
-      {loading ? <p className="loading-text">Carregando refeições...</p> : meals.length ? (
+      {loading && !meals.length ? <p className="loading-text">Carregando refeições...</p> : meals.length ? (
         <div className="meal-list">
           {meals.map((meal, index) => (
             <article className="meal-row" key={meal.id}>
               <div className={`meal-icon tone-${index}`}><Camera size={19} /></div>
               <div className="meal-content">
-                <span>{meal.mealType}</span>
+                <span>{meal.mealType}{meal.syncStatus && <> · {meal.syncStatus === 'syncing' ? 'Sincronizando' : meal.syncStatus === 'failed' ? 'Falha' : 'Pendente'}</>}</span>
                 <h3>{meal.description}</h3>
                 <div className="meal-author"><i aria-hidden="true">{getInitials(meal.authorName)}</i><small>{meal.authorName}</small></div>
               </div>
@@ -84,9 +85,12 @@ function getInitials(fullName: string) {
 export function Dashboard() {
   const { user } = useAuth()
   const { activeDiet, loading: dietsLoading, error: dietsError } = useDiets()
+  const { offlineMeals, operations } = useOfflineMeals()
   const mealsResource = useDietResource('meals', initialMeals, NO_MEALS, 'Não foi possível carregar as refeições.')
   const membersResource = useDietResource('members', initialMembers, NO_MEMBERS, 'Não foi possível carregar os membros.')
-  const meals = mealsResource.data
+  const meals = activeDiet
+    ? [...offlineMeals.filter((meal) => operations.some((operation) => operation.id === meal.operationId && operation.dietId === activeDiet.id)), ...mealsResource.data]
+    : mealsResource.data
   const members = membersResource.data
   const today = new Date()
   const todayKey = localDateKey(today)

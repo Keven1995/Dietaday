@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { clearDietCache, clearUserCache, dietResourceKey, expireCachedResource, readCachedResource, updateCachedResource, writeCachedResource } from './resourceCache'
+import { clearDietCache, clearUserCache, dietResourceKey, expireCachedResource, readCachedResource, resourceCacheSavedAt, subscribeResourceCache, updateCachedResource, writeCachedResource } from './resourceCache'
 
 class MemoryStorage {
   private readonly values = new Map<string, string>()
@@ -55,5 +55,28 @@ describe('resourceCache', () => {
     expect(readCachedResource('user-4', dietResourceKey('diet-1', 'meals'), storage)).toBeNull()
     expect(readCachedResource('user-4', dietResourceKey('diet-1', 'members'), storage)).toBeNull()
     expect(readCachedResource('user-4', dietResourceKey('diet-2', 'meals'), storage)?.data).toEqual(['other meal'])
+  })
+
+  it('notifies mounted resources after a background update', () => {
+    const storage = new MemoryStorage()
+    const listener = vi.fn()
+    const unsubscribe = subscribeResourceCache(listener)
+
+    writeCachedResource('user-5', 'meals', ['breakfast'], storage)
+
+    expect(listener).toHaveBeenCalledWith('user-5', 'meals')
+    unsubscribe()
+  })
+
+  it('prefers a newer value persisted by another tab over memory', () => {
+    const storage = new MemoryStorage()
+    vi.spyOn(Date, 'now').mockReturnValue(1_000)
+    writeCachedResource('user-6', 'meals', ['old'], storage)
+    storage.setItem('Dietaday_resource_v1:user-6:meals', JSON.stringify({
+      userId: 'user-6', resource: 'meals', savedAt: 2_000, data: ['new'],
+    }))
+
+    expect(readCachedResource<string[]>('user-6', 'meals', storage)?.data).toEqual(['new'])
+    expect(resourceCacheSavedAt('user-6', 'meals', storage)).toBe(2_000)
   })
 })
