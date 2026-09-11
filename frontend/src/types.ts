@@ -13,6 +13,12 @@ export type Diet = {
   endDate: string
 }
 
+export type MealReaction = {
+  emoji: string
+  count: number
+  reactedByMe: boolean
+}
+
 export type Meal = {
   id: string
   mealType: string
@@ -25,6 +31,7 @@ export type Meal = {
   syncStatus?: 'pending' | 'syncing' | 'failed'
   syncError?: string
   operationId?: string
+  reactions?: MealReaction[]
 }
 
 export type Member = {

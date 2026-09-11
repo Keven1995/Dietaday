@@ -23,9 +23,11 @@ import java.util.UUID;
 @RequestMapping("/api/diets/{dietId}/meals")
 public class MealController {
     private final MealService service;
+    private final MealReactionService reactions;
 
-    public MealController(MealService service) {
+    public MealController(MealService service, MealReactionService reactions) {
         this.service = service;
+        this.reactions = reactions;
     }
 
     @PostMapping
@@ -33,7 +35,7 @@ public class MealController {
     public MealResponse create(@PathVariable UUID dietId,
                                @RequestHeader(value = "Idempotency-Key", required = false) UUID operationId,
                                @Valid @RequestBody MealRequest request) {
-        return MealResponse.from(service.create(dietId, request.mealType(), request.description(),
+        return response(service.create(dietId, request.mealType(), request.description(),
                 request.mealDate(), request.photoUrl(), operationId));
     }
 
@@ -42,18 +44,21 @@ public class MealController {
             @PathVariable UUID dietId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-        return service.list(dietId, from, to).stream().map(MealResponse::from).toList();
+        List<Meal> meals = service.list(dietId, from, to);
+        var summaries = reactions.summariesFor(meals);
+        return meals.stream().map(meal -> MealResponse.from(
+                meal, summaries.getOrDefault(meal.getId(), List.of()))).toList();
     }
 
     @GetMapping("/{mealId}")
     public MealResponse get(@PathVariable UUID dietId, @PathVariable UUID mealId) {
-        return MealResponse.from(service.get(dietId, mealId));
+        return response(service.get(dietId, mealId));
     }
 
     @PutMapping("/{mealId}")
     public MealResponse update(@PathVariable UUID dietId, @PathVariable UUID mealId,
                                @Valid @RequestBody MealRequest request) {
-        return MealResponse.from(service.update(dietId, mealId, request.mealType(), request.description(),
+        return response(service.update(dietId, mealId, request.mealType(), request.description(),
                 request.mealDate(), request.photoUrl()));
     }
 
@@ -61,6 +66,22 @@ public class MealController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable UUID dietId, @PathVariable UUID mealId) {
         service.delete(dietId, mealId);
+    }
+
+    @PutMapping("/{mealId}/reaction")
+    public MealReactionsResponse react(@PathVariable UUID dietId, @PathVariable UUID mealId,
+                                       @Valid @RequestBody MealReactionRequest request) {
+        return reactions.react(dietId, mealId, request.emoji());
+    }
+
+    @DeleteMapping("/{mealId}/reaction")
+    public MealReactionsResponse removeReaction(@PathVariable UUID dietId, @PathVariable UUID mealId) {
+        return reactions.remove(dietId, mealId);
+    }
+
+    private MealResponse response(Meal meal) {
+        return MealResponse.from(meal, reactions.summariesFor(List.of(meal))
+                .getOrDefault(meal.getId(), List.of()));
     }
 
 }
