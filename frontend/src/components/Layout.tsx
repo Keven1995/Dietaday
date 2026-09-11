@@ -3,6 +3,8 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../state/AuthContext'
 import { InvitationNotifications } from './InvitationNotifications'
 import { CreatorCredit } from './CreatorCredit'
+import { ServerConnectionNotice } from './ServerConnectionNotice'
+import { OfflineMealNotice } from './OfflineMealNotice'
 
 const nav = [
   { to: '/', label: 'Início', icon: Home },
@@ -28,6 +30,7 @@ export function Layout() {
 
   return (
     <div className="app-shell">
+      <ServerConnectionNotice />
       <div className="layout-notifications"><InvitationNotifications /></div>
       <aside className="side-nav">
         <div className="brand">
@@ -46,6 +49,7 @@ export function Layout() {
           <div className="brand"><span className="brand-mark">N</span><span>{title}</span></div>
           <NavLink to="/perfil" className="avatar" aria-label="Abrir perfil">{user?.fullName.charAt(0)}</NavLink>
         </header>
+        <OfflineMealNotice />
         <main><Outlet /></main>
         <CreatorCredit className="app-creator-credit" />
         <nav className="bottom-nav" aria-label="Navegação principal"><NavigationLinks /></nav>
