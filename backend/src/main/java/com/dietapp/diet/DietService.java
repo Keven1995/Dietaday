@@ -43,6 +43,14 @@ public class DietService {
     }
 
     @Transactional
+    public Diet requireMemberForUpdate(UUID dietId) {
+        Diet diet = diets.findForUpdateById(dietId)
+                .orElseThrow(() -> new NotFoundException("Diet not found"));
+        requireMembership(dietId);
+        return diet;
+    }
+
+    @Transactional
     public Diet update(UUID dietId, String name, LocalDate startDate, LocalDate endDate) {
         validateDates(startDate, endDate);
         Diet diet = requireOwner(dietId);

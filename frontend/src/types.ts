@@ -22,6 +22,9 @@ export type Meal = {
   authorId: string
   authorName: string
   createdAt: string
+  syncStatus?: 'pending' | 'syncing' | 'failed'
+  syncError?: string
+  operationId?: string
 }
 
 export type Member = {

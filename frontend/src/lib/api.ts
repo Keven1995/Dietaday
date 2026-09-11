@@ -1,5 +1,5 @@
-const configuredApiUrl: unknown = import.meta.env.VITE_API_URL
-const API_URL = typeof configuredApiUrl === 'string' ? configuredApiUrl.replace(/\/$/, '') : ''
+import { API_URL } from './apiConfig'
+import { markApiUnavailable, prepareApi } from './serverWakeup'
 
 type RequestOptions = RequestInit & { token?: string | null }
 type ErrorResponse = { message?: string }
@@ -16,9 +16,12 @@ export class ApiError extends Error {
   }
 }
 
-export const isDemoMode = !API_URL
+export { isDemoMode } from './apiConfig'
 
 export function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof TypeError || (error instanceof Error && /failed to fetch|networkerror|load failed/i.test(error.message))) {
+    return 'Não foi possível conectar ao aplicativo. Verifique sua conexão e tente novamente.'
+  }
   return error instanceof Error ? error.message : fallback
 }
 
@@ -28,15 +31,28 @@ function isErrorResponse(value: unknown): value is ErrorResponse {
 }
 
 export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  await prepareApi()
   const { token, headers, ...init } = options
-  const response = await fetch(`${API_URL}${path}`, {
-    ...init,
-    headers: {
-      ...(init.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...headers,
-    },
-  })
+  let response: Response
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      ...init,
+      headers: {
+        ...(init.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...headers,
+      },
+    })
+  } catch (error) {
+    if (init.signal?.aborted) throw error
+    markApiUnavailable()
+    throw new Error('Não foi possível conectar ao aplicativo. Verifique sua conexão e tente novamente.', { cause: error })
+  }
+
+  if ([502, 503, 504].includes(response.status)) {
+    markApiUnavailable()
+    throw new Error('O aplicativo está temporariamente indisponível. Aguarde alguns segundos e tente novamente.')
+  }
 
   if (!response.ok) {
     const data: unknown = await response.json().catch(() => null)

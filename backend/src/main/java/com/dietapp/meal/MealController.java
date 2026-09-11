@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -29,9 +30,11 @@ public class MealController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public MealResponse create(@PathVariable UUID dietId, @Valid @RequestBody MealRequest request) {
+    public MealResponse create(@PathVariable UUID dietId,
+                               @RequestHeader(value = "Idempotency-Key", required = false) UUID operationId,
+                               @Valid @RequestBody MealRequest request) {
         return MealResponse.from(service.create(dietId, request.mealType(), request.description(),
-                request.mealDate(), request.photoUrl()));
+                request.mealDate(), request.photoUrl(), operationId));
     }
 
     @GetMapping
