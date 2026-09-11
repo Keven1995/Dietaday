@@ -81,6 +81,13 @@ public class MealService {
     }
 
     @Transactional
+    public Meal getForUpdate(UUID dietId, UUID mealId) {
+        diets.requireMember(dietId);
+        return meals.findForUpdateByIdAndDietId(mealId, dietId)
+                .orElseThrow(() -> new NotFoundException("Meal not found"));
+    }
+
+    @Transactional
     public Meal update(UUID dietId, UUID mealId, String mealType, String description,
                        LocalDate mealDate, String photoUrl) {
         Meal meal = get(dietId, mealId);

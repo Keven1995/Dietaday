@@ -176,6 +176,94 @@ class ApiIntegrationTest {
     }
 
     @Test
+    void membersCanReactOnceToMealsFromOtherUsers() throws Exception {
+        String firstMemberEmail = "reaction-one-" + UUID.randomUUID() + "@example.com";
+        String secondMemberEmail = "reaction-two-" + UUID.randomUUID() + "@example.com";
+        JsonNode owner = register("Reaction Owner", "reaction-owner-" + UUID.randomUUID() + "@example.com");
+        JsonNode firstMember = register("First Member", firstMemberEmail);
+        JsonNode secondMember = register("Second Member", secondMemberEmail);
+        JsonNode outsider = register("Reaction Outsider", "reaction-outsider-" + UUID.randomUUID() + "@example.com");
+        String dietId = createDiet(owner, "Reaction Diet");
+        joinDiet(owner, firstMember, dietId, firstMemberEmail);
+        joinDiet(owner, secondMember, dietId, secondMemberEmail);
+
+        String mealJson = mvc.perform(post("/api/diets/{dietId}/meals", dietId)
+                        .header("Authorization", bearer(owner))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"mealType":"LUNCH","description":"Meal to react",
+                                 "mealDate":"2026-09-11"}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.reactions").isEmpty())
+                .andReturn().getResponse().getContentAsString();
+        String mealId = objectMapper.readTree(mealJson).get("id").asText();
+
+        mvc.perform(put("/api/diets/{dietId}/meals/{mealId}/reaction", dietId, mealId)
+                        .header("Authorization", bearer(firstMember))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"emoji\":\"not an emoji\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Invalid emoji"));
+
+        mvc.perform(put("/api/diets/{dietId}/meals/{mealId}/reaction", dietId, mealId)
+                        .header("Authorization", bearer(owner))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"emoji\":\"❤️\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("You cannot react to your own meal"));
+
+        mvc.perform(put("/api/diets/{dietId}/meals/{mealId}/reaction", dietId, mealId)
+                        .header("Authorization", bearer(outsider))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"emoji\":\"❤️\"}"))
+                .andExpect(status().isNotFound());
+
+        mvc.perform(put("/api/diets/{dietId}/meals/{mealId}/reaction", dietId, mealId)
+                        .header("Authorization", bearer(firstMember))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"emoji\":\"❤️\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reactions[0].emoji").value("❤️"))
+                .andExpect(jsonPath("$.reactions[0].count").value(1))
+                .andExpect(jsonPath("$.reactions[0].reactedByMe").value(true));
+
+        mvc.perform(put("/api/diets/{dietId}/meals/{mealId}/reaction", dietId, mealId)
+                        .header("Authorization", bearer(firstMember))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"emoji\":\"😂\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reactions.length()").value(1))
+                .andExpect(jsonPath("$.reactions[0].emoji").value("😂"))
+                .andExpect(jsonPath("$.reactions[0].count").value(1));
+
+        mvc.perform(put("/api/diets/{dietId}/meals/{mealId}/reaction", dietId, mealId)
+                        .header("Authorization", bearer(secondMember))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"emoji\":\"😂\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reactions[0].count").value(2));
+
+        mvc.perform(get("/api/diets/{dietId}/meals", dietId)
+                        .header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].reactions[0].emoji").value("😂"))
+                .andExpect(jsonPath("$[0].reactions[0].count").value(2))
+                .andExpect(jsonPath("$[0].reactions[0].reactedByMe").value(false));
+
+        mvc.perform(delete("/api/diets/{dietId}/meals/{mealId}/reaction", dietId, mealId)
+                        .header("Authorization", bearer(firstMember)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reactions[0].count").value(1))
+                .andExpect(jsonPath("$.reactions[0].reactedByMe").value(false));
+
+        mvc.perform(delete("/api/diets/{dietId}/meals/{mealId}/reaction", dietId, mealId)
+                        .header("Authorization", bearer(firstMember)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reactions[0].count").value(1));
+    }
+
+    @Test
     void memberCannotChangeDietOwnedByAnotherUser() throws Exception {
         String memberEmail = "restricted-member-" + UUID.randomUUID() + "@example.com";
         JsonNode owner = register("Restricted Owner", "restricted-owner-" + UUID.randomUUID() + "@example.com");
