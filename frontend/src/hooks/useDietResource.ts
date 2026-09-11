@@ -84,7 +84,7 @@ export function useDietResource<T>(resource: string, demoData: T, emptyData: T, 
 
     const shared = isDemoMode
       ? { promise: Promise.resolve(demoData), release: () => undefined, startedAt: Date.now() }
-      : acquireRequest(`${user.id}:${cacheResource}`, (signal) => api<T>(`/diets/${activeDiet.id}/${resource}`, { token, signal }))
+      : acquireRequest(`${user.id}:${cacheResource}:${revision}`, (signal) => api<T>(`/diets/${activeDiet.id}/${resource}`, { token, signal }))
     const requestCacheRevision = resourceCacheRevision(user.id, cacheResource)
     const requestStartedAt = shared.startedAt
 
