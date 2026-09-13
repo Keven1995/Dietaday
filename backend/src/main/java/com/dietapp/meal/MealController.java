@@ -1,5 +1,6 @@
 package com.dietapp.meal;
 
+import com.dietapp.comment.MealCommentService;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -24,10 +25,12 @@ import java.util.UUID;
 public class MealController {
     private final MealService service;
     private final MealReactionService reactions;
+    private final MealCommentService comments;
 
-    public MealController(MealService service, MealReactionService reactions) {
+    public MealController(MealService service, MealReactionService reactions, MealCommentService comments) {
         this.service = service;
         this.reactions = reactions;
+        this.comments = comments;
     }
 
     @PostMapping
@@ -46,8 +49,10 @@ public class MealController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         List<Meal> meals = service.list(dietId, from, to);
         var summaries = reactions.summariesFor(meals);
+        var commentCounts = comments.countsFor(meals);
         return meals.stream().map(meal -> MealResponse.from(
-                meal, summaries.getOrDefault(meal.getId(), List.of()))).toList();
+                meal, summaries.getOrDefault(meal.getId(), List.of()),
+                commentCounts.getOrDefault(meal.getId(), 0L))).toList();
     }
 
     @GetMapping("/{mealId}")
@@ -81,7 +86,8 @@ public class MealController {
 
     private MealResponse response(Meal meal) {
         return MealResponse.from(meal, reactions.summariesFor(List.of(meal))
-                .getOrDefault(meal.getId(), List.of()));
+                .getOrDefault(meal.getId(), List.of()),
+                comments.countsFor(List.of(meal)).getOrDefault(meal.getId(), 0L));
     }
 
 }
