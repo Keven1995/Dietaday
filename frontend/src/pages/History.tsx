@@ -1,11 +1,13 @@
-import { CalendarDays, ChevronLeft, ChevronRight, Coffee, LoaderCircle, Pencil, RotateCcw, SmilePlus, Trash2, Moon, Sun, X } from 'lucide-react'
-import { lazy, Suspense, useEffect, useEffectEvent, useRef, useState } from 'react'
-import type { EmojiClickData } from 'emoji-picker-react'
-import { Link } from 'react-router-dom'
+import { CalendarDays, ChevronLeft, ChevronRight, Coffee, LoaderCircle, MessageCircle, Pencil, RotateCcw, SmilePlus, Trash2, Moon, Sun } from 'lucide-react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { CommentsModal } from '../components/CommentsModal'
+import { ReactionPicker } from '../components/ReactionPicker'
 import { EmptyState, PageTitle } from '../components/Ui'
 import { initialMeals } from '../data'
 import { useDietResource } from '../hooks/useDietResource'
 import { api, getErrorMessage, isDemoMode } from '../lib/api'
+import { mealCommentCount } from '../lib/comments'
 import { localDateKey, mealDateKey, mealTime, parseLocalDate } from '../lib/date'
 import { optimisticReactions } from '../lib/mealReactions'
 import { dietResourceKey, expireCachedResource, readCachedResource, writeCachedResource } from '../lib/resourceCache'
@@ -16,67 +18,6 @@ import type { Meal, MealReaction } from '../types'
 
 const NO_MEALS: Meal[] = []
 const MEAL_ICONS = [Coffee, Sun, Moon]
-const EmojiPicker = lazy(() => import('emoji-picker-react'))
-
-function ReactionPicker({ onClose, onSelect }: { onClose: () => void; onSelect: (emoji: string) => void }) {
-  const dialogRef = useRef<HTMLDivElement>(null)
-  const closeRef = useRef(onClose)
-  closeRef.current = onClose
-
-  useEffect(() => {
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    const focusTimer = window.setTimeout(() => {
-      dialogRef.current?.querySelector<HTMLElement>('input, button')?.focus()
-    })
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') closeRef.current()
-      if (event.key !== 'Tab' || !dialogRef.current) return
-      const focusable = [...dialogRef.current.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])')]
-      if (!focusable.length) return
-      const first = focusable[0]
-      const last = focusable[focusable.length - 1]
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault()
-        last.focus()
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault()
-        first.focus()
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => {
-      window.clearTimeout(focusTimer)
-      window.removeEventListener('keydown', handleKeyDown)
-      document.body.style.overflow = previousOverflow
-      if (previousFocus?.matches(':disabled')) previousFocus.closest<HTMLElement>('.timeline-card')?.focus()
-      else previousFocus?.focus()
-    }
-  }, [])
-
-  function selectEmoji(data: EmojiClickData) {
-    onSelect(data.emoji)
-  }
-
-  return (
-    <div className="emoji-picker-backdrop" role="presentation" onMouseDown={onClose}>
-      <div ref={dialogRef} className="emoji-picker-dialog" role="dialog" aria-modal="true" aria-label="Escolher reação" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="emoji-picker-heading"><strong>Escolha uma reação</strong><button type="button" aria-label="Fechar seletor" onClick={onClose}><X /></button></div>
-        <Suspense fallback={<div className="emoji-picker-loading"><LoaderCircle className="spin" /> Carregando emojis...</div>}>
-          <EmojiPicker
-            width="100%"
-            height="min(410px, calc(100vh - 110px))"
-            lazyLoadEmojis
-            searchPlaceholder="Buscar emoji"
-            previewConfig={{ showPreview: false }}
-            onEmojiClick={selectEmoji}
-          />
-        </Suspense>
-      </div>
-    </div>
-  )
-}
 
 function QueuedPhoto({ photo, description }: { photo: Blob; description: string }) {
   const [source, setSource] = useState('')
@@ -90,13 +31,16 @@ function QueuedPhoto({ photo, description }: { photo: Blob; description: string 
 
 export function History() {
   const { token, user } = useAuth()
-  const { activeDiet } = useDiets()
+  const { activeDiet, diets, selectDiet } = useDiets()
   const { offlineMeals, operations, retry, discard } = useOfflineMeals()
   const [date, setDate] = useState(localDateKey())
   const [pickerMealId, setPickerMealId] = useState<string | null>(null)
   const [reactingMealIds, setReactingMealIds] = useState<Set<string>>(() => new Set())
   const [reactionOverrides, setReactionOverrides] = useState<Record<string, MealReaction[]>>({})
+  const [commentsMealId, setCommentsMealId] = useState<string | null>(null)
   const [reactionError, setReactionError] = useState('')
+  const linkedMealRefreshRef = useRef('')
+  const [searchParams, setSearchParams] = useSearchParams()
   const mealsResource = useDietResource('meals', initialMeals, NO_MEALS, 'Não foi possível carregar o histórico.')
   const { data: remoteMeals, loading, error } = mealsResource
   const refreshHistory = useEffectEvent(() => mealsResource.reload())
@@ -122,12 +66,40 @@ export function History() {
   const activeOfflineMeals = activeDiet
     ? offlineMeals.filter((meal) => operations.some((operation) => operation.id === meal.operationId && operation.dietId === activeDiet.id))
     : []
-  const displayedRemoteMeals = remoteMeals.map((meal) => reactionOverrides[meal.id]
-    ? { ...meal, reactions: reactionOverrides[meal.id] }
-    : meal)
+  const displayedRemoteMeals = remoteMeals.map((meal) => ({
+    ...meal,
+    ...(reactionOverrides[meal.id] ? { reactions: reactionOverrides[meal.id] } : {}),
+  }))
   const allMeals = [...activeOfflineMeals, ...displayedRemoteMeals]
   const meals = allMeals.filter((meal) => mealDateKey(meal.mealDate) === date).sort((a, b) => a.createdAt.localeCompare(b.createdAt))
   const failedOperations = operations.filter((operation) => operation.status === 'failed')
+  const commentsMeal = allMeals.find((meal) => meal.id === commentsMealId) ?? null
+
+  useEffect(() => {
+    const linkedDietId = searchParams.get('dietId')
+    const linkedDate = searchParams.get('date')
+    const linkedMealId = searchParams.get('mealId')
+    if (linkedDietId && linkedDietId !== activeDiet?.id && diets.some((diet) => diet.id === linkedDietId)) {
+      selectDiet(linkedDietId)
+      return
+    }
+    if (linkedDate && /^\d{4}-\d{2}-\d{2}$/.test(linkedDate)) setDate(linkedDate)
+    if (!linkedMealId) {
+      linkedMealRefreshRef.current = ''
+      return
+    }
+    if (activeDiet && activeDiet.id === (linkedDietId ?? activeDiet.id)) {
+      if (allMeals.some((meal) => meal.id === linkedMealId)) {
+        setCommentsMealId(linkedMealId)
+      } else {
+        const refreshKey = `${activeDiet.id}:${linkedMealId}`
+        if (linkedMealRefreshRef.current !== refreshKey) {
+          linkedMealRefreshRef.current = refreshKey
+          refreshHistory()
+        }
+      }
+    }
+  }, [activeDiet?.id, diets, remoteMeals, searchParams])
 
   async function discardOperation(id: string) {
     if (window.confirm('Descartar esta refeição pendente deste dispositivo?')) await discard(id)
@@ -149,6 +121,32 @@ export function History() {
       else delete next[mealId]
       return next
     })
+  }
+
+  function changeCommentCount(meal: Meal, delta: number) {
+    if (!user || !activeDiet) return
+    const resource = dietResourceKey(activeDiet.id, 'meals')
+    const cachedMeals = readCachedResource<Meal[]>(user.id, resource)?.data ?? remoteMeals
+    const cachedMeal = cachedMeals.find((item) => item.id === meal.id) ?? meal
+    const nextCount = Math.max(0, mealCommentCount(cachedMeal) + delta)
+    writeCachedResource(user.id, resource, cachedMeals.map((cachedMeal) => cachedMeal.id === meal.id ? { ...cachedMeal, commentCount: nextCount } : cachedMeal))
+  }
+
+  function settleCommentCount() {
+    if (!user || !activeDiet) return
+    expireCachedResource(user.id, dietResourceKey(activeDiet.id, 'meals'))
+    mealsResource.reload()
+  }
+
+  function closeComments() {
+    setCommentsMealId(null)
+    if (!['dietId', 'date', 'mealId', 'commentId'].some((parameter) => searchParams.has(parameter))) return
+    const next = new URLSearchParams(searchParams)
+    next.delete('dietId')
+    next.delete('date')
+    next.delete('mealId')
+    next.delete('commentId')
+    setSearchParams(next, { replace: true })
   }
 
   async function react(meal: Meal, selectedEmoji: string) {
@@ -227,8 +225,8 @@ export function History() {
                   <div className="meal-details">
                     <span>{meal.mealType}</span><h3>{meal.description}</h3><small>Por {meal.authorName}</small>
                     {meal.syncStatus && <b className={`sync-status ${meal.syncStatus}`}>{meal.syncStatus === 'syncing' ? 'Sincronizando' : meal.syncStatus === 'failed' ? 'Falha na sincronização' : 'Aguardando sincronização'}</b>}
-                    {(meal.reactions?.length || (!meal.syncStatus && meal.authorId !== user?.id && !isDemoMode)) && (
-                      <div className="meal-reactions" aria-label="Reações da refeição">
+                    <div className="meal-engagement">
+                      {(meal.reactions?.length || (!meal.syncStatus && meal.authorId !== user?.id && !isDemoMode)) && <div className="meal-reactions" aria-label="Reações da refeição">
                         {meal.reactions?.map((reaction) => (
                           <button
                             type="button"
@@ -253,8 +251,9 @@ export function History() {
                             {reactingMealIds.has(meal.id) ? <LoaderCircle className="spin" /> : <SmilePlus />}
                           </button>
                         )}
-                      </div>
-                    )}
+                      </div>}
+                      <button type="button" className="meal-comments-button" disabled={Boolean(meal.syncStatus)} aria-label={`Abrir comentários, ${mealCommentCount(meal)} ${mealCommentCount(meal) === 1 ? 'comentário' : 'comentários'}`} onClick={() => setCommentsMealId(meal.id)}><MessageCircle /><b>{mealCommentCount(meal)}</b></button>
+                    </div>
                     {pickerMealId === meal.id && <ReactionPicker onClose={() => setPickerMealId(null)} onSelect={(emoji) => void react(meal, emoji)} />}
                   </div>
                 </div>
@@ -263,6 +262,7 @@ export function History() {
           })}
         </div>
       ) : <EmptyState icon={<CalendarDays />} title="Nenhuma refeição neste dia" text="Seus novos registros aparecerão aqui em ordem de horário." />}
+      {activeDiet && commentsMeal && <CommentsModal key={`${activeDiet.id}:${commentsMeal.id}`} dietId={activeDiet.id} meal={commentsMeal} highlightedCommentId={searchParams.get('commentId')} onClose={closeComments} onCommentCountChange={(delta) => changeCommentCount(commentsMeal, delta)} onCommentsSettled={settleCommentCount} />}
     </div>
   )
 }

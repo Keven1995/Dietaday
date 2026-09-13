@@ -13,6 +13,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.UUID;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -274,6 +275,317 @@ class ApiIntegrationTest {
                         .header("Authorization", bearer(firstMember)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.reactions[0].count").value(1));
+    }
+
+    @Test
+    void commentsSupportCrudValidationAuthorizationIsolationAndCounts() throws Exception {
+        String memberEmail = "comment-member-" + UUID.randomUUID() + "@example.com";
+        JsonNode owner = register("Comment Owner", "comment-owner-" + UUID.randomUUID() + "@example.com");
+        JsonNode member = register("Comment Member", memberEmail);
+        JsonNode outsider = register("Comment Outsider", "comment-outsider-" + UUID.randomUUID() + "@example.com");
+        String dietId = createDiet(owner, "Comment Diet");
+        String otherDietId = createDiet(owner, "Other Comment Diet");
+        joinDiet(owner, member, dietId, memberEmail);
+        String mealId = createMeal(owner, dietId, "Meal with comments");
+        String otherMealId = createMeal(owner, dietId, "Other meal");
+
+        mvc.perform(post("/api/diets/{dietId}/meals/{mealId}/comments", dietId, mealId)
+                        .header("Authorization", bearer(member))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"   \"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fields.content").exists());
+
+        mvc.perform(post("/api/diets/{dietId}/meals/{mealId}/comments", dietId, mealId)
+                        .header("Authorization", bearer(member))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("content", "x".repeat(1001)))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fields.content").exists());
+
+        String memberCommentJson = mvc.perform(post(
+                        "/api/diets/{dietId}/meals/{mealId}/comments", dietId, mealId)
+                        .header("Authorization", bearer(member))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"  First comment  \"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.mealId").value(mealId))
+                .andExpect(jsonPath("$.authorId").value(member.get("userId").asText()))
+                .andExpect(jsonPath("$.authorName").value("Comment Member"))
+                .andExpect(jsonPath("$.content").value("First comment"))
+                .andExpect(jsonPath("$.createdAt").isNotEmpty())
+                .andExpect(jsonPath("$.updatedAt").isNotEmpty())
+                .andExpect(jsonPath("$.reactions").isEmpty())
+                .andReturn().getResponse().getContentAsString();
+        String memberCommentId = objectMapper.readTree(memberCommentJson).get("id").asText();
+        String ownerCommentId = createComment(owner, dietId, mealId, "Second comment");
+
+        mvc.perform(get("/api/diets/{dietId}/meals/{mealId}/comments", dietId, mealId)
+                        .header("Authorization", bearer(member)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(memberCommentId))
+                .andExpect(jsonPath("$[1].id").value(ownerCommentId))
+                .andExpect(jsonPath("$[2]").doesNotExist());
+
+        mvc.perform(get("/api/diets/{dietId}/meals/{mealId}", dietId, mealId)
+                        .header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.commentCount").value(2));
+        mvc.perform(get("/api/diets/{dietId}/meals", dietId)
+                        .header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(otherMealId))
+                .andExpect(jsonPath("$[0].commentCount").value(0))
+                .andExpect(jsonPath("$[1].id").value(mealId))
+                .andExpect(jsonPath("$[1].commentCount").value(2));
+
+        mvc.perform(put("/api/diets/{dietId}/meals/{mealId}/comments/{commentId}",
+                        dietId, mealId, memberCommentId)
+                        .header("Authorization", bearer(owner))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"Owner cannot edit\"}"))
+                .andExpect(status().isForbidden());
+        mvc.perform(delete("/api/diets/{dietId}/meals/{mealId}/comments/{commentId}",
+                        dietId, mealId, ownerCommentId)
+                        .header("Authorization", bearer(member)))
+                .andExpect(status().isForbidden());
+
+        mvc.perform(put("/api/diets/{dietId}/meals/{mealId}/comments/{commentId}",
+                        dietId, mealId, memberCommentId)
+                        .header("Authorization", bearer(member))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"  Edited comment  \"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").value("Edited comment"));
+
+        mvc.perform(get("/api/diets/{dietId}/meals/{mealId}/comments", dietId, mealId)
+                        .header("Authorization", bearer(outsider)))
+                .andExpect(status().isNotFound());
+        mvc.perform(post("/api/diets/{dietId}/meals/{mealId}/comments", dietId, mealId)
+                        .header("Authorization", bearer(outsider))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"Hidden\"}"))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/diets/{dietId}/meals/{mealId}/comments", otherDietId, mealId)
+                        .header("Authorization", bearer(owner)))
+                .andExpect(status().isNotFound());
+        mvc.perform(put("/api/diets/{dietId}/meals/{mealId}/comments/{commentId}",
+                        dietId, otherMealId, memberCommentId)
+                        .header("Authorization", bearer(member))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"Crossed\"}"))
+                .andExpect(status().isNotFound());
+
+        mvc.perform(delete("/api/diets/{dietId}/meals/{mealId}/comments/{commentId}",
+                        dietId, mealId, memberCommentId)
+                        .header("Authorization", bearer(member)))
+                .andExpect(status().isNoContent());
+        mvc.perform(get("/api/diets/{dietId}/meals/{mealId}", dietId, mealId)
+                        .header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.commentCount").value(1));
+    }
+
+    @Test
+    void onlyMealAuthorCanReactOnceToAnotherUsersComment() throws Exception {
+        String firstEmail = "comment-reaction-one-" + UUID.randomUUID() + "@example.com";
+        String secondEmail = "comment-reaction-two-" + UUID.randomUUID() + "@example.com";
+        JsonNode owner = register("Comment Reaction Owner",
+                "comment-reaction-owner-" + UUID.randomUUID() + "@example.com");
+        JsonNode firstMember = register("Comment Reaction One", firstEmail);
+        JsonNode secondMember = register("Comment Reaction Two", secondEmail);
+        String dietId = createDiet(owner, "Comment Reaction Diet");
+        joinDiet(owner, firstMember, dietId, firstEmail);
+        joinDiet(owner, secondMember, dietId, secondEmail);
+        String mealId = createMeal(owner, dietId, "Reaction target meal");
+        String commentId = createComment(firstMember, dietId, mealId, "React to this");
+        String ownCommentId = createComment(owner, dietId, mealId, "Owner comment");
+
+        mvc.perform(put("/api/diets/{dietId}/meals/{mealId}/comments/{commentId}/reaction",
+                        dietId, mealId, commentId)
+                        .header("Authorization", bearer(firstMember))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"emoji\":\"❤️\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Only the meal author can react to comments"));
+        mvc.perform(put("/api/diets/{dietId}/meals/{mealId}/comments/{commentId}/reaction",
+                        dietId, mealId, commentId)
+                        .header("Authorization", bearer(secondMember))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"emoji\":\"❤️\"}"))
+                .andExpect(status().isForbidden());
+        mvc.perform(put("/api/diets/{dietId}/meals/{mealId}/comments/{commentId}/reaction",
+                        dietId, mealId, ownCommentId)
+                        .header("Authorization", bearer(owner))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"emoji\":\"❤️\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("You cannot react to your own comment"));
+        mvc.perform(put("/api/diets/{dietId}/meals/{mealId}/comments/{commentId}/reaction",
+                        dietId, mealId, commentId)
+                        .header("Authorization", bearer(owner))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"emoji\":\"invalid\"}"))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(put("/api/diets/{dietId}/meals/{mealId}/comments/{commentId}/reaction",
+                        dietId, mealId, commentId)
+                        .header("Authorization", bearer(owner))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"emoji\":\"❤️\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reactions[0].emoji").value("❤️"))
+                .andExpect(jsonPath("$.reactions[0].count").value(1))
+                .andExpect(jsonPath("$.reactions[0].reactedByMe").value(true));
+        mvc.perform(put("/api/diets/{dietId}/meals/{mealId}/comments/{commentId}/reaction",
+                        dietId, mealId, commentId)
+                        .header("Authorization", bearer(owner))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"emoji\":\"😂\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reactions.length()").value(1))
+                .andExpect(jsonPath("$.reactions[0].emoji").value("😂"));
+
+        mvc.perform(get("/api/diets/{dietId}/meals/{mealId}/comments", dietId, mealId)
+                        .header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].reactions[0].reactedByMe").value(true));
+        mvc.perform(get("/api/diets/{dietId}/meals/{mealId}/comments", dietId, mealId)
+                        .header("Authorization", bearer(firstMember)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].reactions[0].reactedByMe").value(false));
+
+        mvc.perform(delete("/api/diets/{dietId}/meals/{mealId}/comments/{commentId}/reaction",
+                        dietId, mealId, commentId)
+                        .header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reactions").isEmpty());
+        mvc.perform(delete("/api/diets/{dietId}/meals/{mealId}/comments/{commentId}/reaction",
+                        dietId, mealId, commentId)
+                        .header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reactions").isEmpty());
+    }
+
+    @Test
+    void commentNotificationsAreRecipientScopedReadableAndRemovedWithComment() throws Exception {
+        String firstEmail = "notification-one-" + UUID.randomUUID() + "@example.com";
+        String secondEmail = "notification-two-" + UUID.randomUUID() + "@example.com";
+        JsonNode owner = register("Notification Owner",
+                "notification-owner-" + UUID.randomUUID() + "@example.com");
+        JsonNode firstMember = register("Notification One", firstEmail);
+        JsonNode secondMember = register("Notification Two", secondEmail);
+        String dietId = createDiet(owner, "Notification Diet");
+        joinDiet(owner, firstMember, dietId, firstEmail);
+        joinDiet(owner, secondMember, dietId, secondEmail);
+        String mealId = createMeal(owner, dietId, "Notification meal");
+        String firstCommentId = createComment(firstMember, dietId, mealId, "First notification");
+        createComment(owner, dietId, mealId, "Self comment");
+        String secondCommentId = createComment(secondMember, dietId, mealId, "Second notification");
+
+        mvc.perform(get("/api/notifications/unread-count").header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.count").value(2));
+        String notificationsJson = mvc.perform(get("/api/notifications")
+                        .header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].type").value("MEAL_COMMENTED"))
+                .andExpect(jsonPath("$[0].dietId").value(dietId))
+                .andExpect(jsonPath("$[0].mealId").value(mealId))
+                .andExpect(jsonPath("$[0].mealDate").value("2026-09-04"))
+                .andExpect(jsonPath("$[0].commentId").value(secondCommentId))
+                .andExpect(jsonPath("$[0].actorId").value(secondMember.get("userId").asText()))
+                .andExpect(jsonPath("$[0].actorName").value("Notification Two"))
+                .andExpect(jsonPath("$[0].mealType").value("LUNCH"))
+                .andExpect(jsonPath("$[0].createdAt").isNotEmpty())
+                .andExpect(jsonPath("$[0].readAt").doesNotExist())
+                .andExpect(jsonPath("$[1].commentId").value(firstCommentId))
+                .andExpect(jsonPath("$[2]").doesNotExist())
+                .andReturn().getResponse().getContentAsString();
+        String latestNotificationId = objectMapper.readTree(notificationsJson).get(0).get("id").asText();
+
+        mvc.perform(get("/api/notifications").header("Authorization", bearer(firstMember)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
+        mvc.perform(put("/api/notifications/{id}/read", latestNotificationId)
+                        .header("Authorization", bearer(firstMember)))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/notifications/unread-count").header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.count").value(2));
+
+        mvc.perform(put("/api/notifications/{id}/read", latestNotificationId)
+                        .header("Authorization", bearer(owner)))
+                .andExpect(status().isNoContent());
+        mvc.perform(put("/api/notifications/{id}/read", latestNotificationId)
+                        .header("Authorization", bearer(owner)))
+                .andExpect(status().isNoContent());
+        mvc.perform(get("/api/notifications/unread-count").header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.count").value(1));
+
+        mvc.perform(put("/api/diets/{dietId}/meals/{mealId}/comments/{commentId}",
+                        dietId, mealId, firstCommentId)
+                        .header("Authorization", bearer(firstMember))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"Edited without notification\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/notifications").header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2));
+
+        mvc.perform(put("/api/notifications/read-all").header("Authorization", bearer(owner)))
+                .andExpect(status().isNoContent());
+        mvc.perform(get("/api/notifications/unread-count").header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.count").value(0));
+        mvc.perform(get("/api/notifications").header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].readAt").isNotEmpty())
+                .andExpect(jsonPath("$[1].readAt").isNotEmpty());
+
+        mvc.perform(delete("/api/diets/{dietId}/meals/{mealId}/comments/{commentId}",
+                        dietId, mealId, secondCommentId)
+                        .header("Authorization", bearer(secondMember)))
+                .andExpect(status().isNoContent());
+        mvc.perform(get("/api/notifications").header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].commentId").value(firstCommentId));
+    }
+
+    @Test
+    void commentNotificationsAreHiddenAfterMealAuthorLeavesDiet() throws Exception {
+        String authorEmail = "former-author-" + UUID.randomUUID() + "@example.com";
+        String commenterEmail = "remaining-commenter-" + UUID.randomUUID() + "@example.com";
+        JsonNode owner = register("Diet Owner", "notification-diet-owner-" + UUID.randomUUID() + "@example.com");
+        JsonNode author = register("Former Meal Author", authorEmail);
+        JsonNode commenter = register("Remaining Commenter", commenterEmail);
+        String dietId = createDiet(owner, "Membership Notification Diet");
+        joinDiet(owner, author, dietId, authorEmail);
+        joinDiet(owner, commenter, dietId, commenterEmail);
+        String mealId = createMeal(author, dietId, "Meal from former member");
+
+        createComment(commenter, dietId, mealId, "Visible before leaving");
+        String notificationJson = mvc.perform(get("/api/notifications")
+                        .header("Authorization", bearer(author)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andReturn().getResponse().getContentAsString();
+        String notificationId = objectMapper.readTree(notificationJson).get(0).get("id").asText();
+
+        leaveDiet(author, dietId, null).andExpect(status().isNoContent());
+        createComment(commenter, dietId, mealId, "Created after author left");
+
+        mvc.perform(get("/api/notifications").header("Authorization", bearer(author)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
+        mvc.perform(get("/api/notifications/unread-count").header("Authorization", bearer(author)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.count").value(0));
+        mvc.perform(put("/api/notifications/{id}/read", notificationId)
+                        .header("Authorization", bearer(author)))
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -619,6 +931,27 @@ class ApiIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
                                 new DietRequest(name, "2026-09-01", "2026-10-01"))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(response).get("id").asText();
+    }
+
+    private String createMeal(JsonNode auth, String dietId, String description) throws Exception {
+        String response = mvc.perform(post("/api/diets/{dietId}/meals", dietId)
+                        .header("Authorization", bearer(auth))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "mealType", "LUNCH", "description", description, "mealDate", "2026-09-04"))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(response).get("id").asText();
+    }
+
+    private String createComment(JsonNode auth, String dietId, String mealId, String content) throws Exception {
+        String response = mvc.perform(post("/api/diets/{dietId}/meals/{mealId}/comments", dietId, mealId)
+                        .header("Authorization", bearer(auth))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("content", content))))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(response).get("id").asText();

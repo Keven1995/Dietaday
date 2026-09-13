@@ -47,6 +47,7 @@ public class Meal {
     }
 
     public UUID getId() { return id; }
+    public Diet getDiet() { return diet; }
     public User getAuthor() { return author; }
     public String getMealType() { return mealType; }
     public String getDescription() { return description; }
