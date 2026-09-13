@@ -1,16 +1,21 @@
 import { Bell, BellRing, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getDemoInvitations, respondToDemoInvitation } from '../data'
 import { api, getErrorMessage, isDemoMode } from '../lib/api'
+import { notificationDeepLink, notificationMessage, unreadNotifications } from '../lib/notifications'
 import { useAuth } from '../state/AuthContext'
 import { useDiets } from '../state/DietContext'
-import type { Invitation } from '../types'
+import type { CommentNotification, Invitation } from '../types'
 import { Button } from './Ui'
 
 export function InvitationNotifications() {
   const { token } = useAuth()
-  const { reload } = useDiets()
+  const { reload, selectDiet } = useDiets()
+  const navigate = useNavigate()
   const [invitations, setInvitations] = useState<Invitation[]>([])
+  const [notifications, setNotifications] = useState<CommentNotification[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [processingId, setProcessingId] = useState<string | null>(null)
@@ -25,6 +30,8 @@ export function InvitationNotifications() {
   useEffect(() => {
     if (!token) {
       setInvitations([])
+      setNotifications([])
+      setUnreadCount(0)
       return
     }
 
@@ -37,12 +44,21 @@ export function InvitationNotifications() {
       requestRef.current = { id, controller }
       setLoading(true)
       try {
-        const data = isDemoMode
-          ? getDemoInvitations()
-          : await api<Invitation[]>('/invitations', { token, signal: controller.signal })
+        const [invitationResult, notificationResult] = await Promise.allSettled([
+          isDemoMode ? Promise.resolve(getDemoInvitations()) : api<Invitation[]>('/invitations', { token, signal: controller.signal }),
+          isDemoMode ? Promise.resolve([] as CommentNotification[]) : api<CommentNotification[]>('/notifications', { token, signal: controller.signal }),
+        ])
         if (!controller.signal.aborted && requestRef.current?.id === id) {
-          setInvitations(data)
-          setError('')
+          const errors: string[] = []
+          if (invitationResult.status === 'fulfilled') setInvitations(invitationResult.value)
+          else errors.push(getErrorMessage(invitationResult.reason, 'Não foi possível carregar os convites.'))
+          if (notificationResult.status === 'fulfilled') {
+            setNotifications(notificationResult.value)
+            setUnreadCount(unreadNotifications(notificationResult.value))
+          } else {
+            errors.push(getErrorMessage(notificationResult.reason, 'Não foi possível carregar as notificações.'))
+          }
+          setError(errors.join(' '))
         }
       } catch (loadError) {
         if (!controller.signal.aborted && requestRef.current?.id === id) {
@@ -54,9 +70,14 @@ export function InvitationNotifications() {
     }
 
     void load()
-    const timer = window.setInterval(() => void load(), 30_000)
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine) void load()
+    }
+    const timer = window.setInterval(refreshWhenVisible, 30_000)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
     return () => {
       window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
       requestRef.current?.controller.abort()
     }
   }, [token])
@@ -119,28 +140,79 @@ export function InvitationNotifications() {
     }
   }
 
+  async function openNotification(notification: CommentNotification) {
+    if (!token) return
+    if (!notification.readAt) {
+      const previousNotifications = notifications
+      const previousUnreadCount = unreadCount
+      actionInProgressRef.current = true
+      requestRef.current?.controller.abort()
+      const readAt = new Date().toISOString()
+      setNotifications((current) => current.map((item) => item.id === notification.id ? { ...item, readAt } : item))
+      setUnreadCount((current) => Math.max(0, current - 1))
+      try {
+        if (!isDemoMode) await api<void>(`/notifications/${notification.id}/read`, { method: 'PUT', token })
+      } catch (readError) {
+        setNotifications(previousNotifications)
+        setUnreadCount(previousUnreadCount)
+        setError(getErrorMessage(readError, 'Não foi possível marcar a notificação como lida.'))
+      } finally {
+        actionInProgressRef.current = false
+      }
+    }
+    selectDiet(notification.dietId)
+    setOpen(false)
+    navigate(notificationDeepLink(notification))
+  }
+
+  async function readAll() {
+    if (!token || !unreadCount) return
+    const previous = notifications
+    const previousUnreadCount = unreadCount
+    actionInProgressRef.current = true
+    requestRef.current?.controller.abort()
+    const readAt = new Date().toISOString()
+    setNotifications((current) => current.map((notification) => ({ ...notification, readAt: notification.readAt ?? readAt })))
+    setUnreadCount(0)
+    try {
+      if (!isDemoMode) await api<void>('/notifications/read-all', { method: 'PUT', token })
+    } catch (readError) {
+      setNotifications(previous)
+      setUnreadCount(previousUnreadCount)
+      setError(getErrorMessage(readError, 'Não foi possível marcar as notificações como lidas.'))
+    } finally {
+      actionInProgressRef.current = false
+    }
+  }
+
+  const totalBadge = invitations.length + unreadCount
+
   return (
     <div className="invitation-notifications">
       <button
         ref={bellRef}
         className="notification-trigger"
         type="button"
-        aria-label={`Convites pendentes: ${invitations.length}`}
+        aria-label={`${totalBadge} notificações pendentes`}
         aria-expanded={open}
         aria-controls="invitation-panel"
         onClick={() => setOpen(true)}
       >
-        {invitations.length ? <BellRing aria-hidden="true" /> : <Bell aria-hidden="true" />}
-        {invitations.length > 0 && <span className="notification-badge" aria-hidden="true">{invitations.length > 9 ? '9+' : invitations.length}</span>}
+        {totalBadge ? <BellRing aria-hidden="true" /> : <Bell aria-hidden="true" />}
+        {totalBadge > 0 && <span className="notification-badge" aria-hidden="true">{totalBadge > 9 ? '9+' : totalBadge}</span>}
       </button>
       {open && (
         <div className="invitation-backdrop" onMouseDown={(event) => event.target === event.currentTarget && closePanel()}>
           <section ref={panelRef} id="invitation-panel" className="invitation-panel" role="dialog" aria-modal="true" aria-labelledby="invitation-title">
-            <button className="close" type="button" onClick={closePanel} aria-label="Fechar convites"><X aria-hidden="true" /></button>
+            <button className="close" type="button" onClick={closePanel} aria-label="Fechar notificações"><X aria-hidden="true" /></button>
             <BellRing className="invitation-panel-icon" aria-hidden="true" />
-            <h2 id="invitation-title" ref={titleRef} tabIndex={-1}>Convites para dietas</h2>
+            <div className="notification-panel-title"><h2 id="invitation-title" ref={titleRef} tabIndex={-1}>Notificações</h2>{unreadCount > 0 && <button type="button" onClick={() => void readAll()}>Marcar todas como lidas</button>}</div>
             {error && <div className="error-message" role="alert">{error}</div>}
-            {loading && !invitations.length ? <p className="loading-text">Carregando convites...</p> : invitations.length ? (
+            {loading && !invitations.length && !notifications.length ? <p className="loading-text">Carregando notificações...</p> : (invitations.length || notifications.length) ? (<>
+              {notifications.length > 0 && <div className="comment-notification-list">
+                {notifications.map((notification) => <button type="button" key={notification.id} className={notification.readAt ? 'read' : 'unread'} onClick={() => void openNotification(notification)}><span aria-hidden="true"><Bell /></span><span><strong>{notificationMessage(notification)}</strong><time dateTime={notification.createdAt}>{new Date(notification.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</time></span></button>)}
+              </div>}
+              {invitations.length > 0 && <h3 className="invitation-subtitle">Convites para dietas</h3>}
               <div className="invitation-list">
                 {invitations.map((invitation) => (
                   <article key={invitation.id}>
@@ -152,7 +224,7 @@ export function InvitationNotifications() {
                   </article>
                 ))}
               </div>
-            ) : <p className="invitation-empty">Você não tem convites pendentes.</p>}
+            </>) : <p className="invitation-empty">Você não tem notificações.</p>}
           </section>
         </div>
       )}

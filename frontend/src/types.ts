@@ -32,6 +32,32 @@ export type Meal = {
   syncError?: string
   operationId?: string
   reactions?: MealReaction[]
+  commentCount?: number
+}
+
+export type MealComment = {
+  id: string
+  mealId: string
+  authorId: string
+  authorName: string
+  content: string
+  createdAt: string
+  updatedAt: string
+  reactions: MealReaction[]
+}
+
+export type CommentNotification = {
+  id: string
+  type: string
+  dietId: string
+  mealId: string
+  mealDate: string
+  commentId: string
+  actorId: string
+  actorName: string
+  mealType: string
+  createdAt: string
+  readAt: string | null
 }
 
 export type Member = {

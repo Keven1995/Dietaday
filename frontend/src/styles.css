@@ -252,6 +252,12 @@ label, .field-label { display: grid; gap: 7px; color: #34433f; font-size: .86rem
 .icon-danger { display: grid; place-items: center; width: 35px; height: 35px; border: 0; border-radius: 10px; background: #f4ded7; color: #a23d22; }
 .icon-danger svg { width: 16px; }
 .meal-reactions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; }
+.meal-engagement { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
+.meal-comments-button { display: inline-flex; align-items: center; gap: 5px; height: 31px; margin-top: 12px; padding: 0 9px; border: 1px solid var(--line); border-radius: 18px; background: #f7f5ef; color: var(--green); }
+.meal-comments-button:hover { border-color: #d6a58f; background: #fff4ee; }
+.meal-comments-button:disabled { cursor: not-allowed; opacity: .45; }
+.meal-comments-button svg { width: 15px; }
+.meal-comments-button b { font-size: .68rem; }
 .reaction-pill, .add-reaction { display: inline-flex; align-items: center; justify-content: center; height: 31px; border: 1px solid var(--line); background: #f7f5ef; color: var(--green); }
 .reaction-pill { gap: 4px; padding: 0 9px; border-radius: 18px; }
 .reaction-pill span { color: inherit; font-size: 1rem; line-height: 1; text-transform: none; }
@@ -269,6 +275,49 @@ label, .field-label { display: grid; gap: 7px; color: #34433f; font-size: .86rem
 .emoji-picker-dialog aside { max-width: 100%; border: 0 !important; box-shadow: none !important; }
 .emoji-picker-loading { display: flex; align-items: center; justify-content: center; gap: 8px; height: 300px; color: var(--muted); font-size: .78rem; }
 .emoji-picker-loading svg { width: 18px; }
+.comments-backdrop { position: fixed; inset: 0; z-index: 70; display: grid; align-items: end; background: #112d2780; backdrop-filter: blur(4px); }
+.comments-modal { display: grid; grid-template-rows: auto auto minmax(100px, 1fr) auto; width: 100%; max-height: 94dvh; overflow: hidden; padding: 22px 18px max(18px, env(safe-area-inset-bottom)); border-radius: 24px 24px 0 0; background: var(--white); }
+.comments-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; padding-bottom: 17px; border-bottom: 1px solid var(--line); }
+.comments-header > div { display: flex; min-width: 0; align-items: center; gap: 12px; }
+.comments-header > div > svg { flex: 0 0 auto; width: 23px; color: var(--orange); }
+.comments-header h2 { margin: 0; color: var(--green); font-size: 1.2rem; }
+.comments-header h2:focus { outline: 0; }
+.comments-header p { overflow: hidden; margin: 3px 0 0; color: var(--muted); font-size: .7rem; text-overflow: ellipsis; white-space: nowrap; }
+.comments-header .close { display: grid; place-items: center; flex: 0 0 auto; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 50%; background: #f0eee8; color: var(--muted); }
+.comments-header .close svg { width: 18px; }
+.comments-offline { margin: 12px 0 0; padding: 9px 11px; border-radius: 9px; background: #f2eee4; color: #665e4f; font-size: .72rem; }
+.comments-modal > .error-message { margin-top: 12px; }
+.comment-list { display: grid; align-content: start; gap: 10px; overflow-y: auto; padding: 15px 2px; }
+.comment-list > article { padding: 13px; border: 1px solid var(--line); border-radius: 14px; background: #faf8f2; transition: border-color .25s, background .25s; }
+.comment-list > article:focus { outline: none; }
+.comment-list > article.highlighted { border-color: var(--orange); background: #fff3ec; box-shadow: 0 0 0 3px #e8683a1c; }
+.comment-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.comment-meta strong { color: var(--green); font-size: .78rem; }
+.comment-meta time { color: var(--muted); font-size: .65rem; }
+.comment-list article > p { margin: 8px 0 0; color: #46534f; font-size: .84rem; line-height: 1.5; overflow-wrap: anywhere; white-space: pre-wrap; }
+.comment-footer { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; margin-top: 10px; }
+.comment-reactions { display: flex; flex-wrap: wrap; gap: 5px; }
+.comment-actions { display: flex; gap: 3px; margin-left: auto; }
+.comment-actions button { display: grid; place-items: center; width: 29px; height: 29px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--muted); }
+.comment-actions button:last-child { color: #a74732; }
+.comment-actions button:disabled { cursor: not-allowed; opacity: .4; }
+.comment-actions svg { width: 14px; }
+.comment-edit { display: grid; gap: 8px; margin-top: 9px; }
+.comment-edit textarea { min-height: 76px; font-size: .82rem; }
+.comment-edit > div { display: flex; justify-content: flex-end; gap: 6px; }
+.comment-edit .button { min-height: 34px; padding: 0 11px; font-size: .7rem; }
+.comment-edit .button svg { width: 14px; }
+.comment-empty { display: grid; justify-items: center; padding: 35px 15px; color: var(--muted); text-align: center; }
+.comment-empty svg { width: 27px; margin-bottom: 10px; color: #9ba8a3; }
+.comment-empty strong { color: var(--green); font-size: .85rem; }
+.comment-empty span { margin-top: 5px; font-size: .72rem; }
+.comment-composer { display: grid; gap: 7px; padding-top: 14px; border-top: 1px solid var(--line); }
+.comment-composer label { font-size: .74rem; }
+.comment-composer textarea { min-height: 70px; max-height: 140px; font-size: .82rem; }
+.comment-composer > div { display: flex; align-items: center; justify-content: space-between; }
+.comment-composer small { color: var(--muted); font-size: .65rem; }
+.comment-composer .button { min-height: 38px; padding: 0 13px; font-size: .72rem; }
+.comment-composer .button svg { width: 15px; }
 .empty-state { display: grid; place-items: center; padding: 55px 25px; text-align: center; border: 1px dashed #c9c7bf; border-radius: 20px; }
 .empty-state > span { display: grid; place-items: center; width: 55px; height: 55px; border-radius: 18px; background: #e7ece3; color: var(--green-2); }
 .empty-state h3 { margin: 18px 0 7px; color: var(--green); }
@@ -329,6 +378,19 @@ label, .field-label { display: grid; gap: 7px; color: #34433f; font-size: .86rem
 .invitation-panel-icon { width: 27px; color: var(--orange); }
 .invitation-panel h2 { margin: 12px 48px 20px 0; color: var(--green); font-size: 1.3rem; }
 .invitation-panel h2:focus { outline: none; }
+.notification-panel-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-right: 46px; }
+.notification-panel-title h2 { margin-right: 0; }
+.notification-panel-title button { padding: 5px 0; border: 0; background: transparent; color: var(--orange); font-size: .68rem; font-weight: 800; }
+.comment-notification-list { display: grid; gap: 8px; margin-bottom: 20px; }
+.comment-notification-list > button { display: grid; grid-template-columns: 36px minmax(0, 1fr); align-items: center; gap: 10px; width: 100%; padding: 12px; border: 1px solid var(--line); border-radius: 13px; background: #faf8f2; color: inherit; text-align: left; }
+.comment-notification-list > button.unread { border-color: #e9b19a; background: #fff4ed; }
+.comment-notification-list > button.read { opacity: .72; }
+.comment-notification-list > button > span:first-child { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: #e7ece3; color: var(--green); }
+.comment-notification-list svg { width: 16px; }
+.comment-notification-list strong, .comment-notification-list time { display: block; }
+.comment-notification-list strong { color: var(--green); font-size: .76rem; line-height: 1.4; }
+.comment-notification-list time { margin-top: 3px; color: var(--muted); font-size: .62rem; }
+.invitation-subtitle { margin: 5px 0 10px; color: var(--green); font-size: .85rem; }
 .invitation-list { display: grid; gap: 12px; }
 .invitation-list article { padding: 18px; border: 1px solid var(--line); border-radius: 16px; background: #faf8f2; }
 .invitation-list p { margin: 0; color: #46534f; font-size: .9rem; line-height: 1.6; }
@@ -369,6 +431,8 @@ label, .field-label { display: grid; gap: 7px; color: #34433f; font-size: .86rem
   .leave-diet-actions { grid-template-columns: 1fr 1fr; }
   .date-switcher { max-width: 570px; }
   .emoji-picker-backdrop { place-items: center; }
+  .comments-backdrop { place-items: center; padding: 25px; }
+  .comments-modal { width: min(100%, 650px); height: min(780px, calc(100dvh - 50px)); padding: 24px; border-radius: 24px; }
 }
 
 @media (min-width: 980px) {
