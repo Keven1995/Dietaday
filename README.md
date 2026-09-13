@@ -37,7 +37,7 @@ Sem essas variáveis ainda é possível registrar refeições sem foto.
 4. Configure no Render `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`, `JWT_SECRET` e, provisoriamente, `FRONTEND_URL=http://localhost:5173`.
 5. Depois da publicação, confirme `https://sua-api.onrender.com/api/health`.
 6. Na Vercel, importe o mesmo repositório, defina `frontend` como Root Directory e adicione as variáveis `VITE_API_URL`, `VITE_CLOUDINARY_CLOUD_NAME` e `VITE_CLOUDINARY_UPLOAD_PRESET`.
-7. Após a Vercel fornecer a URL final, substitua `FRONTEND_URL` no Render por essa URL e faça novo deploy da API.
+7. Após a Vercel fornecer a URL final, substitua `FRONTEND_URL` no Render por essa URL e faça novo deploy da API. Para uma migração entre domínios, separe temporariamente as origens permitidas por vírgula, por exemplo `FRONTEND_URL=https://dietaday.vercel.app,https://dietaday.com.br`.
 
 O `DATABASE_URL` esperado pelo Spring tem o formato `jdbc:postgresql://host:5432/database?sslmode=require`. Não envie arquivos `.env` para o GitHub.
 
