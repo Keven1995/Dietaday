@@ -53,15 +53,27 @@ export async function uploadPhoto(file: Blob, fileName: string, signal?: AbortSi
   const body = new FormData()
   body.append('file', file, fileName)
   body.append('upload_preset', uploadPreset)
-  const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
-    method: 'POST',
-    body,
-    signal,
-  })
+  const endpoint = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`
+  let response: Response
+  try {
+    response = await fetch(endpoint, { method: 'POST', body, signal })
+  } catch (error) {
+    if (signal?.aborted) throw error
+    throw new PhotoUploadError(
+      `Falha de rede no upload (sem resposta HTTP). Arquivo: ${fileName}, ${file.type || 'tipo desconhecido'}, ${file.size} bytes. `
+      + `Endpoint: ${endpoint}`,
+      0,
+    )
+  }
   const value: unknown = await response.json().catch(() => null)
   const data = isCloudinaryResponse(value) ? value : null
   if (!response.ok || !data?.secure_url) {
-    throw new PhotoUploadError(data?.error?.message || 'Não foi possível enviar a foto ao Cloudinary.', response.status)
+    const cloudinaryMessage = data?.error?.message || 'Resposta sem secure_url.'
+    throw new PhotoUploadError(
+      `Cloudinary HTTP ${response.status}: ${cloudinaryMessage} `
+      + `Arquivo: ${fileName}, ${file.type || 'tipo desconhecido'}, ${file.size} bytes. Preset: ${uploadPreset}.`,
+      response.status,
+    )
   }
   return data.secure_url
 }
