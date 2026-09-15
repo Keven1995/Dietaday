@@ -20,12 +20,7 @@ Sem `VITE_API_URL`, o frontend abre em modo demonstrativo. Com a URL definida, o
 
 ## Fotos
 
-Crie uma conta gratuita no Cloudinary e um upload preset sem assinatura. Preencha no `frontend/.env`:
-
-```env
-VITE_CLOUDINARY_CLOUD_NAME=seu-cloud-name
-VITE_CLOUDINARY_UPLOAD_PRESET=seu-upload-preset
-```
+Configure uma conta no Cloudinary e use upload assinado pelo backend. No Render, defina `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY` e `CLOUDINARY_API_SECRET`.
 
 Sem essas variáveis ainda é possível registrar refeições sem foto.
 
@@ -34,9 +29,9 @@ Sem essas variáveis ainda é possível registrar refeições sem foto.
 1. Envie este projeto para um repositório privado ou público no GitHub.
 2. Crie um projeto PostgreSQL gratuito no Neon e copie host, database, usuário e senha.
 3. No Render, crie um Blueprint usando o `render.yaml` ou um Web Service Docker com raiz `backend`.
-4. Configure no Render `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`, `JWT_SECRET` e, provisoriamente, `FRONTEND_URL=http://localhost:5173`.
+4. Configure no Render `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`, `JWT_SECRET`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` e, provisoriamente, `FRONTEND_URL=http://localhost:5173`.
 5. Depois da publicação, confirme `https://sua-api.onrender.com/api/health`.
-6. Na Vercel, importe o mesmo repositório, defina `frontend` como Root Directory e adicione as variáveis `VITE_API_URL`, `VITE_CLOUDINARY_CLOUD_NAME` e `VITE_CLOUDINARY_UPLOAD_PRESET`.
+6. Na Vercel, importe o mesmo repositório, defina `frontend` como Root Directory e adicione a variável `VITE_API_URL`.
 7. Após a Vercel fornecer a URL final, substitua `FRONTEND_URL` no Render por essa URL e faça novo deploy da API. Para uma migração entre domínios, separe temporariamente as origens permitidas por vírgula, por exemplo `FRONTEND_URL=https://dietaday.vercel.app,https://dietaday.com.br`.
 
 O `DATABASE_URL` esperado pelo Spring tem o formato `jdbc:postgresql://host:5432/database?sslmode=require`. Não envie arquivos `.env` para o GitHub.
@@ -47,7 +42,7 @@ Gere o segredo JWT no PowerShell com:
 [Convert]::ToBase64String([byte[]](1..48 | ForEach-Object { Get-Random -Maximum 256 }))
 ```
 
-No Cloudinary, use um upload preset sem assinatura restrito a imagens, com limite de tamanho e uma pasta exclusiva para o aplicativo. O nome do preset e o cloud name ficam visíveis no frontend; nunca coloque o API Secret nas variáveis `VITE_*`.
+No Cloudinary, o `API Secret` fica exclusivamente no Render; nunca coloque credenciais do Cloudinary nas variáveis `VITE_*`.
 
 ## Verificação
 

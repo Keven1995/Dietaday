@@ -15,3 +15,7 @@ app:
     secret: test-secret-that-is-long-enough-for-hmac-sha256
     expiration-minutes: 60
   frontend-url: http://localhost:3000, http://localhost:5173
+  cloudinary:
+    cloud-name: test-cloud
+    api-key: test-key
+    api-secret: test-secret

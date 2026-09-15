@@ -1,7 +1,13 @@
-const cloudName: string | undefined = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME
-const uploadPreset: string | undefined = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET
+import { api } from './api'
+import { API_URL } from './apiConfig'
 
 type CloudinaryResponse = { secure_url?: string; error?: { message?: string } }
+type CloudinarySignature = {
+  apiKey: string
+  timestamp: number
+  signature: string
+  uploadUrl: string
+}
 
 export class PhotoUploadError extends Error {
   readonly status: number
@@ -17,7 +23,7 @@ function isCloudinaryResponse(value: unknown): value is CloudinaryResponse {
   return typeof value === 'object' && value !== null
 }
 
-export const isPhotoUploadConfigured = Boolean(cloudName && uploadPreset)
+export const isPhotoUploadConfigured = Boolean(API_URL)
 
 export async function compressPhoto(file: File) {
   if (file.size <= 500 * 1024 || file.type === 'image/gif') return file
@@ -46,14 +52,18 @@ export async function compressPhoto(file: File) {
   }
 }
 
-export async function uploadPhoto(file: Blob, fileName: string, signal?: AbortSignal) {
-  if (!cloudName || !uploadPreset) {
-    throw new Error('O upload de fotos não está configurado.')
-  }
+export async function uploadPhoto(file: Blob, fileName: string, token: string, signal?: AbortSignal) {
+  const signedUpload = await api<CloudinarySignature>('/uploads/signature', {
+    method: 'POST',
+    token,
+    signal,
+  })
   const body = new FormData()
   body.append('file', file, fileName)
-  body.append('upload_preset', uploadPreset)
-  const endpoint = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`
+  body.append('api_key', signedUpload.apiKey)
+  body.append('timestamp', String(signedUpload.timestamp))
+  body.append('signature', signedUpload.signature)
+  const endpoint = signedUpload.uploadUrl
   let response: Response
   try {
     response = await fetch(endpoint, { method: 'POST', body, signal })
@@ -71,7 +81,7 @@ export async function uploadPhoto(file: Blob, fileName: string, signal?: AbortSi
     const cloudinaryMessage = data?.error?.message || 'Resposta sem secure_url.'
     throw new PhotoUploadError(
       `Cloudinary HTTP ${response.status}: ${cloudinaryMessage} `
-      + `Arquivo: ${fileName}, ${file.type || 'tipo desconhecido'}, ${file.size} bytes. Preset: ${uploadPreset}.`,
+      + `Arquivo: ${fileName}, ${file.type || 'tipo desconhecido'}, ${file.size} bytes. Upload assinado.`,
       response.status,
     )
   }
