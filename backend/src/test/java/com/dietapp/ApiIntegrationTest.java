@@ -42,6 +42,20 @@ class ApiIntegrationTest {
     }
 
     @Test
+    void authenticatedUsersCanRequestCloudinaryUploadSignature() throws Exception {
+        JsonNode user = register("Upload User", "upload-" + UUID.randomUUID() + "@example.com");
+
+        mvc.perform(post("/api/uploads/signature")
+                        .header("Authorization", bearer(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cloudName").value("test-cloud"))
+                .andExpect(jsonPath("$.apiKey").value("test-key"))
+                .andExpect(jsonPath("$.timestamp").isNumber())
+                .andExpect(jsonPath("$.signature").isString())
+                .andExpect(jsonPath("$.uploadUrl").value("https://api.cloudinary.com/v1_1/test-cloud/image/upload"));
+    }
+
+    @Test
     void corsAcceptsEachConfiguredFrontendOrigin() throws Exception {
         for (String origin : new String[]{"http://localhost:3000", "http://localhost:5173"}) {
             mvc.perform(options("/api/health")

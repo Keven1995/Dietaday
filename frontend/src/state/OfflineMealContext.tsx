@@ -58,7 +58,7 @@ async function synchronize(userId: string, token: string) {
           const controller = new AbortController()
           const timeout = window.setTimeout(() => controller.abort(), 60_000)
           try {
-            const uploadedPhotoUrl = await uploadPhoto(operation.photo, operation.photoName ?? 'refeicao.jpg', controller.signal)
+            const uploadedPhotoUrl = await uploadPhoto(operation.photo, operation.photoName ?? 'refeicao.jpg', token, controller.signal)
             operation = { ...operation, uploadedPhotoUrl }
             if (!await saveClaimedOfflineMeal(operation, syncOwner)) continue
           } finally {
