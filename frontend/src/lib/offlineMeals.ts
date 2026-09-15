@@ -27,6 +27,11 @@ export type OfflineMealOperation = {
   syncLeaseUntil?: number
 }
 
+export function toStoredPhoto(photo: File | null | undefined) {
+  if (!photo) return undefined
+  return new Blob([photo], { type: photo.type || 'application/octet-stream' })
+}
+
 const listeners = new Set<() => void>()
 const queueChannel = typeof window !== 'undefined' && 'BroadcastChannel' in window
   ? new BroadcastChannel('Dietaday_meal_queue')
