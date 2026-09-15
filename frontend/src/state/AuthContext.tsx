@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { api, isDemoMode, UNAUTHORIZED_EVENT } from '../lib/api'
 import { clearUserCache } from '../lib/resourceCache'
 import type { AuthResponse, RegisterRequest, UpdateProfileRequest, User } from '../types'
+import { createUuid } from '../lib/uuid'
 
 type AuthContextValue = {
   user: User | null
@@ -71,7 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function register(data: RegisterRequest) {
     const response = isDemoMode
-      ? { token: 'demo-jwt-token', userId: crypto.randomUUID(), fullName: data.fullName, email: data.email }
+      ? { token: 'demo-jwt-token', userId: createUuid(), fullName: data.fullName, email: data.email }
       : await api<AuthResponse>('/auth/register', { method: 'POST', body: JSON.stringify(data) })
     persist(response)
   }

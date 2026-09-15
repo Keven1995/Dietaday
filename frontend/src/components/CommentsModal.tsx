@@ -5,6 +5,7 @@ import { chronologicalComments, commentPath, commentReactionPath, commentsPath, 
 import { mealTime } from '../lib/date'
 import { optimisticReactions } from '../lib/mealReactions'
 import { readCachedResource, writeCachedResource } from '../lib/resourceCache'
+import { createUuid } from '../lib/uuid'
 import { useAuth } from '../state/AuthContext'
 import type { Meal, MealComment, MealReaction } from '../types'
 import { ReactionPicker } from './ReactionPicker'
@@ -142,7 +143,7 @@ export function CommentsModal({ dietId, meal, highlightedCommentId, onClose, onC
     event.preventDefault()
     const content = draft.trim()
     if (!token || !user || !canWrite || !content || submitting) return
-    const temporaryId = `pending-${crypto.randomUUID()}`
+    const temporaryId = `pending-${createUuid()}`
     const temporary: MealComment = {
       id: temporaryId,
       mealId: meal.id,

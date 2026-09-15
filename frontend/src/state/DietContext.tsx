@@ -3,6 +3,7 @@ import { deleteDemoDiet, getDemoDiets } from '../data'
 import { api, getErrorMessage, isDemoMode } from '../lib/api'
 import { clearDietCache, readCachedResource, writeCachedResource } from '../lib/resourceCache'
 import type { CreateDietRequest, Diet } from '../types'
+import { createUuid } from '../lib/uuid'
 import { useAuth } from './AuthContext'
 
 type DietContextValue = {
@@ -92,7 +93,7 @@ export function DietProvider({ children }: { children: ReactNode }) {
     if (!token || !user) throw new Error('Sua sessão expirou. Entre novamente.')
     requestIdRef.current += 1
     const created = isDemoMode
-      ? { id: crypto.randomUUID(), ...data }
+      ? { id: createUuid(), ...data }
       : await api<Diet>('/diets', { method: 'POST', token, body: JSON.stringify(data) })
     setDiets((current) => {
       const next = [...current, created]

@@ -12,9 +12,11 @@ import {
   saveClaimedOfflineMeal,
   saveOfflineMeal,
   subscribeOfflineMeals,
+  toStoredPhoto,
   type OfflineMealOperation,
 } from '../lib/offlineMeals'
 import type { CreateMealRequest, Meal } from '../types'
+import { createUuid } from '../lib/uuid'
 import { useAuth } from './AuthContext'
 
 type QueueMealInput = {
@@ -37,7 +39,7 @@ type OfflineMealContextValue = {
 
 const OfflineMealContext = createContext<OfflineMealContextValue | null>(null)
 const activeSyncs = new Map<string, Promise<void>>()
-const syncOwner = crypto.randomUUID()
+const syncOwner = createUuid()
 
 function isPermanentFailure(error: unknown) {
   const status = error instanceof ApiError || error instanceof PhotoUploadError ? error.status : 0
@@ -158,13 +160,13 @@ export function OfflineMealProvider({ children }: { children: ReactNode }) {
     if (!user) throw new Error('Sua sessão expirou. Entre novamente.')
     const existing = input.operationId ? operations.find((operation) => operation.id === input.operationId) : undefined
     const operation: OfflineMealOperation = {
-      id: existing?.id ?? crypto.randomUUID(),
+      id: existing?.id ?? createUuid(),
       userId: user.id,
       dietId: input.dietId,
       dietName: input.dietName,
       authorName: user.fullName,
       request: input.request,
-      photo: input.photo === undefined ? existing?.photo : input.photo ?? undefined,
+      photo: input.photo === undefined ? existing?.photo : toStoredPhoto(input.photo),
       photoName: input.photo === undefined ? existing?.photoName : input.photo?.name,
       uploadedPhotoUrl: input.photo === undefined ? existing?.uploadedPhotoUrl : undefined,
       status: 'pending',

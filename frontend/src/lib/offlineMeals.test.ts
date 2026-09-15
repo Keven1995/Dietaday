@@ -1,10 +1,11 @@
 import 'fake-indexeddb/auto'
 import { describe, expect, it } from 'vitest'
-import { addOfflineMeal, claimOfflineMeal, listOfflineMeals, removeClaimedOfflineMeal, removeOfflineMeal, saveClaimedOfflineMeal, saveOfflineMeal, type OfflineMealOperation } from './offlineMeals'
+import { createUuid } from './uuid'
+import { addOfflineMeal, claimOfflineMeal, listOfflineMeals, removeClaimedOfflineMeal, removeOfflineMeal, saveClaimedOfflineMeal, saveOfflineMeal, toStoredPhoto, type OfflineMealOperation } from './offlineMeals'
 
 function operation(overrides: Partial<OfflineMealOperation> = {}): OfflineMealOperation {
   return {
-    id: crypto.randomUUID(),
+    id: createUuid(),
     userId: 'user-1',
     dietId: 'diet-1',
     dietName: 'Dieta',
@@ -20,6 +21,16 @@ function operation(overrides: Partial<OfflineMealOperation> = {}): OfflineMealOp
 }
 
 describe('offlineMeals', () => {
+  it('normalizes a File to a Blob before IndexedDB persistence', async () => {
+    const file = new File(['photo'], 'iphone.jpg', { type: 'image/jpeg' })
+    const stored = toStoredPhoto(file)
+
+    expect(stored).toBeInstanceOf(Blob)
+    expect(stored).not.toBeInstanceOf(File)
+    expect(stored?.type).toBe('image/jpeg')
+    expect(await stored?.text()).toBe('photo')
+  })
+
   it('persists photos and isolates each user queue', async () => {
     const first = operation()
     const second = operation({ userId: 'user-2' })
