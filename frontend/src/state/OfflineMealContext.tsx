@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-import { ApiError, api, getErrorMessage, isDemoMode } from '../lib/api'
+import { ApiError, api, isDemoMode } from '../lib/api'
 import { PhotoUploadError, uploadPhoto } from '../lib/cloudinary'
 import { dietResourceKey, readCachedResource, writeCachedResource } from '../lib/resourceCache'
 import { SERVER_STATUS_EVENT, type ServerStatus } from '../lib/serverWakeup'
@@ -17,6 +17,7 @@ import {
 } from '../lib/offlineMeals'
 import type { CreateMealRequest, Meal } from '../types'
 import { createUuid } from '../lib/uuid'
+import { reportSyncEvent, type SyncTelemetryPhase } from '../lib/syncTelemetry'
 import { useAuth } from './AuthContext'
 
 type QueueMealInput = {
@@ -40,6 +41,8 @@ type OfflineMealContextValue = {
 const OfflineMealContext = createContext<OfflineMealContextValue | null>(null)
 const activeSyncs = new Map<string, Promise<void>>()
 const syncOwner = createUuid()
+const SYNC_ERROR_MESSAGE = 'Não foi possível sincronizar esta refeição agora. Ela continua salva neste dispositivo.'
+const RETRY_DELAYS_MS = [30_000, 60_000, 5 * 60_000, 15 * 60_000]
 
 function isPermanentFailure(error: unknown) {
   const status = error instanceof ApiError || error instanceof PhotoUploadError ? error.status : 0
@@ -52,15 +55,34 @@ async function synchronize(userId: string, token: string) {
     const operations = await listOfflineMeals(userId)
     for (const stored of operations) {
       if (stored.status === 'failed') continue
+      if (stored.status === 'pending' && (stored.nextRetryAt ?? 0) > Date.now()) continue
       const claimed = await claimOfflineMeal(stored.id, syncOwner)
       if (!claimed) continue
       let operation = claimed
+      const syncStartedAt = Date.now()
+      const updatePhase = async (phase: SyncTelemetryPhase) => {
+        operation = { ...operation, phase, lastAttemptAt: new Date().toISOString() }
+        await saveClaimedOfflineMeal(operation, syncOwner)
+        void reportSyncEvent(token, {
+          operationId: operation.id,
+          phase,
+          attempt: operation.attempts + 1,
+          fileType: operation.photo?.type,
+          fileSizeBytes: operation.photo?.size,
+        })
+      }
       try {
         if (operation.photo && !operation.uploadedPhotoUrl) {
           const controller = new AbortController()
-          const timeout = window.setTimeout(() => controller.abort(), 60_000)
+          const timeout = window.setTimeout(() => controller.abort(), 120_000)
           try {
-            const uploadedPhotoUrl = await uploadPhoto(operation.photo, operation.photoName ?? 'refeicao.jpg', token, controller.signal)
+            const uploadedPhotoUrl = await uploadPhoto(
+              operation.photo,
+              operation.photoName ?? 'refeicao.jpg',
+              token,
+              controller.signal,
+              updatePhase,
+            )
             operation = { ...operation, uploadedPhotoUrl }
             if (!await saveClaimedOfflineMeal(operation, syncOwner)) continue
           } finally {
@@ -71,6 +93,7 @@ async function synchronize(userId: string, token: string) {
         const renewed = await claimOfflineMeal(operation.id, syncOwner)
         if (!renewed) continue
         operation = renewed
+        await updatePhase('meal-create')
         const created = await api<Meal>(`/diets/${operation.dietId}/meals`, {
           method: 'POST',
           token,
@@ -83,17 +106,46 @@ async function synchronize(userId: string, token: string) {
           created,
           ...cachedMeals.filter((meal) => meal.id !== created.id),
         ])
+        operation = { ...operation, phase: 'completed' }
+        void reportSyncEvent(token, {
+          operationId: operation.id,
+          phase: 'completed',
+          attempt: operation.attempts + 1,
+          durationMs: Date.now() - syncStartedAt,
+          fileType: operation.photo?.type,
+          fileSizeBytes: operation.photo?.size,
+        })
         await removeClaimedOfflineMeal(operation.id, syncOwner)
       } catch (error) {
+        const status = error instanceof ApiError || error instanceof PhotoUploadError ? error.status : 0
+        const permanent = isPermanentFailure(error)
         const failureSaved = await saveClaimedOfflineMeal({
           ...operation,
-          status: isPermanentFailure(error) ? 'failed' : 'pending',
+          status: permanent ? 'failed' : 'pending',
           attempts: operation.attempts + 1,
-          error: getErrorMessage(error, 'Não foi possível sincronizar esta refeição.'),
+          error: SYNC_ERROR_MESSAGE,
+          debugError: `${operation.phase ?? 'unknown'}:${error instanceof Error ? error.name : 'UnknownError'}`,
+          nextRetryAt: permanent ? undefined : Date.now() + RETRY_DELAYS_MS[Math.min(operation.attempts, RETRY_DELAYS_MS.length - 1)],
+          lastAttemptAt: new Date().toISOString(),
+          lastFailureAt: new Date().toISOString(),
+          lastHttpStatus: status || undefined,
           syncOwner: undefined,
           syncLeaseUntil: undefined,
         }, syncOwner)
-        if (failureSaved && !isPermanentFailure(error)) break
+        if (failureSaved) {
+          void reportSyncEvent(token, {
+            operationId: operation.id,
+            phase: operation.phase === 'signature' || operation.phase === 'cloudinary-upload' || operation.phase === 'meal-create'
+              ? operation.phase
+              : 'meal-create',
+            attempt: operation.attempts + 1,
+            durationMs: Date.now() - syncStartedAt,
+            httpStatus: status || undefined,
+            fileType: operation.photo?.type,
+            fileSizeBytes: operation.photo?.size,
+          })
+        }
+        if (failureSaved && !permanent) break
       }
     }
   })().finally(() => activeSyncs.delete(userId))
@@ -170,6 +222,7 @@ export function OfflineMealProvider({ children }: { children: ReactNode }) {
       photoName: input.photo === undefined ? existing?.photoName : input.photo?.name,
       uploadedPhotoUrl: input.photo === undefined ? existing?.uploadedPhotoUrl : undefined,
       status: 'pending',
+      phase: 'queued',
       attempts: existing?.attempts ?? 0,
       createdAt: existing?.createdAt ?? new Date().toISOString(),
       syncOwner: undefined,
@@ -183,7 +236,14 @@ export function OfflineMealProvider({ children }: { children: ReactNode }) {
   async function retry(id: string) {
     const operation = operations.find((item) => item.id === id)
     if (!operation) return
-    await saveOfflineMeal({ ...operation, status: 'pending', error: undefined })
+    await saveOfflineMeal({
+      ...operation,
+      status: 'pending',
+      phase: 'queued',
+      error: undefined,
+      debugError: undefined,
+      nextRetryAt: undefined,
+    })
     void syncNow().catch(() => undefined)
   }
 

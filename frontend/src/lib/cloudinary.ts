@@ -1,5 +1,6 @@
 import { api } from './api'
 import { API_URL } from './apiConfig'
+import type { SyncTelemetryPhase } from './syncTelemetry'
 
 type CloudinaryResponse = { secure_url?: string; error?: { message?: string } }
 type CloudinarySignature = {
@@ -52,12 +53,20 @@ export async function compressPhoto(file: File) {
   }
 }
 
-export async function uploadPhoto(file: Blob, fileName: string, token: string, signal?: AbortSignal) {
+export async function uploadPhoto(
+  file: Blob,
+  fileName: string,
+  token: string,
+  signal?: AbortSignal,
+  onPhase?: (phase: SyncTelemetryPhase) => Promise<void>,
+) {
+  await onPhase?.('signature')
   const signedUpload = await api<CloudinarySignature>('/uploads/signature', {
     method: 'POST',
     token,
     signal,
   })
+  await onPhase?.('cloudinary-upload')
   const body = new FormData()
   body.append('file', file, fileName)
   body.append('api_key', signedUpload.apiKey)
