@@ -188,7 +188,7 @@ export function History() {
           <div><span>SINCRONIZAÇÃO</span><h2 id="sync-failures-title">Registros que precisam de atenção</h2></div>
           {failedOperations.map((operation) => (
             <article key={operation.id}>
-              <div><strong>{operation.request.description}</strong><small>{operation.dietName} · {parseLocalDate(operation.request.mealDate).toLocaleDateString('pt-BR')}</small><p>{operation.error}</p></div>
+               <div><strong>{operation.request.description}</strong><small>{operation.dietName} · {parseLocalDate(operation.request.mealDate).toLocaleDateString('pt-BR')}</small><p>Não foi possível sincronizar esta refeição agora. Ela continua salva neste dispositivo.</p></div>
               <div className="sync-failure-actions">
                 <Link className="button outline" to="/refeicoes/nova" state={{ offlineOperationId: operation.id }}><Pencil /> Editar</Link>
                 <button className="button outline" type="button" onClick={() => void retry(operation.id)}><RotateCcw /> Tentar novamente</button>
