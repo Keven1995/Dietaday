@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -23,6 +25,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/diets/{dietId}/meals")
 public class MealController {
+    private static final Logger log = LoggerFactory.getLogger(MealController.class);
     private final MealService service;
     private final MealReactionService reactions;
     private final MealCommentService comments;
@@ -38,8 +41,19 @@ public class MealController {
     public MealResponse create(@PathVariable UUID dietId,
                                @RequestHeader(value = "Idempotency-Key", required = false) UUID operationId,
                                @Valid @RequestBody MealRequest request) {
-        return response(service.create(dietId, request.mealType(), request.description(),
-                request.mealDate(), request.photoUrl(), operationId));
+        long startedAt = System.currentTimeMillis();
+        log.info("meal_create_started dietId={} operationId={} hasPhoto={}", dietId, operationId, request.photoUrl() != null);
+        try {
+            MealResponse result = response(service.create(dietId, request.mealType(), request.description(),
+                    request.mealDate(), request.photoUrl(), operationId));
+            log.info("meal_create_completed dietId={} operationId={} durationMs={}",
+                    dietId, operationId, System.currentTimeMillis() - startedAt);
+            return result;
+        } catch (RuntimeException exception) {
+            log.warn("meal_create_failed dietId={} operationId={} durationMs={} errorType={}",
+                    dietId, operationId, System.currentTimeMillis() - startedAt, exception.getClass().getSimpleName());
+            throw exception;
+        }
     }
 
     @GetMapping

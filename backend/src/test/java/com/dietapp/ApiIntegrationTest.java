@@ -56,6 +56,19 @@ class ApiIntegrationTest {
     }
 
     @Test
+    void authenticatedUsersCanReportSanitizedSyncTelemetry() throws Exception {
+        JsonNode user = register("Telemetry User", "telemetry-" + UUID.randomUUID() + "@example.com");
+
+        mvc.perform(post("/api/telemetry/sync")
+                        .header("Authorization", bearer(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"operationId":"00000000-0000-0000-0000-000000000001","phase":"cloudinary-upload","attempt":1,"durationMs":1200,"httpStatus":0,"fileType":"image/webp","fileSizeBytes":1024}
+                                """))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
     void corsAcceptsEachConfiguredFrontendOrigin() throws Exception {
         for (String origin : new String[]{"http://localhost:3000", "http://localhost:5173"}) {
             mvc.perform(options("/api/health")
