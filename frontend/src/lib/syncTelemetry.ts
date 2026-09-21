@@ -1,6 +1,6 @@
 import { api } from './api'
 
-export type SyncTelemetryPhase = 'signature' | 'cloudinary-upload' | 'meal-create' | 'completed'
+export type SyncTelemetryPhase = 'signature' | 'cloudinary-upload' | 'cloudinary-uploaded' | 'meal-create' | 'completed'
 
 type SyncTelemetryEvent = {
   operationId: string
@@ -8,6 +8,7 @@ type SyncTelemetryEvent = {
   attempt: number
   durationMs?: number
   httpStatus?: number
+  errorType?: string
   fileType?: string
   fileSizeBytes?: number
 }

@@ -49,6 +49,14 @@ function isPermanentFailure(error: unknown) {
   return status >= 400 && status < 500 && ![401, 408, 429].includes(status)
 }
 
+function diagnosticErrorType(error: unknown) {
+  if (error instanceof PhotoUploadError) return error.status ? `cloudinary-http-${error.status}` : 'cloudinary-no-response'
+  if (error instanceof ApiError) return `api-http-${error.status}`
+  if (error instanceof DOMException && error.name === 'AbortError') return 'upload-timeout'
+  if (error instanceof Error) return error.name || 'Error'
+  return 'UnknownError'
+}
+
 async function synchronize(userId: string, token: string) {
   if (activeSyncs.has(userId)) return activeSyncs.get(userId)!
   const synchronization = (async () => {
@@ -137,10 +145,11 @@ async function synchronize(userId: string, token: string) {
             operationId: operation.id,
             phase: operation.phase === 'signature' || operation.phase === 'cloudinary-upload' || operation.phase === 'meal-create'
               ? operation.phase
-              : 'meal-create',
+              : operation.phase === 'cloudinary-uploaded' ? 'cloudinary-uploaded' : 'meal-create',
             attempt: operation.attempts + 1,
             durationMs: Date.now() - syncStartedAt,
-            httpStatus: status || undefined,
+            httpStatus: status,
+            errorType: diagnosticErrorType(error),
             fileType: operation.photo?.type,
             fileSizeBytes: operation.photo?.size,
           })
