@@ -1,4 +1,4 @@
-import { CalendarDays, Home, Salad, UserRound, Users } from 'lucide-react'
+import { CalendarDays, Droplets, Home, Salad, UserRound, Users } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../state/AuthContext'
 import { InvitationNotifications } from './InvitationNotifications'
@@ -12,6 +12,7 @@ const nav = [
   { to: '/historico', label: 'Histórico', icon: CalendarDays },
   { to: '/membros', label: 'Membros', icon: Users },
   { to: '/perfil', label: 'Perfil', icon: UserRound },
+  { to: '/agua', label: 'Água', icon: Droplets },
 ]
 
 function NavigationLinks() {

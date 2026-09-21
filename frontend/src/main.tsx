@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { AuthProvider } from './state/AuthContext'
 import { DietProvider } from './state/DietContext'
 import { OfflineMealProvider } from './state/OfflineMealContext'
+import { WaterProvider } from './state/WaterContext'
 import App from './App'
 import { prepareApi } from './lib/serverWakeup'
 import './styles.css'
@@ -19,7 +20,7 @@ createRoot(root).render(
       <AuthProvider>
         <DietProvider>
           <OfflineMealProvider>
-            <App />
+            <WaterProvider><App /></WaterProvider>
           </OfflineMealProvider>
         </DietProvider>
       </AuthProvider>

@@ -7,6 +7,7 @@ import { History } from './pages/History'
 import { MealForm } from './pages/MealForm'
 import { Members } from './pages/Members'
 import { Profile } from './pages/Profile'
+import { Water } from './pages/Water'
 import { useAuth } from './state/AuthContext'
 
 function ProtectedLayout() {
@@ -29,6 +30,7 @@ export default function App() {
         <Route path="refeicoes/nova" element={<MealForm />} />
         <Route path="membros" element={<Members />} />
         <Route path="perfil" element={<Profile />} />
+        <Route path="agua" element={<Water />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

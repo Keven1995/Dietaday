@@ -90,3 +90,18 @@ export type CreateMealRequest = Pick<Meal, 'mealType' | 'description' | 'mealDat
 export type InviteMemberRequest = Pick<User, 'email'>
 export type LeaveDietRequest = { successorId: string | null }
 export type UpdateProfileRequest = Pick<User, 'fullName' | 'weightKg' | 'heightCm'>
+
+export type WaterCheck = {
+  id: string
+  amountMl: number
+  createdAt: string
+}
+
+export type WaterToday = {
+  date: string
+  goalMl: number
+  consumedMl: number
+  remainingMl: number
+  percentage: number
+  checks: WaterCheck[]
+}
