@@ -64,7 +64,7 @@ public class WaterReminderDeliveryService {
         if (deliveries.existsByUserIdAndReminderDateAndReminderSlot(first.getUser().getId(), date, slot)) return;
         WaterReminderGender gender = messages.genderFor(first.getUser().getFullName());
         String message = messages.messageFor(first.getUser().getFullName(), gender,
-                ThreadLocalRandom.current().nextInt(messages.messageCount()));
+                ThreadLocalRandom.current().nextInt(messages.messageCount(gender)));
         boolean sent = userSubscriptions.stream()
                 .map(subscription -> push.send(subscription, "Hora da água 💧", message))
                 .anyMatch(Boolean.TRUE::equals);
