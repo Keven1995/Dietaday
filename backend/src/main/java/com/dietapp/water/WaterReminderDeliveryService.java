@@ -53,6 +53,8 @@ public class WaterReminderDeliveryService {
             LocalDate date = now.toLocalDate();
             Map<java.util.UUID, List<PushSubscription>> byUser = subscriptions.findByEnabledTrue().stream()
                     .collect(Collectors.groupingBy(subscription -> subscription.getUser().getId()));
+            log.info("water_reminder_slot_due date={} slot={} users={} subscriptions={}", date, slot,
+                    byUser.size(), byUser.values().stream().mapToInt(List::size).sum());
             for (List<PushSubscription> userSubscriptions : byUser.values()) {
                 deliverToUser(userSubscriptions, date, slot);
             }
