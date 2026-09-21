@@ -12,7 +12,7 @@ clientsClaim()
 self.skipWaiting()
 
 self.addEventListener('push', (event) => {
-  const data = event.data?.json() as { title?: string; body?: string; url?: string; tag?: string } | undefined
+  const data = readPushData(event.data)
   event.waitUntil(self.registration.showNotification(data?.title ?? 'Dietaday', {
     body: data?.body ?? 'Hora de beber água 💧',
     icon: '/pwa-icon.svg',
@@ -21,6 +21,15 @@ self.addEventListener('push', (event) => {
     data: { url: data?.url ?? '/' },
   }))
 })
+
+function readPushData(data: PushMessageData | null) {
+  if (!data) return undefined
+  try {
+    return data.json() as { title?: string; body?: string; url?: string; tag?: string }
+  } catch {
+    return { body: data.text() }
+  }
+}
 
 self.addEventListener('notificationclick', (event) => {
   const targetUrl = new URL((event.notification.data as { url?: string } | undefined)?.url ?? '/', self.location.origin).href

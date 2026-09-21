@@ -1,8 +1,9 @@
 import { api, isDemoMode } from './api'
 
-type PushSubscriptionPayload = {
+export type PushSubscriptionPayload = {
   endpoint: string
-  keys: { p256dh: string; auth: string }
+  p256dh: string
+  auth: string
 }
 
 export type PushStatus = 'unsupported' | 'disabled' | 'enabled'
@@ -41,7 +42,7 @@ export async function enablePushNotifications(token: string) {
       applicationServerKey: decodeVapidKey(publicKey),
     })
   }
-  const payload = toPayload(subscription)
+  const payload = toPushSubscriptionPayload(subscription)
   await api<void>('/push/subscriptions', {
     method: 'POST',
     token,
@@ -61,12 +62,12 @@ export async function disablePushNotifications(token: string) {
   await subscription.unsubscribe()
 }
 
-function toPayload(subscription: PushSubscription): PushSubscriptionPayload {
+export function toPushSubscriptionPayload(subscription: PushSubscription): PushSubscriptionPayload {
   const payload = subscription.toJSON()
   const p256dh = payload.keys?.p256dh
   const auth = payload.keys?.auth
   if (!payload.endpoint || !p256dh || !auth) throw new Error('Não foi possível preparar as notificações neste dispositivo.')
-  return { endpoint: payload.endpoint, keys: { p256dh, auth } }
+  return { endpoint: payload.endpoint, p256dh, auth }
 }
 
 function decodeVapidKey(value: string) {
