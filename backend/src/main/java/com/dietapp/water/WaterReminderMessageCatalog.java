@@ -7,7 +7,6 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class WaterReminderMessageCatalog {
-    private static final int MESSAGE_COUNT = 5;
     private static final List<String> MALE_MESSAGES = List.of(
             "Já tomou água hoje, %s? 💧 Lembre-se: só fica gostoso quem toma bastante água durante o dia 😉",
             "Não esquece da água do dia, %s 💦 Nosso corpo precisa de bastante água para não ficar retido.",
@@ -19,7 +18,9 @@ public class WaterReminderMessageCatalog {
             "Não esquece da água do dia, %s 💦 Nosso corpo precisa de bastante água para não ficar retido.",
             "Tu já bebeu água hoje, %s? 🥤 Já já teu rim tá cheio de pedra 😅",
             "Não acredito que você esqueceu de tomar água hoje, %s. Ainda bem que eu estou aqui, né? VAI BEBER ÁGUA! 🚰",
-            "Você conhece a tal da pedra no rim, %s? 🪨 Se eu fosse você, não queria conhecer... BEBE ÁGUA! 💧");
+            "Você conhece a tal da pedra no rim, %s? 🪨 Se eu fosse você, não queria conhecer... BEBE ÁGUA! 💧",
+            "Não acredito nisso não, Charlene, essas horas e não tomou um pingo d'água. Vai beber água! 💧",
+            "Mulheeer, vai beber essa água. Tu vai ficar retida, acorda Charlene! 🚰");
     private static final List<String> NEUTRAL_MESSAGES = List.of(
             "Já tomou água hoje, %s? 💧 Lembre-se: hidratação faz bem durante o dia 😉",
             "Não esquece da água do dia, %s 💦 Nosso corpo precisa de bastante água.",
@@ -42,11 +43,11 @@ public class WaterReminderMessageCatalog {
         };
         String name = firstName(fullName);
         String displayName = name.isEmpty() ? "você" : capitalize(name);
-        return messages.get(Math.floorMod(index, MESSAGE_COUNT)).formatted(displayName);
+        return messages.get(Math.floorMod(index, messages.size())).formatted(displayName);
     }
 
-    public int messageCount() {
-        return MESSAGE_COUNT;
+    public int messageCount(WaterReminderGender gender) {
+        return messagesFor(gender).size();
     }
 
     private String firstName(String fullName) {
@@ -55,6 +56,14 @@ public class WaterReminderMessageCatalog {
                 .replaceAll("\\p{M}", "")
                 .toLowerCase(Locale.ROOT);
         return normalized.split("\\s+")[0];
+    }
+
+    private List<String> messagesFor(WaterReminderGender gender) {
+        return switch (gender) {
+            case MALE -> MALE_MESSAGES;
+            case FEMALE -> FEMALE_MESSAGES;
+            case NEUTRAL -> NEUTRAL_MESSAGES;
+        };
     }
 
     private String capitalize(String value) {

@@ -37,5 +37,7 @@ class WaterReminderMessageCatalogTest {
 
         assertThat(messages).hasSize(5);
         assertThat(messages).allMatch(message -> message.matches(".*[^\\p{ASCII}].*"));
+        assertThat(catalog.messageCount(WaterReminderGender.MALE)).isEqualTo(5);
+        assertThat(catalog.messageCount(WaterReminderGender.FEMALE)).isEqualTo(7);
     }
 }
