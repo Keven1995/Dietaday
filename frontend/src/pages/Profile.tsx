@@ -120,7 +120,7 @@ export function Profile() {
       </form>
       <section className="card profile-form">
         <h2>Lembretes de água</h2>
-        <p>Receba lembretes às 09h, 13h, 16h, 18h e 20h no horário de Brasília.</p>
+        <p>Receba lembretes para não esquecer de se hidratar durante o dia.</p>
         {pushStatus === 'unsupported' ? <p>As notificações não estão disponíveis neste dispositivo.</p> : (
           <Button type="button" loading={pushLoading} className={pushStatus === 'enabled' ? 'outline' : ''} onClick={() => void togglePush()}>
             {pushStatus === 'enabled' ? <BellOff /> : <Bell />} {pushStatus === 'enabled' ? 'Desativar lembretes' : 'Ativar lembretes'}
