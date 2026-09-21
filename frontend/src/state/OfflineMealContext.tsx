@@ -44,6 +44,13 @@ const syncOwner = createUuid()
 const SYNC_ERROR_MESSAGE = 'Não foi possível sincronizar esta refeição agora. Ela continua salva neste dispositivo.'
 const RETRY_DELAYS_MS = [30_000, 60_000, 5 * 60_000, 15 * 60_000]
 
+class SyncPersistenceError extends Error {
+  constructor() {
+    super('A fila offline perdeu a posse da operação.')
+    this.name = 'SyncPersistenceError'
+  }
+}
+
 function isPermanentFailure(error: unknown) {
   const status = error instanceof ApiError || error instanceof PhotoUploadError ? error.status : 0
   return status >= 400 && status < 500 && ![401, 408, 429].includes(status)
@@ -52,6 +59,7 @@ function isPermanentFailure(error: unknown) {
 function diagnosticErrorType(error: unknown) {
   if (error instanceof PhotoUploadError) return error.status ? `cloudinary-http-${error.status}` : 'cloudinary-no-response'
   if (error instanceof ApiError) return `api-http-${error.status}`
+  if (error instanceof SyncPersistenceError) return 'offline-persistence'
   if (error instanceof DOMException && error.name === 'AbortError') return 'upload-timeout'
   if (error instanceof Error) return error.name || 'Error'
   return 'UnknownError'
@@ -70,7 +78,7 @@ async function synchronize(userId: string, token: string) {
       const syncStartedAt = Date.now()
       const updatePhase = async (phase: SyncTelemetryPhase) => {
         operation = { ...operation, phase, lastAttemptAt: new Date().toISOString() }
-        await saveClaimedOfflineMeal(operation, syncOwner)
+        if (!await saveClaimedOfflineMeal(operation, syncOwner)) throw new SyncPersistenceError()
         void reportSyncEvent(token, {
           operationId: operation.id,
           phase,
@@ -92,7 +100,7 @@ async function synchronize(userId: string, token: string) {
               updatePhase,
             )
             operation = { ...operation, uploadedPhotoUrl }
-            if (!await saveClaimedOfflineMeal(operation, syncOwner)) continue
+            if (!await saveClaimedOfflineMeal(operation, syncOwner)) throw new SyncPersistenceError()
           } finally {
             window.clearTimeout(timeout)
           }
