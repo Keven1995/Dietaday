@@ -24,6 +24,8 @@ public class User {
     private BigDecimal weightKg;
     @Column(name = "height_cm")
     private Integer heightCm;
+    @Column(name = "daily_water_goal_ml", nullable = false)
+    private int dailyWaterGoalMl;
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -34,6 +36,7 @@ public class User {
         this.email = email;
         this.passwordHash = passwordHash;
         this.fullName = fullName;
+        this.dailyWaterGoalMl = 2000;
         this.createdAt = Instant.now();
     }
 
@@ -43,10 +46,15 @@ public class User {
     public String getFullName() { return fullName; }
     public BigDecimal getWeightKg() { return weightKg; }
     public Integer getHeightCm() { return heightCm; }
+    public int getDailyWaterGoalMl() { return dailyWaterGoalMl; }
 
     public void updateProfile(String fullName, BigDecimal weightKg, Integer heightCm) {
         this.fullName = fullName;
         this.weightKg = weightKg;
         this.heightCm = heightCm;
+    }
+
+    public void updateDailyWaterGoal(int dailyWaterGoalMl) {
+        this.dailyWaterGoalMl = dailyWaterGoalMl;
     }
 }

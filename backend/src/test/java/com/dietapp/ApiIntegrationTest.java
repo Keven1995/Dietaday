@@ -92,6 +92,34 @@ class ApiIntegrationTest {
     }
 
     @Test
+    void waterGoalAndChecksAreScopedToTodayAndCannotExceedGoal() throws Exception {
+        JsonNode user = register("Water User", "water-" + UUID.randomUUID() + "@example.com");
+        String authorization = bearer(user);
+
+        mvc.perform(get("/api/water/today").header("Authorization", authorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.goalMl").value(2000))
+                .andExpect(jsonPath("$.consumedMl").value(0));
+        mvc.perform(put("/api/water/goal").header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"goalMl\":1500}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.goalMl").value(1500));
+        mvc.perform(post("/api/water/checks").header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"amountMl\":1000}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.consumedMl").value(1000))
+                .andExpect(jsonPath("$.percentage").value(67));
+        mvc.perform(post("/api/water/checks").header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"amountMl\":1000}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/water/checks").header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"amountMl\":500}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.percentage").value(100))
+                .andExpect(jsonPath("$.remainingMl").value(0));
+    }
+
+    @Test
     void corsAcceptsEachConfiguredFrontendOrigin() throws Exception {
         for (String origin : new String[]{"http://localhost:3000", "http://localhost:5173"}) {
             mvc.perform(options("/api/health")
