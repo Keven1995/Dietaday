@@ -24,8 +24,8 @@ public class SyncTelemetryController {
     @PostMapping("/sync")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void sync(@Valid @RequestBody SyncTelemetryRequest event) {
-        log.info("sync_event userId={} operationId={} phase={} attempt={} durationMs={} httpStatus={} fileType={} fileSizeBytes={}",
+        log.info("sync_event userId={} operationId={} phase={} attempt={} durationMs={} httpStatus={} errorType={} fileType={} fileSizeBytes={}",
                 currentUser.id(), event.operationId(), event.phase(), event.attempt(), event.durationMs(),
-                event.httpStatus(), event.fileType(), event.fileSizeBytes());
+                event.httpStatus(), event.errorType(), event.fileType(), event.fileSizeBytes());
     }
 }
