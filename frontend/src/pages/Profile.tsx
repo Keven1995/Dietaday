@@ -1,10 +1,11 @@
-import { LogOut, Save, UserRound } from 'lucide-react'
+import { Bell, BellOff, LogOut, Save, UserRound } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, PageTitle } from '../components/Ui'
 import { getErrorMessage } from '../lib/api'
 import { useAuth } from '../state/AuthContext'
 import type { User } from '../types'
+import { currentPushStatus, disablePushNotifications, enablePushNotifications, type PushStatus } from '../lib/pushNotifications'
 
 type ProfileForm = { fullName: string; weight: string; height: string }
 
@@ -17,16 +18,24 @@ function userToForm(user: User | null): ProfileForm {
 }
 
 export function Profile() {
-  const { user, updateUser, logout } = useAuth()
+  const { user, token, updateUser, logout } = useAuth()
   const navigate = useNavigate()
   const [form, setForm] = useState(() => userToForm(user))
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState('')
+  const [pushStatus, setPushStatus] = useState<PushStatus>('disabled')
+  const [pushLoading, setPushLoading] = useState(false)
+  const [pushMessage, setPushMessage] = useState('')
+  const [pushError, setPushError] = useState('')
 
   useEffect(() => {
     setForm(userToForm(user))
   }, [user])
+
+  useEffect(() => {
+    void currentPushStatus().then(setPushStatus).catch(() => setPushStatus('unsupported'))
+  }, [])
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -57,6 +66,30 @@ export function Profile() {
     navigate('/login')
   }
 
+  async function togglePush() {
+    if (!user) return
+    setPushLoading(true)
+    setPushMessage('')
+    setPushError('')
+    try {
+      if (pushStatus === 'enabled') {
+        if (!token) return
+        await disablePushNotifications(token)
+        setPushStatus('disabled')
+        setPushMessage('Lembretes de água desativados.')
+      } else {
+        if (!token) return
+        await enablePushNotifications(token)
+        setPushStatus('enabled')
+        setPushMessage('Lembretes de água ativados! 💧')
+      }
+    } catch (pushError) {
+      setPushError(pushError instanceof Error ? pushError.message : 'Não foi possível configurar os lembretes.')
+    } finally {
+      setPushLoading(false)
+    }
+  }
+
   return (
     <div className="page narrow-page">
       <PageTitle eyebrow="SUA CONTA" title="Perfil" />
@@ -85,6 +118,17 @@ export function Profile() {
         {success && <div className="success-message" role="status">Perfil atualizado com sucesso.</div>}
         <Button loading={loading}><Save /> Salvar alterações</Button>
       </form>
+      <section className="card profile-form">
+        <h2>Lembretes de água</h2>
+        <p>Receba lembretes às 09h, 13h, 16h, 18h e 20h no horário de Brasília.</p>
+        {pushStatus === 'unsupported' ? <p>As notificações não estão disponíveis neste dispositivo.</p> : (
+          <Button type="button" loading={pushLoading} className={pushStatus === 'enabled' ? 'outline' : ''} onClick={() => void togglePush()}>
+            {pushStatus === 'enabled' ? <BellOff /> : <Bell />} {pushStatus === 'enabled' ? 'Desativar lembretes' : 'Ativar lembretes'}
+          </Button>
+        )}
+        {pushError && <div className="error-message" role="alert">{pushError}</div>}
+        {pushMessage && <div className="success-message" role="status">{pushMessage}</div>}
+      </section>
       <button type="button" className="logout-button" onClick={signOut}><LogOut /> Sair da conta</button>
     </div>
   )
