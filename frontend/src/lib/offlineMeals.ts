@@ -8,7 +8,7 @@ const QUEUE_SIGNAL_KEY = 'Dietaday_meal_queue_signal'
 let databasePromise: Promise<IDBDatabase> | null = null
 
 export type OfflineMealStatus = 'pending' | 'syncing' | 'failed'
-export type OfflineMealPhase = 'queued' | 'signature' | 'cloudinary-upload' | 'meal-create' | 'completed'
+export type OfflineMealPhase = 'queued' | 'signature' | 'cloudinary-upload' | 'cloudinary-uploaded' | 'meal-create' | 'completed'
 
 export type OfflineMealOperation = {
   id: string

@@ -94,5 +94,6 @@ export async function uploadPhoto(
       response.status,
     )
   }
+  await onPhase?.('cloudinary-uploaded')
   return data.secure_url
 }
