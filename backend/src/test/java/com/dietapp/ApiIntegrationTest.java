@@ -69,6 +69,29 @@ class ApiIntegrationTest {
     }
 
     @Test
+    void authenticatedUsersCanRegisterAndRefreshPushSubscriptions() throws Exception {
+        JsonNode user = register("Push User", "push-" + UUID.randomUUID() + "@example.com");
+        String subscription = """
+                {"endpoint":"https://push.example.test/subscription-1","p256dh":"public-key","auth":"auth-key"}
+                """;
+
+        mvc.perform(post("/api/push/subscriptions")
+                        .header("Authorization", bearer(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(subscription))
+                .andExpect(status().isNoContent());
+        mvc.perform(post("/api/push/subscriptions")
+                        .header("Authorization", bearer(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(subscription.replace("public-key", "rotated-key")))
+                .andExpect(status().isNoContent());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/push/subscriptions")
+                        .header("Authorization", bearer(user))
+                        .param("endpoint", "https://push.example.test/subscription-1"))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
     void corsAcceptsEachConfiguredFrontendOrigin() throws Exception {
         for (String origin : new String[]{"http://localhost:3000", "http://localhost:5173"}) {
             mvc.perform(options("/api/health")
