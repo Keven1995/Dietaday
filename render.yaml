@@ -27,5 +27,7 @@ services:
         sync: false
       - key: VAPID_PRIVATE_KEY
         sync: false
+      - key: APP_PUSH_TEST_ENABLED
+        sync: false
       - key: VAPID_SUBJECT
         value: mailto:dev@dietaday.com.br
