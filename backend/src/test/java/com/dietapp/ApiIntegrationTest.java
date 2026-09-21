@@ -63,7 +63,7 @@ class ApiIntegrationTest {
                         .header("Authorization", bearer(user))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"operationId":"00000000-0000-0000-0000-000000000001","phase":"cloudinary-upload","attempt":1,"durationMs":1200,"httpStatus":0,"fileType":"image/webp","fileSizeBytes":1024}
+                                {"operationId":"00000000-0000-0000-0000-000000000001","phase":"cloudinary-upload","attempt":1,"durationMs":1200,"httpStatus":0,"errorType":"cloudinary-no-response","fileType":"image/webp","fileSizeBytes":1024}
                                 """))
                 .andExpect(status().isNoContent());
     }

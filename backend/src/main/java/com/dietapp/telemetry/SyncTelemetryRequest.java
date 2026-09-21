@@ -14,6 +14,7 @@ public record SyncTelemetryRequest(
         @Min(1) @Max(1000) int attempt,
         @Min(0) @Max(900_000) Long durationMs,
         @Min(0) @Max(599) Integer httpStatus,
+        @Size(max = 64) String errorType,
         @Size(max = 100) String fileType,
         @Min(0) @Max(50_000_000) Long fileSizeBytes) {
 }
