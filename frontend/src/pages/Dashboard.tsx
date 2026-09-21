@@ -1,4 +1,4 @@
-import { ArrowRight, Camera, Plus, Sparkles, Users } from 'lucide-react'
+import { ArrowRight, Camera, Droplets, Plus, Sparkles, Users } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { EmptyState, PageTitle } from '../components/Ui'
 import { initialMeals, initialMembers } from '../data'
@@ -7,6 +7,7 @@ import { localDateKey, mealDateKey, mealTime, parseLocalDate } from '../lib/date
 import { useAuth } from '../state/AuthContext'
 import { useDiets } from '../state/DietContext'
 import { useOfflineMeals } from '../state/OfflineMealContext'
+import { useWater } from '../state/WaterContext'
 import type { Meal, Member } from '../types'
 
 const NO_MEALS: Meal[] = []
@@ -78,6 +79,24 @@ function MembersSummary({ members }: { members: Member[] }) {
   )
 }
 
+function WaterSummary() {
+  const { water } = useWater()
+  if (!water) return null
+  const consumed = (water.consumedMl / 1000).toString().replace('.', ',')
+  const goal = (water.goalMl / 1000).toString().replace('.', ',')
+  return (
+    <Link to="/agua" className="water-summary-card">
+      <div className="water-summary-icon"><Droplets size={21} /></div>
+      <div>
+        <span>HIDRATAÇÃO</span>
+        <h2>{consumed} L <small>de {goal} L</small></h2>
+        <div className="water-summary-progress"><span style={{ width: `${water.percentage}%` }} /></div>
+      </div>
+      <ArrowRight size={18} />
+    </Link>
+  )
+}
+
 function getInitials(fullName: string) {
   return fullName.split(' ').filter(Boolean).map((part) => part[0]).slice(0, 2).join('')
 }
@@ -129,6 +148,7 @@ export function Dashboard() {
             </div>
             <div className="hero-number"><strong>{remaining}</strong><span>dias restantes</span></div>
           </section>
+          <WaterSummary />
           <WeekCalendar dates={days} meals={meals} todayKey={todayKey} periodStart={start} />
           <div className="dashboard-grid">
             <TodayMeals meals={todayMeals} loading={mealsResource.loading} />

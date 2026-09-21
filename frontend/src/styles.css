@@ -51,7 +51,7 @@ label, .field-label { display: grid; gap: 7px; color: #34433f; font-size: .86rem
 .brand { display: flex; align-items: center; gap: 10px; font-size: 1.06rem; font-weight: 800; color: var(--green); }
 .brand-mark { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 11px 11px 11px 4px; background: var(--green); color: #fff; }
 .avatar { display: grid; place-items: center; flex: 0 0 auto; width: 36px; height: 36px; border-radius: 50%; background: #d9e3d9; color: var(--green); font-family: 'Manrope'; font-size: .8rem; font-weight: 800; }
-.bottom-nav { display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; z-index: 30; bottom: 0; left: 0; right: 0; height: 70px; padding: 7px 4px max(7px, env(safe-area-inset-bottom)); background: rgba(255,253,249,.96); border-top: 1px solid var(--line); backdrop-filter: blur(10px); }
+.bottom-nav { display: grid; grid-template-columns: repeat(6, 1fr); position: fixed; z-index: 30; bottom: 0; left: 0; right: 0; height: 70px; padding: 7px 4px max(7px, env(safe-area-inset-bottom)); background: rgba(255,253,249,.96); border-top: 1px solid var(--line); backdrop-filter: blur(10px); }
 .bottom-nav a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #82908b; font-size: .64rem; font-weight: 600; }
 .bottom-nav a.active { color: var(--orange); }
 .page { max-width: 1120px; margin: 0 auto; padding: 28px 18px 100px; }
@@ -183,6 +183,54 @@ label, .field-label { display: grid; gap: 7px; color: #34433f; font-size: .86rem
 .avatar-stack i:nth-child(2) { background: #efc6ad; }
 .avatar-stack i:last-child { background: var(--white); }
 .members-card a { display: flex; align-items: center; gap: 5px; color: var(--green); font-size: .8rem; font-weight: 800; }
+
+/* Hidratação */
+.water-summary-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 13px; margin: 16px 0 30px; padding: 15px 17px; border: 1px solid #c9dcd5; border-radius: 18px; background: #edf5f0; color: var(--green); transition: transform .2s, border-color .2s; }
+.water-summary-card:hover { border-color: #91b8aa; transform: translateY(-2px); }
+.water-summary-icon { display: grid; place-items: center; width: 43px; height: 43px; border-radius: 14px; background: var(--green); color: #b8e5df; }
+.water-summary-card span { display: block; color: var(--green-2); font-size: .62rem; font-weight: 800; letter-spacing: .12em; }
+.water-summary-card h2 { margin: 3px 0 7px; font-size: 1.08rem; }
+.water-summary-card h2 small { color: var(--muted); font-family: 'DM Sans'; font-size: .72rem; font-weight: 500; }
+.water-summary-progress { height: 5px; overflow: hidden; border-radius: 5px; background: #d5e5df; }
+.water-summary-progress span { display: block; height: 100%; border-radius: inherit; background: #3297a1; transition: width .5s ease; }
+.water-hero { display: grid; grid-template-columns: minmax(0, 1fr) 170px; align-items: center; overflow: hidden; margin-top: 25px; padding: 25px 20px 25px 25px; background: var(--green); color: #fff; }
+.water-hero-copy { position: relative; z-index: 1; }
+.water-pill { background: #ffffff18; color: #bde5dc; }
+.water-hero h2 { margin: 18px 0 6px; color: #fff; font-size: clamp(1.6rem, 5vw, 2.25rem); letter-spacing: -.045em; }
+.water-amount, .water-amount-separator { display: inline-block; letter-spacing: normal; }
+.water-amount-separator { margin: 0 .16em; font-size: .7em; font-weight: 600; letter-spacing: -.02em; }
+.water-hero p { margin-bottom: 20px; color: #c9d9d4; font-size: .83rem; line-height: 1.45; }
+.water-progress { height: 7px; overflow: hidden; border-radius: 8px; background: #ffffff1c; }
+.water-progress span { display: block; height: 100%; border-radius: inherit; background: #72c8ca; transition: width .5s ease; }
+.water-hero-copy > strong { display: block; margin-top: 8px; color: #b7d2cc; font-size: .7rem; }
+.water-bottle { position: relative; width: 170px; justify-self: end; filter: drop-shadow(0 12px 16px #061e1a35); }
+.water-bottle svg { display: block; width: 100%; height: auto; }
+.bottle-shadow { fill: #bde8e322; }
+.bottle-body { fill: #ffffff14; stroke: #bde8e3; stroke-width: 3; }
+.bottle-neck { fill: #ffffff1c; stroke: #bde8e3; stroke-width: 3; }
+.bottle-cap { fill: #72c8ca; stroke: #bde8e3; stroke-width: 3; }
+.bottle-water { fill: url(#water-gradient); opacity: .95; }
+.bottle-wave { fill: #9be1df; opacity: .8; }
+.bottle-highlight { fill: none; stroke: #ffffff70; stroke-linecap: round; stroke-width: 5; }
+.bottle-label { fill: #ffffff26; stroke: #bde8e3; stroke-width: 1.5; }
+.water-bottle text { fill: #dff8f4; font-family: 'Manrope', sans-serif; font-size: 9px; font-weight: 800; letter-spacing: .08em; }
+.water-grid { display: grid; gap: 16px; margin-top: 16px; }
+.water-action-card, .water-goal-card, .water-history-card { padding: 21px; }
+.water-action-card .section-heading, .water-goal-card .section-heading, .water-history-card .section-heading { margin-bottom: 9px; }
+.water-action-card .section-heading h2, .water-goal-card .section-heading h2, .water-history-card .section-heading h2 { font-size: 1.05rem; }
+.water-heading-icon { width: 20px; color: #3297a1; }
+.water-action-card > p, .water-goal-card > p { min-height: 42px; margin: 0 0 17px; color: var(--muted); font-size: .82rem; line-height: 1.5; }
+.water-action-card label, .water-goal-card label { margin-bottom: 7px; }
+.water-action-card .button, .water-goal-card .button { width: 100%; margin-top: 15px; }
+.water-action-card .success-message, .water-goal-card .success-message { margin-bottom: 0; }
+.water-history-card { margin-top: 16px; }
+.water-history-card .section-heading > strong { display: grid; place-items: center; min-width: 27px; height: 27px; border-radius: 50%; background: #e3eee8; color: var(--green); font-size: .72rem; }
+.water-check-list { display: grid; }
+.water-check-list > div { display: flex; align-items: center; justify-content: space-between; padding: 13px 0; border-bottom: 1px solid var(--line); color: var(--green); font-size: .84rem; }
+.water-check-list > div:last-child { border-bottom: 0; }
+.water-check-list span { display: flex; align-items: center; gap: 7px; font-weight: 700; }
+.water-check-list span svg { color: #3297a1; }
+.water-check-list time { color: var(--muted); font-size: .72rem; }
 
 /* Dietas e modal */
 .diet-grid { display: grid; gap: 15px; }
@@ -459,6 +507,7 @@ label, .field-label { display: grid; gap: 7px; color: #34433f; font-size: .86rem
   .offline-meal-notice { margin-top: 24px; }
   .dashboard-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(250px, .8fr); gap: 35px; }
   .members-card { margin-top: 0; }
+  .water-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .invite-card { grid-template-columns: auto 1fr minmax(220px, .9fr) auto; }
   .invite-card label, .invite-card > .button { grid-column: auto; }
   .invite-card > .button { align-self: end; }
