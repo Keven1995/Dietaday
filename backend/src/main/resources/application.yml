@@ -26,3 +26,4 @@ app:
     public-key: ${VAPID_PUBLIC_KEY:}
     private-key: ${VAPID_PRIVATE_KEY:}
     subject: ${VAPID_SUBJECT:mailto:dev@dietaday.com.br}
+    test-enabled: ${APP_PUSH_TEST_ENABLED:false}
