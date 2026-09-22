@@ -1,19 +1,17 @@
 import { api, isDemoMode } from './api'
 import type { WaterToday } from '../types'
 import { createUuid } from './uuid'
+import { readCachedResource } from './resourceCache'
 
 const DEFAULT_GOAL_ML = 2000
+export const WATER_CACHE_RESOURCE = 'water:today'
 
 function storageKey(userId: string) {
   return `Dietaday_water_${userId}`
 }
 
-function todayKey() {
-  const now = new Date()
-  const year = now.getFullYear()
-  const month = String(now.getMonth() + 1).padStart(2, '0')
-  const day = String(now.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
+export function todayKey() {
+  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Sao_Paulo' }).format(new Date())
 }
 
 function createDemoState(userId: string): WaterToday {
@@ -32,6 +30,19 @@ function createDemoState(userId: string): WaterToday {
 function saveDemoState(userId: string, state: WaterToday) {
   localStorage.setItem(storageKey(userId), JSON.stringify(state))
   return state
+}
+
+export function readCachedWater(userId: string) {
+  const cached = readCachedResource<WaterToday>(userId, WATER_CACHE_RESOURCE)
+  if (!cached || cached.data.date === todayKey()) return cached?.data ?? null
+  return {
+    ...cached.data,
+    date: todayKey(),
+    consumedMl: 0,
+    remainingMl: cached.data.goalMl,
+    percentage: 0,
+    checks: [],
+  }
 }
 
 export async function getWaterToday(token: string | null, userId: string): Promise<WaterToday> {
