@@ -4,6 +4,7 @@ import java.text.Normalizer;
 import java.util.List;
 import java.util.Locale;
 import org.springframework.stereotype.Component;
+import com.dietapp.user.UserSex;
 
 @Component
 public class WaterReminderMessageCatalog {
@@ -28,11 +29,13 @@ public class WaterReminderMessageCatalog {
             "Não acredito que você esqueceu de tomar água hoje, %s. Ainda bem que eu estou aqui, né? VAI BEBER ÁGUA! 🚰",
             "Você conhece a tal da pedra no rim, %s? 🪨 Melhor não conhecer... BEBE ÁGUA! 💧");
 
-    public WaterReminderGender genderFor(String fullName) {
-        String firstName = firstName(fullName);
-        if (firstName.equals("keven")) return WaterReminderGender.MALE;
-        if (firstName.equals("allana")) return WaterReminderGender.FEMALE;
-        return WaterReminderGender.NEUTRAL;
+    public WaterReminderGender genderFor(UserSex sex) {
+        if (sex == null) return WaterReminderGender.NEUTRAL;
+        return switch (sex) {
+            case MALE -> WaterReminderGender.MALE;
+            case FEMALE -> WaterReminderGender.FEMALE;
+            case NEUTRAL -> WaterReminderGender.NEUTRAL;
+        };
     }
 
     public String messageFor(String fullName, WaterReminderGender gender, int index) {

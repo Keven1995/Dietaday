@@ -20,7 +20,7 @@ public class ProfileService {
     @Transactional
     public ProfileResponse update(UpdateProfileRequest request) {
         User user = currentUser.require();
-        user.updateProfile(request.fullName().trim(), request.weightKg(), request.heightCm());
+        user.updateProfile(request.fullName().trim(), request.weightKg(), request.heightCm(), request.sex());
         return ProfileResponse.from(user);
     }
 }

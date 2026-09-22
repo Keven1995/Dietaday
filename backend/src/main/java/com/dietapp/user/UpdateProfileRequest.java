@@ -12,5 +12,6 @@ import java.math.BigDecimal;
 public record UpdateProfileRequest(
         @NotBlank @Size(max = 120) String fullName,
         @DecimalMin("20.0") @DecimalMax("500.0") BigDecimal weightKg,
-        @Min(50) @Max(300) Integer heightCm) {
+        @Min(50) @Max(300) Integer heightCm,
+        UserSex sex) {
 }

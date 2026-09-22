@@ -151,6 +151,7 @@ class ApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email").value(email))
                 .andExpect(jsonPath("$.fullName").value("Test User"))
+                .andExpect(jsonPath("$.sex").value("MALE"))
                 .andExpect(jsonPath("$.weightKg").doesNotExist())
                 .andExpect(jsonPath("$.heightCm").doesNotExist());
 
@@ -997,7 +998,7 @@ class ApiIntegrationTest {
     private JsonNode register(String name, String email) throws Exception {
         String response = mvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new RegisterRequest(name, email, "password123"))))
+                         .content(objectMapper.writeValueAsString(new RegisterRequest(name, email, "password123", "MALE"))))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(response);
@@ -1064,7 +1065,7 @@ class ApiIntegrationTest {
         return "Bearer " + auth.get("token").asText();
     }
 
-    private record RegisterRequest(String fullName, String email, String password) {}
+    private record RegisterRequest(String fullName, String email, String password, String sex) {}
     private record LoginRequest(String email, String password) {}
     private record DietRequest(String name, String startDate, String endDate) {}
     private record EmailRequest(String email) {}
