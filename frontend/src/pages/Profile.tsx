@@ -4,16 +4,17 @@ import { useNavigate } from 'react-router-dom'
 import { Button, PageTitle } from '../components/Ui'
 import { getErrorMessage } from '../lib/api'
 import { useAuth } from '../state/AuthContext'
-import type { User } from '../types'
+import type { User, UserSex } from '../types'
 import { currentPushStatus, disablePushNotifications, enablePushNotifications, type PushStatus } from '../lib/pushNotifications'
 
-type ProfileForm = { fullName: string; weight: string; height: string }
+type ProfileForm = { fullName: string; weight: string; height: string; sex: UserSex | '' }
 
 function userToForm(user: User | null): ProfileForm {
   return {
     fullName: user?.fullName ?? '',
     weight: user?.weightKg?.toString() ?? '',
     height: user?.heightCm?.toString() ?? '',
+    sex: user?.sex === 'MALE' || user?.sex === 'FEMALE' ? user.sex : '',
   }
 }
 
@@ -46,12 +47,17 @@ export function Profile() {
       setError('Informe seu nome completo.')
       return
     }
+    if (!form.sex) {
+      setError('Selecione seu sexo.')
+      return
+    }
     setLoading(true)
     try {
       await updateUser({
         fullName,
         weightKg: Number(form.weight),
         heightCm: Number(form.height),
+        sex: form.sex,
       })
       setSuccess(true)
     } catch (updateError) {
@@ -103,6 +109,14 @@ export function Profile() {
         <label>
           Nome completo
           <input required autoComplete="name" value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} />
+        </label>
+        <label>
+          Sexo
+          <select required value={form.sex} onChange={(event) => setForm({ ...form, sex: event.target.value as UserSex })}>
+            <option value="">Selecione uma opção</option>
+            <option value="FEMALE">Feminino</option>
+            <option value="MALE">Masculino</option>
+          </select>
         </label>
         <div className="form-row">
           <label>

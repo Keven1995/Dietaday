@@ -87,6 +87,16 @@ O endpoint de teste manual deve permanecer desativado em produção:
 APP_PUSH_TEST_ENABLED=false
 ```
 
+## Backfill De Sexo
+
+Depois de aplicar a migration `V9__user_sex.sql` no banco de produção, execute uma vez:
+
+```powershell
+psql -h <host> -U <user> -d <database> -f backend/scripts/backfill-user-sex.sql
+```
+
+Informe a senha por um mecanismo seguro, como `PGPASSWORD` temporário. O script valida os dois e-mails, atualiza Keven como `MALE` e Allana como `FEMALE`, e pode ser executado novamente sem alterar o resultado.
+
 ## Segurança
 
 Gere o segredo JWT no PowerShell com:

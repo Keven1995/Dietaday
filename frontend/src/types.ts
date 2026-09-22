@@ -4,7 +4,10 @@ export type User = {
   fullName: string
   weightKg?: number | null
   heightCm?: number | null
+  sex: UserSex
 }
+
+export type UserSex = 'MALE' | 'FEMALE' | 'NEUTRAL'
 
 export type Diet = {
   id: string
@@ -81,15 +84,16 @@ export type AuthResponse = {
   userId: string
   email: string
   fullName: string
+  sex: UserSex
 }
 
 export type LoginRequest = { email: string; password: string }
-export type RegisterRequest = LoginRequest & { fullName: string }
+export type RegisterRequest = LoginRequest & { fullName: string; sex: UserSex }
 export type CreateDietRequest = Omit<Diet, 'id'>
 export type CreateMealRequest = Pick<Meal, 'mealType' | 'description' | 'mealDate' | 'photoUrl'>
 export type InviteMemberRequest = Pick<User, 'email'>
 export type LeaveDietRequest = { successorId: string | null }
-export type UpdateProfileRequest = Pick<User, 'fullName' | 'weightKg' | 'heightCm'>
+export type UpdateProfileRequest = Pick<User, 'fullName' | 'weightKg' | 'heightCm' | 'sex'>
 
 export type WaterCheck = {
   id: string
