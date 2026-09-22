@@ -1,49 +1,45 @@
 # Dietaday
 
-PWA para registrar dietas e refeições com amigos. O projeto usa React com TypeScript no frontend, Spring Boot no backend e PostgreSQL.
+### Seu dia mais leve começa com pequenos hábitos
 
-## Requisitos
+O Dietaday é um diário alimentar para quem quer cuidar da rotina sem transformar o acompanhamento em uma tarefa complicada.
 
-- Java 17+
-- Maven 3.9+
-- Node.js 20+
-- Docker Desktop
+Registre suas refeições, acompanhe sua hidratação e compartilhe a jornada com as pessoas que fazem parte dela, tudo em uma experiência simples e acolhedora.
 
-## Executar localmente
+**Acesse o app:** [dietaday.com.br](https://dietaday.com.br)
 
-1. Abra o Docker Desktop e inicie o PostgreSQL com `docker compose up -d` na raiz do projeto. O banco do projeto usa a porta local `5433` para não conflitar com outras instalações do PostgreSQL.
-2. Em `backend`, execute `mvn spring-boot:run`.
-3. Em `frontend`, copie `.env.example` para `.env` e execute `npm install` e `npm run dev`.
-4. Abra `http://localhost:5173`.
+## O que você pode fazer
 
-Sem `VITE_API_URL`, o frontend abre em modo demonstrativo. Com a URL definida, os dados são salvos no PostgreSQL.
+- **Registrar refeições** com descrição, horário e foto.
+- **Criar períodos de dieta** para acompanhar sua evolução dia após dia.
+- **Compartilhar uma dieta** com amigos e familiares.
+- **Comentar e reagir** às refeições de quem está acompanhando você.
+- **Definir uma meta diária de água** e registrar cada check de hidratação.
+- **Visualizar seu progresso** com uma garrafa de água animada.
+- **Continuar usando mesmo offline** e sincronizar quando a conexão voltar.
+- **Receber lembretes de água** nos horários certos do dia.
 
-## Fotos
+## Como funciona
 
-Configure uma conta no Cloudinary e use upload assinado pelo backend. No Render, defina `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY` e `CLOUDINARY_API_SECRET`.
+1. Crie sua conta e monte o período que deseja acompanhar.
+2. Registre suas refeições e seus checks de água ao longo do dia.
+3. Convide alguém para acompanhar sua evolução e tornar o processo mais leve.
 
-Sem essas variáveis ainda é possível registrar refeições sem foto.
+## Feito para a vida real
 
-## Hospedagem gratuita
+O Dietaday funciona como um aplicativo instalável no celular e foi pensado para acompanhar rotinas corridas. Seus registros podem ser feitos mesmo sem conexão, com sincronização posterior quando a internet estiver disponível.
 
-1. Envie este projeto para um repositório privado ou público no GitHub.
-2. Crie um projeto PostgreSQL gratuito no Neon e copie host, database, usuário e senha.
-3. No Render, crie um Blueprint usando o `render.yaml` ou um Web Service Docker com raiz `backend`.
-4. Configure no Render `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`, `JWT_SECRET`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` e, provisoriamente, `FRONTEND_URL=http://localhost:5173`.
-5. Depois da publicação, confirme `https://sua-api.onrender.com/api/health`.
-6. Na Vercel, importe o mesmo repositório, defina `frontend` como Root Directory e adicione a variável `VITE_API_URL`.
-7. Após a Vercel fornecer a URL final, substitua `FRONTEND_URL` no Render por essa URL e faça novo deploy da API. Para uma migração entre domínios, separe temporariamente as origens permitidas por vírgula, por exemplo `FRONTEND_URL=https://dietaday.vercel.app,https://dietaday.com.br`.
+## Construído com cuidado
 
-O `DATABASE_URL` esperado pelo Spring tem o formato `jdbc:postgresql://host:5432/database?sslmode=require`. Não envie arquivos `.env` para o GitHub.
+O app combina uma interface React/PWA com uma API Spring Boot e persistência em PostgreSQL. A experiência também conta com armazenamento seguro de fotos, notificações push e uma arquitetura preparada para sincronização offline.
 
-Gere o segredo JWT no PowerShell com:
+## Projeto
 
-```powershell
-[Convert]::ToBase64String([byte[]](1..48 | ForEach-Object { Get-Random -Maximum 256 }))
-```
+Este repositório contém o código-fonte e os artefatos de operação do Dietaday. O produto é disponibilizado como uma aplicação web/PWA hospedada.
 
-No Cloudinary, o `API Secret` fica exclusivamente no Render; nunca coloque credenciais do Cloudinary nas variáveis `VITE_*`.
+## Documentação técnica
 
-## Verificação
-
-Execute `mvn test` em `backend`. Em `frontend`, execute `npm test` e `npm run build`.
+- [Arquitetura](docs/ARCHITECTURE.md): visão dos componentes e fluxos principais.
+- [Operações](docs/OPERATIONS.md): deploy, configuração, observabilidade e manutenção.
+- [API](docs/API.md): contratos dos principais recursos da aplicação.
+- [Decisões técnicas](docs/DECISIONS.md): contexto das principais escolhas do produto.
