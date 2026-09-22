@@ -43,7 +43,8 @@ public class AuthService {
             user = users.saveAndFlush(new User(
                     email,
                     passwordEncoder.encode(request.password()),
-                    request.fullName().trim()));
+                    request.fullName().trim(),
+                    request.sex()));
         } catch (DataIntegrityViolationException exception) {
             throw new ConflictException("Email already registered", exception);
         }
@@ -60,7 +61,7 @@ public class AuthService {
     }
 
     private AuthResponse toResponse(User user) {
-        return new AuthResponse(jwtService.generate(user.getId()), user.getId(), user.getEmail(), user.getFullName());
+        return new AuthResponse(jwtService.generate(user.getId()), user.getId(), user.getEmail(), user.getFullName(), user.getSex());
     }
 
     private String normalizeEmail(String email) {

@@ -1,5 +1,6 @@
 package com.dietapp.water;
 
+import com.dietapp.user.UserSex;
 import org.junit.jupiter.api.Test;
 
 import java.util.Set;
@@ -10,10 +11,10 @@ class WaterReminderMessageCatalogTest {
     private final WaterReminderMessageCatalog catalog = new WaterReminderMessageCatalog();
 
     @Test
-    void infersOnlyTheKnownApplicationNames() {
-        assertThat(catalog.genderFor("Keven Lucas Pereira Araujo")).isEqualTo(WaterReminderGender.MALE);
-        assertThat(catalog.genderFor("Allana Gomes")).isEqualTo(WaterReminderGender.FEMALE);
-        assertThat(catalog.genderFor("Alex")).isEqualTo(WaterReminderGender.NEUTRAL);
+    void mapsPersistedUserSexToMessageGender() {
+        assertThat(catalog.genderFor(UserSex.MALE)).isEqualTo(WaterReminderGender.MALE);
+        assertThat(catalog.genderFor(UserSex.FEMALE)).isEqualTo(WaterReminderGender.FEMALE);
+        assertThat(catalog.genderFor(UserSex.NEUTRAL)).isEqualTo(WaterReminderGender.NEUTRAL);
     }
 
     @Test

@@ -36,7 +36,7 @@ public class WaterReminderTestController {
         if (!enabled) throw new BadRequestException("O teste de push está desativado.");
         if (!push.isConfigured()) throw new BadRequestException("Notificações não estão configuradas.");
         var user = currentUser.require();
-        var gender = messages.genderFor(user.getFullName());
+        var gender = messages.genderFor(user.getSex());
         var message = messages.messageFor(user.getFullName(), gender,
                 ThreadLocalRandom.current().nextInt(messages.messageCount(gender)));
         var userSubscriptions = subscriptions.findByEnabledTrue().stream()

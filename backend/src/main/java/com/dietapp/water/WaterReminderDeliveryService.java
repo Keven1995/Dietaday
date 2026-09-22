@@ -64,7 +64,7 @@ public class WaterReminderDeliveryService {
     private void deliverToUser(List<PushSubscription> userSubscriptions, LocalDate date, String slot) {
         PushSubscription first = userSubscriptions.get(0);
         if (deliveries.existsByUserIdAndReminderDateAndReminderSlot(first.getUser().getId(), date, slot)) return;
-        WaterReminderGender gender = messages.genderFor(first.getUser().getFullName());
+        WaterReminderGender gender = messages.genderFor(first.getUser().getSex());
         String message = messages.messageFor(first.getUser().getFullName(), gender,
                 ThreadLocalRandom.current().nextInt(messages.messageCount(gender)));
         boolean sent = userSubscriptions.stream()

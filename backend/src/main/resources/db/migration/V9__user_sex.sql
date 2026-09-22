@@ -1,0 +1,5 @@
+ALTER TABLE app_users
+    ADD COLUMN sex VARCHAR(20) NOT NULL DEFAULT 'NEUTRAL';
+
+ALTER TABLE app_users
+    ADD CONSTRAINT ck_user_sex CHECK (sex IN ('MALE', 'FEMALE', 'NEUTRAL'));
