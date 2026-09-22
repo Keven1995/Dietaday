@@ -17,6 +17,17 @@ GET  /profile
 PUT  /profile
 ```
 
+O cadastro exige `sex` com um dos valores `MALE` ou `FEMALE`:
+
+```json
+{
+  "fullName": "Nome do usuário",
+  "email": "usuario@exemplo.com",
+  "password": "senha-com-no-minimo-8-caracteres",
+  "sex": "FEMALE"
+}
+```
+
 ## Dietas
 
 ```text

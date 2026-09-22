@@ -7,10 +7,11 @@ import { Button } from '../components/Ui'
 import { isDemoMode } from '../lib/api'
 import { prepareApi } from '../lib/serverWakeup'
 import { useAuth } from '../state/AuthContext'
-import type { RegisterRequest } from '../types'
+import type { LoginRequest, UserSex } from '../types'
 
 type AuthMode = 'login' | 'register'
 type PreparationState = 'idle' | 'waiting' | 'ready'
+type AuthForm = LoginRequest & { fullName: string; sex: UserSex | '' }
 
 function getRedirectPath(state: unknown) {
   if (typeof state !== 'object' || state === null || !('from' in state)) return '/'
@@ -27,10 +28,11 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
   const [loading, setLoading] = useState(false)
   const [preparation, setPreparation] = useState<PreparationState>('idle')
   const [error, setError] = useState('')
-  const [form, setForm] = useState<RegisterRequest>({
+  const [form, setForm] = useState<AuthForm>({
     fullName: '',
     email: isDemoMode ? 'marina@exemplo.com' : '',
     password: isDemoMode ? '12345678' : '',
+    sex: isDemoMode ? 'FEMALE' : '',
   })
 
   useEffect(() => {
@@ -50,6 +52,10 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
     const request = { ...form, fullName: form.fullName.trim(), email: form.email.trim() }
     if (mode === 'register' && !request.fullName) {
       setError('Informe seu nome.')
+      return
+    }
+    if (mode === 'register' && !request.sex) {
+      setError('Selecione seu sexo.')
       return
     }
     setLoading(true)
@@ -72,7 +78,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
         }
       }
       if (mode === 'login') await login(request.email, request.password)
-      else await register(request)
+      else await register({ ...request, sex: request.sex as UserSex })
       if (!mountedRef.current) return
       navigate(getRedirectPath(location.state), { replace: true })
     } catch (err) {
@@ -131,10 +137,20 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
           <p>{isLogin ? 'Continue cuidando da sua rotina alimentar.' : 'Leva menos de um minuto.'}</p>
           <form onSubmit={submit}>
             {!isLogin && (
-              <label>
-                Seu nome
-                <input required autoComplete="name" placeholder="Como podemos chamar você?" value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} />
-              </label>
+              <>
+                <label>
+                  Seu nome
+                  <input required autoComplete="name" placeholder="Como podemos chamar você?" value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} />
+                </label>
+                <label>
+                  Sexo
+                  <select required value={form.sex} onChange={(event) => setForm({ ...form, sex: event.target.value as UserSex })}>
+                    <option value="">Selecione uma opção</option>
+                    <option value="FEMALE">Feminino</option>
+                    <option value="MALE">Masculino</option>
+                  </select>
+                </label>
+              </>
             )}
             <label>
               E-mail
