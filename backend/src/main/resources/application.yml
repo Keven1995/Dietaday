@@ -15,8 +15,10 @@ server:
 
 app:
   jwt:
-    secret: ${JWT_SECRET:change-me-in-production-with-at-least-32-characters}
+    secret: ${JWT_SECRET}
     expiration-minutes: ${JWT_EXPIRATION_MINUTES:1440}
+  security:
+    rate-limit-enabled: ${RATE_LIMIT_ENABLED:true}
   frontend-url: ${FRONTEND_URL:http://localhost:5173}
   cloudinary:
     cloud-name: ${CLOUDINARY_CLOUD_NAME:}

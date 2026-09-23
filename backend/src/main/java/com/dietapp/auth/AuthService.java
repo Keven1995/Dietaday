@@ -2,6 +2,7 @@ package com.dietapp.auth;
 
 import com.dietapp.common.ConflictException;
 import com.dietapp.security.JwtService;
+import com.dietapp.security.LoginAttemptService;
 import com.dietapp.user.User;
 import com.dietapp.user.UserRepository;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -22,13 +23,16 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
+    private final LoginAttemptService loginAttempts;
 
     public AuthService(UserRepository users, PasswordEncoder passwordEncoder,
-                       AuthenticationManager authenticationManager, JwtService jwtService) {
+                       AuthenticationManager authenticationManager, JwtService jwtService,
+                       LoginAttemptService loginAttempts) {
         this.users = users;
         this.passwordEncoder = passwordEncoder;
         this.authenticationManager = authenticationManager;
         this.jwtService = jwtService;
+        this.loginAttempts = loginAttempts;
     }
 
     @Transactional
@@ -52,9 +56,17 @@ public class AuthService {
     }
 
     @Transactional(readOnly = true)
-    public AuthResponse login(LoginRequest request) {
+    public AuthResponse login(LoginRequest request, String clientAddress) {
         String email = normalizeEmail(request.email());
-        authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(email, request.password()));
+        String attemptKey = email + '|' + clientAddress;
+        loginAttempts.checkAllowed(attemptKey);
+        try {
+            authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(email, request.password()));
+        } catch (BadCredentialsException exception) {
+            loginAttempts.recordFailure(attemptKey);
+            throw new BadCredentialsException(INVALID_CREDENTIALS);
+        }
+        loginAttempts.recordSuccess(attemptKey);
         User user = users.findByEmailIgnoreCase(email)
                 .orElseThrow(() -> new BadCredentialsException(INVALID_CREDENTIALS));
         return toResponse(user);
