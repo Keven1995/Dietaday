@@ -13,9 +13,15 @@ URL de produção: `https://nutrivia-api.onrender.com/api`.
 ```text
 POST /auth/register
 POST /auth/login
+POST /auth/refresh
+POST /auth/logout
 GET  /profile
 PUT  /profile
 ```
+
+`register` e `login` retornam um access token para uso no header `Authorization`. Eles também criam um refresh token rotativo em cookie `HttpOnly`; o frontend deve enviar `credentials: include` e o header `X-Requested-With: Dietaday` nos endpoints `refresh` e `logout`.
+
+O access token tem validade padrão de 30 minutos. O refresh token fica armazenado somente como hash no backend e é invalidado após cada rotação.
 
 O cadastro exige `sex` com um dos valores `MALE` ou `FEMALE`:
 
