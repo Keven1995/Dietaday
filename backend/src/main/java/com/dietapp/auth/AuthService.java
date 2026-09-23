@@ -52,7 +52,7 @@ public class AuthService {
         } catch (DataIntegrityViolationException exception) {
             throw new ConflictException("Email already registered", exception);
         }
-        return toResponse(user);
+        return responseFor(user);
     }
 
     @Transactional(readOnly = true)
@@ -69,10 +69,10 @@ public class AuthService {
         loginAttempts.recordSuccess(attemptKey);
         User user = users.findByEmailIgnoreCase(email)
                 .orElseThrow(() -> new BadCredentialsException(INVALID_CREDENTIALS));
-        return toResponse(user);
+        return responseFor(user);
     }
 
-    private AuthResponse toResponse(User user) {
+    AuthResponse responseFor(User user) {
         return new AuthResponse(jwtService.generate(user.getId()), user.getId(), user.getEmail(), user.getFullName(), user.getSex());
     }
 

@@ -11,6 +11,7 @@ import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 import java.util.UUID;
 import java.util.Map;
@@ -38,7 +39,12 @@ class ApiIntegrationTest {
     void healthEndpointIsPublic() throws Exception {
         mvc.perform(get("/api/health"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("UP"));
+                .andExpect(jsonPath("$.status").value("UP"))
+                .andExpect(header().string("X-Content-Type-Options", "nosniff"))
+                .andExpect(header().string("X-Frame-Options", "DENY"))
+                .andExpect(header().string("Referrer-Policy", "no-referrer"))
+                .andExpect(header().string("Content-Security-Policy",
+                        "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"));
     }
 
     @Test
@@ -53,6 +59,20 @@ class ApiIntegrationTest {
                 .andExpect(jsonPath("$.timestamp").isNumber())
                 .andExpect(jsonPath("$.signature").isString())
                 .andExpect(jsonPath("$.uploadUrl").value("https://api.cloudinary.com/v1_1/test-cloud/image/upload"));
+    }
+
+    @Test
+    void mealRejectsPhotoUrlOutsideConfiguredCloudinary() throws Exception {
+        JsonNode user = register("Photo User", "photo-" + UUID.randomUUID() + "@example.com");
+        String dietId = createDiet(user, "Photo Diet");
+
+        mvc.perform(post("/api/diets/{dietId}/meals", dietId)
+                        .header("Authorization", bearer(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"mealType":"Almoço","description":"Refeição","mealDate":"2026-09-22","photoUrl":"https://evil.example/photo.jpg"}
+                                """))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -175,6 +195,39 @@ class ApiIntegrationTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.fields.weightKg").exists())
                 .andExpect(jsonPath("$.fields.heightCm").exists());
+    }
+
+    @Test
+    void refreshTokenIsHttpOnlyAndRotates() throws Exception {
+        String email = "refresh-" + UUID.randomUUID() + "@example.com";
+        MvcResult registration = mvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new RegisterRequest("Refresh User", email, "password123", "MALE"))))
+                .andExpect(status().isOk())
+                .andReturn();
+        var originalCookie = registration.getResponse().getCookie("dietaday_refresh");
+        assertThat(originalCookie).isNotNull();
+        assertThat(originalCookie.isHttpOnly()).isTrue();
+
+        MvcResult refresh = mvc.perform(post("/api/auth/refresh")
+                        .cookie(originalCookie)
+                        .header("X-Requested-With", "Dietaday"))
+                .andExpect(status().isOk())
+                .andReturn();
+        var rotatedCookie = refresh.getResponse().getCookie("dietaday_refresh");
+        assertThat(rotatedCookie).isNotNull();
+        assertThat(rotatedCookie.getValue()).isNotEqualTo(originalCookie.getValue());
+
+        mvc.perform(post("/api/auth/refresh")
+                        .cookie(originalCookie)
+                        .header("X-Requested-With", "Dietaday"))
+                .andExpect(status().isUnauthorized());
+
+        mvc.perform(post("/api/auth/logout")
+                        .cookie(rotatedCookie)
+                        .header("X-Requested-With", "Dietaday"))
+                .andExpect(status().isOk());
     }
 
     @Test
@@ -793,10 +846,10 @@ class ApiIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"mealType":"LUNCH","description":"Rice and chicken",
-                                 "mealDate":"2026-09-04","photoUrl":"https://example.com/meal.jpg"}
+                                 "mealDate":"2026-09-04","photoUrl":"https://res.cloudinary.com/test-cloud/image/upload/v1/meal.jpg"}
                                 """))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.photoUrl").value("https://example.com/meal.jpg"))
+                .andExpect(jsonPath("$.photoUrl").value("https://res.cloudinary.com/test-cloud/image/upload/v1/meal.jpg"))
                 .andExpect(jsonPath("$.authorId").value(member.get("userId").asText()))
                 .andExpect(jsonPath("$.authorName").value("Member"))
                 .andReturn().getResponse().getContentAsString();
