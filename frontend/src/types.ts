@@ -88,13 +88,6 @@ export type AuthResponse = {
   sex: UserSex
 }
 
-export type Session = {
-  id: string
-  createdAt: string
-  lastUsedAt: string | null
-  expiresAt: string
-  current: boolean
-}
 
 export type LoginRequest = { email: string; password: string }
 export type RegisterRequest = LoginRequest & { fullName: string; sex: UserSex }
