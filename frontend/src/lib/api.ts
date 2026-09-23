@@ -71,7 +71,8 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   }
 
   if (response.status === 204) return undefined as T
-  return response.json() as Promise<T>
+  const body = await response.text()
+  return (body ? JSON.parse(body) : undefined) as T
 }
 
 async function refreshAccessToken(): Promise<import('../types').AuthResponse | null> {
