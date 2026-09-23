@@ -129,6 +129,29 @@ Os logs privados do Render são a fonte principal para investigar falhas de prod
 - `water_push_subscription_saved` para inscrições de push.
 - `water_reminder_sent` e `water_push_failed` para lembretes.
 
+Eventos de auditoria de segurança usam o formato `security_audit event=...` e incluem somente IDs técnicos, status e tipos fixos de erro:
+
+- `login_success`.
+- `login_failure`.
+- `login_blocked`.
+- `logout`.
+- `profile_updated`.
+- `diet_created` e `diet_deleted`.
+- `member_invitation_created`, `member_invitation_accepted`, `member_invitation_declined`.
+- `member_left` e `member_ownership_transferred`.
+- `upload_failure`.
+- `push_failure`.
+
+Alertas recomendados no provedor de logs:
+
+- Mais de 10 eventos `login_blocked` em 10 minutos.
+- Mais de 20 eventos `login_failure` para o mesmo intervalo curto.
+- Aumento repentino de `upload_failure`.
+- Aumento repentino de `push_failure`.
+- Qualquer tentativa de log contendo `password`, `token`, `authorization`, `cookie`, `vapid` ou corpo JSON.
+
+O job `security_maintenance event=refresh_tokens_cleanup` remove refresh tokens expirados diariamente às 03:15 no fuso `America/Sao_Paulo`. O número removido é registrado, mas nenhum token é registrado.
+
 Não registre tokens, senhas, chaves VAPID privadas, URLs privadas de fotos ou dados pessoais desnecessários.
 
 ## Incidentes
@@ -136,5 +159,7 @@ Não registre tokens, senhas, chaves VAPID privadas, URLs privadas de fotos ou d
 1. Verifique o health check da API.
 2. Consulte os logs do Render no intervalo do incidente.
 3. Confirme o status da Vercel, Render, PostgreSQL e Cloudinary.
-4. Não altere migrations já executadas; crie uma nova migration corretiva.
-5. Registre a causa, o impacto e a correção aplicada.
+4. Se houver suspeita de credencial exposta, rotacione imediatamente JWT, banco, Cloudinary ou VAPID conforme o segredo afetado.
+5. Se houver suspeita de sessão comprometida, invalide os refresh tokens ativos no banco e solicite novo login dos usuários.
+6. Não altere migrations já executadas; crie uma nova migration corretiva.
+7. Registre a causa, o impacto, os eventos observados e a correção aplicada.

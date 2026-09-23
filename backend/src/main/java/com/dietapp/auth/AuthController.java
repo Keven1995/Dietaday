@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import com.dietapp.common.ForbiddenException;
+import com.dietapp.security.SecurityAuditService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseCookie;
 import org.springframework.web.bind.annotation.CookieValue;
@@ -20,12 +21,15 @@ public class AuthController {
     private final AuthService authService;
     private final RefreshTokenService refreshTokens;
     private final boolean secureCookies;
+    private final SecurityAuditService audit;
 
     public AuthController(AuthService authService, RefreshTokenService refreshTokens,
-                           @Value("${app.security.secure-cookies:true}") boolean secureCookies) {
+                           @Value("${app.security.secure-cookies:true}") boolean secureCookies,
+                           SecurityAuditService audit) {
         this.authService = authService;
         this.refreshTokens = refreshTokens;
         this.secureCookies = secureCookies;
+        this.audit = audit;
     }
 
     @PostMapping("/register")
@@ -54,7 +58,7 @@ public class AuthController {
                        @RequestHeader(value = "X-Requested-With", required = false) String requestedWith,
                        HttpServletResponse response) {
         requireBrowserRequest(requestedWith);
-        refreshTokens.revoke(value);
+        audit.logout(refreshTokens.revoke(value));
         response.addHeader("Set-Cookie", refreshCookie(null).toString());
     }
 

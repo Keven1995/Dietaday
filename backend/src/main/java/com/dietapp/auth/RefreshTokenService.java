@@ -5,6 +5,9 @@ import com.dietapp.user.UserRepository;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -17,6 +20,7 @@ import java.util.UUID;
 
 @Service
 public class RefreshTokenService {
+    private static final Logger log = LoggerFactory.getLogger(RefreshTokenService.class);
     private static final Duration TOKEN_LIFETIME = Duration.ofDays(30);
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final String INVALID_REFRESH_TOKEN = "Invalid refresh token";
@@ -55,11 +59,22 @@ public class RefreshTokenService {
     }
 
     @Transactional
-    public void revoke(String value) {
+    public UUID revoke(String value) {
         if (value == null || value.isBlank()) {
-            return;
+            return null;
         }
-        tokens.findByTokenHash(hash(value)).ifPresent(RefreshToken::revoke);
+        var token = tokens.findByTokenHash(hash(value));
+        token.ifPresent(RefreshToken::revoke);
+        return token.map(refreshToken -> refreshToken.getUser().getId()).orElse(null);
+    }
+
+    @Transactional
+    @Scheduled(cron = "0 15 3 * * *", zone = "America/Sao_Paulo")
+    public void deleteExpiredTokens() {
+        long deleted = tokens.deleteByExpiresAtBefore(Instant.now());
+        if (deleted > 0) {
+            log.info("security_maintenance event=refresh_tokens_cleanup deletedCount={}", deleted);
+        }
     }
 
     private String hash(String value) {

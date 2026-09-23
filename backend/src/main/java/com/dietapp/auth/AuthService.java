@@ -3,6 +3,8 @@ package com.dietapp.auth;
 import com.dietapp.common.ConflictException;
 import com.dietapp.security.JwtService;
 import com.dietapp.security.LoginAttemptService;
+import com.dietapp.security.SecurityAuditService;
+import com.dietapp.common.RateLimitExceededException;
 import com.dietapp.user.User;
 import com.dietapp.user.UserRepository;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -24,15 +26,17 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
     private final LoginAttemptService loginAttempts;
+    private final SecurityAuditService audit;
 
     public AuthService(UserRepository users, PasswordEncoder passwordEncoder,
                        AuthenticationManager authenticationManager, JwtService jwtService,
-                       LoginAttemptService loginAttempts) {
+                       LoginAttemptService loginAttempts, SecurityAuditService audit) {
         this.users = users;
         this.passwordEncoder = passwordEncoder;
         this.authenticationManager = authenticationManager;
         this.jwtService = jwtService;
         this.loginAttempts = loginAttempts;
+        this.audit = audit;
     }
 
     @Transactional
@@ -59,16 +63,23 @@ public class AuthService {
     public AuthResponse login(LoginRequest request, String clientAddress) {
         String email = normalizeEmail(request.email());
         String attemptKey = email + '|' + clientAddress;
-        loginAttempts.checkAllowed(attemptKey);
+        try {
+            loginAttempts.checkAllowed(attemptKey);
+        } catch (RateLimitExceededException exception) {
+            audit.loginBlocked();
+            throw exception;
+        }
         try {
             authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(email, request.password()));
         } catch (BadCredentialsException exception) {
             loginAttempts.recordFailure(attemptKey);
+            audit.loginFailure();
             throw new BadCredentialsException(INVALID_CREDENTIALS);
         }
         loginAttempts.recordSuccess(attemptKey);
         User user = users.findByEmailIgnoreCase(email)
                 .orElseThrow(() -> new BadCredentialsException(INVALID_CREDENTIALS));
+        audit.loginSuccess(user.getId());
         return responseFor(user);
     }
 

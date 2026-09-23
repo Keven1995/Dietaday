@@ -1,5 +1,6 @@
 package com.dietapp.water;
 
+import com.dietapp.security.SecurityAuditService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import nl.martijndwars.webpush.Notification;
 import nl.martijndwars.webpush.PushService;
@@ -24,16 +25,19 @@ public class PushNotificationService {
     private final String publicKey;
     private final String privateKey;
     private final String subject;
+    private final SecurityAuditService audit;
 
     public PushNotificationService(
             ObjectMapper objectMapper,
             @Value("${app.push.public-key:}") String publicKey,
             @Value("${app.push.private-key:}") String privateKey,
-            @Value("${app.push.subject:mailto:dev@dietaday.com.br}") String subject) {
+            @Value("${app.push.subject:mailto:dev@dietaday.com.br}") String subject,
+            SecurityAuditService audit) {
         this.objectMapper = objectMapper;
         this.publicKey = publicKey.trim();
         this.privateKey = privateKey.trim();
         this.subject = subject.trim();
+        this.audit = audit;
         Security.addProvider(new BouncyCastleProvider());
     }
 
@@ -68,6 +72,7 @@ public class PushNotificationService {
                 return false;
             }
             if (status < 200 || status >= 300) {
+                audit.pushFailure(subscription.getId(), status, "http_error");
                 log.warn("water_push_failed subscriptionId={} status={}", subscription.getId(), status);
                 return false;
             }
@@ -75,6 +80,7 @@ public class PushNotificationService {
         } catch (GeneralSecurityException | JoseException | java.io.IOException
                  | java.util.concurrent.ExecutionException | InterruptedException exception) {
             if (exception instanceof InterruptedException) Thread.currentThread().interrupt();
+            audit.pushFailure(subscription.getId(), null, exception.getClass().getSimpleName());
             log.warn("water_push_failed subscriptionId={} errorType={}",
                     subscription.getId(), exception.getClass().getSimpleName());
             return false;
