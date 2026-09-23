@@ -1,4 +1,12 @@
 spring:
+  mail:
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${MAIL_SMTP_AUTH:true}
+      mail.smtp.starttls.enable: ${MAIL_SMTP_STARTTLS:true}
   datasource:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5433/dietapp}
     username: ${DATABASE_USERNAME:postgres}
@@ -20,6 +28,9 @@ app:
   security:
     rate-limit-enabled: ${RATE_LIMIT_ENABLED:true}
     secure-cookies: ${SECURE_COOKIES:true}
+  mail:
+    enabled: ${MAIL_ENABLED:false}
+    from: ${MAIL_FROM:no-reply@dietaday.com.br}
   frontend-url: ${FRONTEND_URL:http://localhost:5173}
   cloudinary:
     cloud-name: ${CLOUDINARY_CLOUD_NAME:}

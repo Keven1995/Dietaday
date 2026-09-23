@@ -3,6 +3,8 @@ package com.dietapp.auth;
 import com.dietapp.user.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
@@ -13,48 +15,41 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "refresh_tokens")
-public class RefreshToken {
+@Table(name = "account_action_tokens")
+public class AccountActionToken {
+    public enum Type { EMAIL_VERIFICATION, PASSWORD_RESET }
+
     @Id
     private UUID id;
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "token_type", nullable = false, length = 32)
+    private Type type;
     @Column(name = "token_hash", nullable = false, unique = true, length = 64)
     private String tokenHash;
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
     @Column(name = "expires_at", nullable = false)
     private Instant expiresAt;
-    @Column(name = "revoked_at")
-    private Instant revokedAt;
-    @Column(name = "user_agent", length = 255)
-    private String userAgent;
-    @Column(name = "ip_address", length = 64)
-    private String ipAddress;
-    @Column(name = "last_used_at")
-    private Instant lastUsedAt;
+    @Column(name = "used_at")
+    private Instant usedAt;
 
-    protected RefreshToken() {}
+    protected AccountActionToken() {}
 
-    public RefreshToken(User user, String tokenHash, Instant expiresAt, String userAgent, String ipAddress) {
+    public AccountActionToken(User user, Type type, String tokenHash, Instant expiresAt) {
         this.id = UUID.randomUUID();
         this.user = user;
+        this.type = type;
         this.tokenHash = tokenHash;
         this.createdAt = Instant.now();
         this.expiresAt = expiresAt;
-        this.userAgent = userAgent;
-        this.ipAddress = ipAddress;
     }
 
     public User getUser() { return user; }
-    public UUID getId() { return id; }
-    public Instant getCreatedAt() { return createdAt; }
-    public Instant getExpiresAt() { return expiresAt; }
-    public Instant getLastUsedAt() { return lastUsedAt; }
     public boolean isActive(Instant now) {
-        return revokedAt == null && now.isBefore(expiresAt);
+        return usedAt == null && now.isBefore(expiresAt);
     }
-    public void revoke() { this.revokedAt = Instant.now(); }
-    public void markUsed() { this.lastUsedAt = Instant.now(); }
+    public void use() { this.usedAt = Instant.now(); }
 }

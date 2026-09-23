@@ -17,6 +17,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.UUID;
+import java.util.List;
 
 @Service
 public class RefreshTokenService {
@@ -35,17 +36,29 @@ public class RefreshTokenService {
 
     @Transactional
     public IssuedToken issue(UUID userId) {
+        return issue(userId, null, null);
+    }
+
+    @Transactional
+    public IssuedToken issue(UUID userId, String userAgent, String ipAddress) {
         User user = users.findById(userId)
                 .orElseThrow(() -> new BadCredentialsException(INVALID_REFRESH_TOKEN));
         byte[] raw = new byte[32];
         RANDOM.nextBytes(raw);
         String value = HexFormat.of().formatHex(raw);
-        tokens.save(new RefreshToken(user, hash(value), Instant.now().plus(TOKEN_LIFETIME)));
-        return new IssuedToken(value, user);
+        RefreshToken token = tokens.save(new RefreshToken(user, hash(value), Instant.now().plus(TOKEN_LIFETIME),
+                userAgent == null ? null : userAgent.substring(0, Math.min(255, userAgent.length())),
+                ipAddress == null ? null : ipAddress.substring(0, Math.min(64, ipAddress.length()))));
+        return new IssuedToken(value, user, token.getId());
     }
 
     @Transactional
     public IssuedToken rotate(String value) {
+        return rotate(value, null, null);
+    }
+
+    @Transactional
+    public IssuedToken rotate(String value, String userAgent, String ipAddress) {
         if (value == null || value.isBlank()) {
             throw new BadCredentialsException(INVALID_REFRESH_TOKEN);
         }
@@ -54,8 +67,9 @@ public class RefreshTokenService {
         if (!current.isActive(Instant.now())) {
             throw new BadCredentialsException(INVALID_REFRESH_TOKEN);
         }
+        current.markUsed();
         current.revoke();
-        return issue(current.getUser().getId());
+        return issue(current.getUser().getId(), userAgent, ipAddress);
     }
 
     @Transactional
@@ -66,6 +80,30 @@ public class RefreshTokenService {
         var token = tokens.findByTokenHash(hash(value));
         token.ifPresent(RefreshToken::revoke);
         return token.map(refreshToken -> refreshToken.getUser().getId()).orElse(null);
+    }
+
+    @Transactional
+    public int revokeAll(UUID userId) {
+        return tokens.revokeAllByUserId(userId);
+    }
+
+    @Transactional
+    public int revokeOne(UUID userId, UUID sessionId) {
+        return tokens.revokeByIdAndUserId(sessionId, userId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<SessionResponse> sessions(UUID userId, UUID currentSessionId) {
+        return tokens.findByUserIdOrderByCreatedAtDesc(userId).stream()
+                .map(token -> new SessionResponse(token.getId(), token.getCreatedAt(), token.getLastUsedAt(),
+                        token.getExpiresAt(), token.getId().equals(currentSessionId)))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public UUID currentSessionId(String value) {
+        if (value == null || value.isBlank()) return null;
+        return tokens.findByTokenHash(hash(value)).map(RefreshToken::getId).orElse(null);
     }
 
     @Transactional
@@ -86,5 +124,5 @@ public class RefreshTokenService {
         }
     }
 
-    public record IssuedToken(String value, User user) {}
+    public record IssuedToken(String value, User user, UUID sessionId) {}
 }
