@@ -16,9 +16,10 @@ server:
 app:
   jwt:
     secret: ${JWT_SECRET}
-    expiration-minutes: ${JWT_EXPIRATION_MINUTES:1440}
+    expiration-minutes: ${JWT_EXPIRATION_MINUTES:30}
   security:
     rate-limit-enabled: ${RATE_LIMIT_ENABLED:true}
+    secure-cookies: ${SECURE_COOKIES:true}
   frontend-url: ${FRONTEND_URL:http://localhost:5173}
   cloudinary:
     cloud-name: ${CLOUDINARY_CLOUD_NAME:}

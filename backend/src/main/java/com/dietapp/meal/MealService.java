@@ -7,6 +7,7 @@ import com.dietapp.common.NotFoundException;
 import com.dietapp.diet.Diet;
 import com.dietapp.diet.DietService;
 import com.dietapp.security.CurrentUser;
+import com.dietapp.upload.PhotoUrlPolicy;
 import com.dietapp.user.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,18 +27,21 @@ public class MealService {
     private final MealSyncOperationRepository syncOperations;
     private final DietService diets;
     private final CurrentUser currentUser;
+    private final PhotoUrlPolicy photoUrlPolicy;
 
     public MealService(MealRepository meals, MealSyncOperationRepository syncOperations,
-                       DietService diets, CurrentUser currentUser) {
+                       DietService diets, CurrentUser currentUser, PhotoUrlPolicy photoUrlPolicy) {
         this.meals = meals;
         this.syncOperations = syncOperations;
         this.diets = diets;
         this.currentUser = currentUser;
+        this.photoUrlPolicy = photoUrlPolicy;
     }
 
     @Transactional
     public Meal create(UUID dietId, String mealType, String description, LocalDate mealDate,
                        String photoUrl, UUID operationId) {
+        photoUrlPolicy.validate(photoUrl);
         Diet diet = operationId == null ? diets.requireMember(dietId) : diets.requireMemberForUpdate(dietId);
         User author = currentUser.require();
         if (operationId == null) {
@@ -90,6 +94,7 @@ public class MealService {
     @Transactional
     public Meal update(UUID dietId, UUID mealId, String mealType, String description,
                        LocalDate mealDate, String photoUrl) {
+        photoUrlPolicy.validate(photoUrl);
         Meal meal = get(dietId, mealId);
         requireAuthor(meal);
         meal.update(mealType, description, mealDate, photoUrl);
