@@ -39,6 +39,11 @@ public class ApiExceptionHandler {
         return error(HttpStatus.UNAUTHORIZED, "Invalid email or password", null);
     }
 
+    @ExceptionHandler(RateLimitExceededException.class)
+    ResponseEntity<ApiError> tooManyRequests(RateLimitExceededException exception) {
+        return error(HttpStatus.TOO_MANY_REQUESTS, exception.getMessage(), null);
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ResponseEntity<ApiError> validation(MethodArgumentNotValidException exception) {
         Map<String, String> fields = new LinkedHashMap<>();
