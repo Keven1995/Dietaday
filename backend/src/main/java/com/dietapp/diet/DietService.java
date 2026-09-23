@@ -5,6 +5,7 @@ import com.dietapp.common.ConflictException;
 import com.dietapp.common.ForbiddenException;
 import com.dietapp.common.NotFoundException;
 import com.dietapp.security.CurrentUser;
+import com.dietapp.security.SecurityAuditService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,18 +18,23 @@ public class DietService {
     private final DietRepository diets;
     private final DietMemberRepository members;
     private final CurrentUser currentUser;
+    private final SecurityAuditService audit;
 
-    public DietService(DietRepository diets, DietMemberRepository members, CurrentUser currentUser) {
+    public DietService(DietRepository diets, DietMemberRepository members, CurrentUser currentUser,
+                       SecurityAuditService audit) {
         this.diets = diets;
         this.members = members;
         this.currentUser = currentUser;
+        this.audit = audit;
     }
 
     @Transactional
     public Diet create(String name, LocalDate startDate, LocalDate endDate) {
         validateDates(startDate, endDate);
+        var owner = currentUser.require();
         Diet diet = diets.save(new Diet(name.trim(), startDate, endDate));
-        members.save(new DietMember(diet, currentUser.require(), DietMember.Role.OWNER));
+        members.save(new DietMember(diet, owner, DietMember.Role.OWNER));
+        audit.dietCreated(owner.getId(), diet.getId());
         return diet;
     }
 
@@ -60,8 +66,9 @@ public class DietService {
 
     @Transactional
     public void delete(UUID dietId) {
-        requireOwner(dietId);
+        Diet diet = requireOwner(dietId);
         diets.deleteById(dietId);
+        audit.dietDeleted(currentUser.id(), diet.getId());
     }
 
     @Transactional(readOnly = true)
@@ -82,6 +89,7 @@ public class DietService {
                 throw new BadRequestException("A member cannot appoint a successor");
             }
             members.delete(membership);
+            audit.memberLeft(membership.getUser().getId(), dietId);
             return;
         }
 
@@ -103,6 +111,7 @@ public class DietService {
                 .orElseThrow(() -> new BadRequestException("Successor must be a current member of the diet"));
         successor.promoteToOwner();
         members.delete(membership);
+        audit.memberOwnershipTransferred(membership.getUser().getId(), dietId, successorId);
     }
 
     private Diet requireOwner(UUID dietId) {

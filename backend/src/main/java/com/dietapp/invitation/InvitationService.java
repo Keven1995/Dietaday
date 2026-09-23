@@ -7,6 +7,7 @@ import com.dietapp.diet.Diet;
 import com.dietapp.diet.DietMember;
 import com.dietapp.diet.DietMemberRepository;
 import com.dietapp.security.CurrentUser;
+import com.dietapp.security.SecurityAuditService;
 import com.dietapp.user.User;
 import com.dietapp.user.UserRepository;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -23,13 +24,15 @@ public class InvitationService {
     private final DietMemberRepository members;
     private final UserRepository users;
     private final CurrentUser currentUser;
+    private final SecurityAuditService audit;
 
     public InvitationService(InvitationRepository invitations, DietMemberRepository members,
-                             UserRepository users, CurrentUser currentUser) {
+                             UserRepository users, CurrentUser currentUser, SecurityAuditService audit) {
         this.invitations = invitations;
         this.members = members;
         this.users = users;
         this.currentUser = currentUser;
+        this.audit = audit;
     }
 
     @Transactional
@@ -52,7 +55,9 @@ public class InvitationService {
 
         Diet diet = ownerMembership.getDiet();
         try {
-            return invitations.saveAndFlush(new Invitation(diet, inviter, invitee));
+            Invitation invitation = invitations.saveAndFlush(new Invitation(diet, inviter, invitee));
+            audit.memberInvitationCreated(inviter.getId(), dietId, invitee.getId());
+            return invitation;
         } catch (DataIntegrityViolationException exception) {
             throw new ConflictException("A pending invitation already exists for this user", exception);
         }
@@ -72,6 +77,7 @@ public class InvitationService {
                     invitation.getDiet(), invitation.getInvitee(), DietMember.Role.MEMBER));
             invitation.accept();
             invitations.saveAndFlush(invitation);
+            audit.memberInvitationAccepted(currentUser.id(), invitation.getDiet().getId());
         } catch (DataIntegrityViolationException exception) {
             throw new ConflictException("User is already a member", exception);
         }
@@ -82,6 +88,7 @@ public class InvitationService {
         Invitation invitation = requirePendingForCurrentUser(invitationId);
         invitation.decline();
         invitations.saveAndFlush(invitation);
+        audit.memberInvitationDeclined(currentUser.id(), invitation.getDiet().getId());
     }
 
     private Invitation requirePendingForCurrentUser(UUID invitationId) {
