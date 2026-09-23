@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'r
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Button, EmptyState, PageTitle } from '../components/Ui'
 import { getErrorMessage, isDemoMode } from '../lib/api'
-import { compressPhoto, isPhotoUploadConfigured } from '../lib/cloudinary'
+import { compressPhoto, isPhotoUploadConfigured, validatePhoto } from '../lib/cloudinary'
 import { localDateKey } from '../lib/date'
 import { useAuth } from '../state/AuthContext'
 import { useDiets } from '../state/DietContext'
@@ -68,6 +68,18 @@ export function MealForm() {
 
   function choosePhoto(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null
+    if (file) {
+      try {
+        validatePhoto(file)
+      } catch (photoError) {
+        setPhoto(null)
+        setPhotoChanged(false)
+        setPreview('')
+        setError(photoError instanceof Error ? photoError.message : 'A foto selecionada não é válida.')
+        event.target.value = ''
+        return
+      }
+    }
     setPhoto(file)
     setPhotoChanged(true)
     setPreview(file ? URL.createObjectURL(file) : '')

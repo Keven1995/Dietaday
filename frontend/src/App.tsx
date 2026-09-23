@@ -11,8 +11,9 @@ import { Water } from './pages/Water'
 import { useAuth } from './state/AuthContext'
 
 function ProtectedLayout() {
-  const { user } = useAuth()
+  const { user, ready } = useAuth()
   const location = useLocation()
+  if (!ready) return null
   return user
     ? <Layout />
     : <Navigate to="/login" replace state={{ from: location.pathname }} />

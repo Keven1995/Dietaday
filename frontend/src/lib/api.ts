@@ -1,10 +1,11 @@
 import { API_URL } from './apiConfig'
 import { markApiUnavailable, prepareApi } from './serverWakeup'
 
-type RequestOptions = RequestInit & { token?: string | null }
+type RequestOptions = RequestInit & { token?: string | null; skipRefresh?: boolean }
 type ErrorResponse = { message?: string }
 
 export const UNAUTHORIZED_EVENT = 'Dietaday:unauthorized'
+export const TOKEN_REFRESHED_EVENT = 'Dietaday:token-refreshed'
 
 export class ApiError extends Error {
   readonly status: number
@@ -32,13 +33,15 @@ function isErrorResponse(value: unknown): value is ErrorResponse {
 
 export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
   await prepareApi()
-  const { token, headers, ...init } = options
+  const { token, headers, skipRefresh, ...init } = options
   let response: Response
   try {
     response = await fetch(`${API_URL}${path}`, {
       ...init,
+      credentials: init.credentials ?? 'include',
       headers: {
         ...(init.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+        'X-Requested-With': 'Dietaday',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...headers,
       },
@@ -56,11 +59,33 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
 
   if (!response.ok) {
     const data: unknown = await response.json().catch(() => null)
-    if (response.status === 401 && token) window.dispatchEvent(new Event(UNAUTHORIZED_EVENT))
+    if (response.status === 401 && token && !skipRefresh) {
+      const refreshed = await refreshAccessToken()
+      if (refreshed) {
+        return api<T>(path, { ...options, token: refreshed.token, skipRefresh: true })
+      }
+      window.dispatchEvent(new Event(UNAUTHORIZED_EVENT))
+    }
     const message = isErrorResponse(data) ? data.message : undefined
     throw new ApiError(message || 'Não foi possível concluir a solicitação.', response.status)
   }
 
   if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
+}
+
+async function refreshAccessToken(): Promise<import('../types').AuthResponse | null> {
+  try {
+    const response = await fetch(`${API_URL}/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'X-Requested-With': 'Dietaday' },
+    })
+    if (!response.ok) return null
+    const data = await response.json() as import('../types').AuthResponse
+    window.dispatchEvent(new CustomEvent(TOKEN_REFRESHED_EVENT, { detail: data }))
+    return data
+  } catch {
+    return null
+  }
 }

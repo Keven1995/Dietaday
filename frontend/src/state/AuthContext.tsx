@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-import { api, isDemoMode, UNAUTHORIZED_EVENT } from '../lib/api'
+import { api, isDemoMode, TOKEN_REFRESHED_EVENT, UNAUTHORIZED_EVENT } from '../lib/api'
 import { clearUserCache } from '../lib/resourceCache'
 import type { AuthResponse, RegisterRequest, UpdateProfileRequest, User, UserSex } from '../types'
 import { createUuid } from '../lib/uuid'
@@ -7,6 +7,7 @@ import { createUuid } from '../lib/uuid'
 type AuthContextValue = {
   user: User | null
   token: string | null
+  ready: boolean
   login: (email: string, password: string) => Promise<void>
   register: (data: RegisterRequest) => Promise<void>
   updateUser: (data: UpdateProfileRequest) => Promise<void>
@@ -36,16 +37,25 @@ function readStoredUser(): User | null {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem('Dietaday_token'))
-  const [user, setUser] = useState<User | null>(readStoredUser)
+  const [token, setToken] = useState<string | null>(null)
+  const [user, setUser] = useState<User | null>(() => isDemoMode ? readStoredUser() : null)
+  const [ready, setReady] = useState(isDemoMode)
 
   function persist(data: AuthResponse) {
     const authenticatedUser: User = { id: data.userId, email: data.email, fullName: data.fullName, sex: data.sex }
-    localStorage.setItem('Dietaday_token', data.token)
     localStorage.setItem('Dietaday_user', JSON.stringify(authenticatedUser))
     setToken(data.token)
     setUser(authenticatedUser)
   }
+
+  useEffect(() => {
+    localStorage.removeItem('Dietaday_token')
+    if (isDemoMode) return
+    api<AuthResponse>('/auth/refresh', { method: 'POST', skipRefresh: true })
+      .then(persist)
+      .catch(() => undefined)
+      .finally(() => setReady(true))
+  }, [])
 
   useEffect(() => {
     if (!token || isDemoMode) return
@@ -62,7 +72,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     window.addEventListener(UNAUTHORIZED_EVENT, logout)
-    return () => window.removeEventListener(UNAUTHORIZED_EVENT, logout)
+    const onTokenRefreshed = (event: Event) => {
+      const data = (event as CustomEvent<AuthResponse>).detail
+      if (data) persist(data)
+    }
+    window.addEventListener(TOKEN_REFRESHED_EVENT, onTokenRefreshed)
+    return () => {
+      window.removeEventListener(UNAUTHORIZED_EVENT, logout)
+      window.removeEventListener(TOKEN_REFRESHED_EVENT, onTokenRefreshed)
+    }
   })
 
   async function login(email: string, password: string) {
@@ -89,8 +107,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   function logout() {
+    if (!isDemoMode) void api('/auth/logout', { method: 'POST', skipRefresh: true }).catch(() => undefined)
     if (user) clearUserCache(user.id)
-    localStorage.removeItem('Dietaday_token')
     localStorage.removeItem('Dietaday_user')
     localStorage.removeItem('Dietaday_active_diet')
     setToken(null)
@@ -98,7 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, token, login, register, updateUser, logout }}>
+    <AuthContext.Provider value={{ user, token, ready, login, register, updateUser, logout }}>
       {children}
     </AuthContext.Provider>
   )

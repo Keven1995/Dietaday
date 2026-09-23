@@ -26,6 +26,25 @@ function isCloudinaryResponse(value: unknown): value is CloudinaryResponse {
 
 export const isPhotoUploadConfigured = Boolean(API_URL)
 
+const MAX_PHOTO_BYTES = 10 * 1024 * 1024
+const ALLOWED_PHOTO_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'image/heic',
+  'image/heif',
+])
+
+export function validatePhoto(file: File) {
+  if (!ALLOWED_PHOTO_TYPES.has(file.type.toLowerCase())) {
+    throw new PhotoUploadError('Escolha uma imagem JPG, PNG, WEBP, GIF ou HEIC.', 400)
+  }
+  if (file.size > MAX_PHOTO_BYTES) {
+    throw new PhotoUploadError('A foto deve ter no máximo 10 MB.', 413)
+  }
+}
+
 export async function compressPhoto(file: File) {
   if (file.size <= 500 * 1024 || file.type === 'image/gif') return file
   const source = URL.createObjectURL(file)
