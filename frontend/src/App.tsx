@@ -8,6 +8,7 @@ import { MealForm } from './pages/MealForm'
 import { Members } from './pages/Members'
 import { Profile } from './pages/Profile'
 import { Water } from './pages/Water'
+import { PasswordResetPage, VerifyEmailPage } from './pages/AccountSecurity'
 import { useAuth } from './state/AuthContext'
 
 function ProtectedLayout() {
@@ -24,6 +25,9 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<AuthPage mode="login" />} />
       <Route path="/cadastro" element={<AuthPage mode="register" />} />
+      <Route path="/recuperar-senha" element={<PasswordResetPage />} />
+      <Route path="/redefinir-senha" element={<PasswordResetPage />} />
+      <Route path="/verificar-email" element={<VerifyEmailPage />} />
       <Route element={<ProtectedLayout />}>
         <Route index element={<Dashboard />} />
         <Route path="dietas" element={<Diets />} />
