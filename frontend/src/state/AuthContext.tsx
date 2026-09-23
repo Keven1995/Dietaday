@@ -12,7 +12,6 @@ type AuthContextValue = {
   register: (data: RegisterRequest) => Promise<void>
   updateUser: (data: UpdateProfileRequest) => Promise<void>
   logout: () => void
-  logoutAll: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -116,13 +115,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
   }
 
-  async function logoutAll() {
-    if (!isDemoMode) await api('/auth/logout-all', { method: 'POST', token })
-    logout()
-  }
-
   return (
-    <AuthContext.Provider value={{ user, token, ready, login, register, updateUser, logout, logoutAll }}>
+    <AuthContext.Provider value={{ user, token, ready, login, register, updateUser, logout }}>
       {children}
     </AuthContext.Provider>
   )

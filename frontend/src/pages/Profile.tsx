@@ -1,10 +1,10 @@
-import { Bell, BellOff, LogOut, Save, UserRound, Shield, X } from 'lucide-react'
+import { Bell, BellOff, LogOut, Save, UserRound, Shield } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, PageTitle } from '../components/Ui'
 import { api, getErrorMessage } from '../lib/api'
 import { useAuth } from '../state/AuthContext'
-import type { Session, User, UserSex } from '../types'
+import type { User, UserSex } from '../types'
 import { currentPushStatus, disablePushNotifications, enablePushNotifications, type PushStatus } from '../lib/pushNotifications'
 
 type ProfileForm = { fullName: string; weight: string; height: string; sex: UserSex | '' }
@@ -19,7 +19,7 @@ function userToForm(user: User | null): ProfileForm {
 }
 
 export function Profile() {
-  const { user, token, updateUser, logout, logoutAll } = useAuth()
+  const { user, token, updateUser, logout } = useAuth()
   const navigate = useNavigate()
   const [form, setForm] = useState(() => userToForm(user))
   const [loading, setLoading] = useState(false)
@@ -29,8 +29,6 @@ export function Profile() {
   const [pushLoading, setPushLoading] = useState(false)
   const [pushMessage, setPushMessage] = useState('')
   const [pushError, setPushError] = useState('')
-  const [sessions, setSessions] = useState<Session[]>([])
-  const [sessionError, setSessionError] = useState('')
   const [verificationMessage, setVerificationMessage] = useState('')
 
   useEffect(() => {
@@ -40,11 +38,6 @@ export function Profile() {
   useEffect(() => {
     void currentPushStatus().then(setPushStatus).catch(() => setPushStatus('unsupported'))
   }, [])
-
-  useEffect(() => {
-    if (!token) return
-    void api<Session[]>('/auth/sessions', { token }).then(setSessions).catch(() => setSessionError('Não foi possível carregar as sessões.'))
-  }, [token])
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -87,17 +80,6 @@ export function Profile() {
     } catch (requestError) {
       setVerificationMessage(getErrorMessage(requestError, 'Não foi possível solicitar o e-mail.'))
     }
-  }
-
-  async function revokeSession(id: string) {
-    if (!token) return
-    await api(`/auth/sessions/${id}`, { method: 'DELETE', token })
-    setSessions((current) => current.filter((session) => session.id !== id))
-  }
-
-  async function revokeAllSessions() {
-    await logoutAll()
-    navigate('/login')
   }
 
   async function togglePush() {
@@ -176,16 +158,6 @@ export function Profile() {
         )}
         {pushError && <div className="error-message" role="alert">{pushError}</div>}
         {pushMessage && <div className="success-message" role="status">{pushMessage}</div>}
-      </section>
-      <section className="card profile-form">
-        <h2>Sessões ativas</h2>
-        <p>Revogue acessos antigos ou encerre todos os dispositivos.</p>
-        {sessionError && <div className="error-message" role="alert">{sessionError}</div>}
-        {sessions.map((session) => <div key={session.id} className="session-row">
-          <span>{session.current ? 'Este dispositivo' : 'Outro dispositivo'}<small> Expira em {new Date(session.expiresAt).toLocaleDateString('pt-BR')}</small></span>
-          {!session.current && <button type="button" aria-label="Revogar sessão" onClick={() => void revokeSession(session.id)}><X /></button>}
-        </div>)}
-        <Button type="button" className="outline" onClick={() => void revokeAllSessions()}>Sair de todos os dispositivos</Button>
       </section>
       <button type="button" className="logout-button" onClick={signOut}><LogOut /> Sair da conta</button>
     </div>
