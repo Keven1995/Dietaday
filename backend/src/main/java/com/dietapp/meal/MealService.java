@@ -20,6 +20,8 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 @Service
 public class MealService {
@@ -70,12 +72,12 @@ public class MealService {
     }
 
     @Transactional(readOnly = true)
-    public List<Meal> list(UUID dietId, LocalDate fromDate, LocalDate toDate) {
+    public Page<Meal> list(UUID dietId, LocalDate fromDate, LocalDate toDate, Pageable pageable) {
         diets.requireMember(dietId);
         if (fromDate != null && toDate != null && toDate.isBefore(fromDate)) {
             throw new BadRequestException("to must be on or after from");
         }
-        return meals.findHistory(dietId, fromDate, toDate);
+        return meals.findHistory(dietId, fromDate, toDate, pageable);
     }
 
     @Transactional(readOnly = true)

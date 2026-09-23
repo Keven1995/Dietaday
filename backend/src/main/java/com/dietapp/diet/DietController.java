@@ -11,6 +11,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.http.ResponseEntity;
+import com.dietapp.common.Pagination;
 
 import java.util.List;
 import java.util.UUID;
@@ -31,8 +34,11 @@ public class DietController {
     }
 
     @GetMapping
-    public List<DietResponse> list() {
-        return service.list().stream().map(DietResponse::from).toList();
+    public ResponseEntity<List<DietResponse>> list(@RequestParam(defaultValue = "0") int page,
+                                                   @RequestParam(defaultValue = "50") int size) {
+        var result = service.list(Pagination.request(page, size));
+        return Pagination.headers(ResponseEntity.ok(), result).body(result.getContent().stream()
+                .map(DietResponse::from).toList());
     }
 
     @GetMapping("/{dietId}")
@@ -52,8 +58,12 @@ public class DietController {
     }
 
     @GetMapping("/{dietId}/members")
-    public List<MemberResponse> members(@PathVariable UUID dietId) {
-        return service.listMembers(dietId).stream().map(MemberResponse::from).toList();
+    public ResponseEntity<List<MemberResponse>> members(@PathVariable UUID dietId,
+                                                        @RequestParam(defaultValue = "0") int page,
+                                                        @RequestParam(defaultValue = "50") int size) {
+        var result = service.listMembers(dietId, Pagination.request(page, size));
+        return Pagination.headers(ResponseEntity.ok(), result).body(result.getContent().stream()
+                .map(MemberResponse::from).toList());
     }
 
     @PostMapping("/{dietId}/leave")

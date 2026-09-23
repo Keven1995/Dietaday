@@ -48,6 +48,32 @@ class ApiIntegrationTest {
     }
 
     @Test
+    void listEndpointsRejectOversizedPages() throws Exception {
+        JsonNode user = register("Pagination User", "pagination-" + UUID.randomUUID() + "@example.com");
+        String dietId = createDiet(user, "Pagination Diet");
+        String mealId = createMeal(user, dietId, "Pagination meal");
+        String authorization = bearer(user);
+
+        mvc.perform(get("/api/diets").param("size", "101").header("Authorization", authorization))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/diets/{dietId}/members", dietId).param("size", "101")
+                        .header("Authorization", authorization))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/diets/{dietId}/meals", dietId).param("size", "101")
+                        .header("Authorization", authorization))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/diets/{dietId}/meals/{mealId}/comments", dietId, mealId)
+                        .param("size", "101").header("Authorization", authorization))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/notifications").param("size", "101")
+                        .header("Authorization", authorization))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/invitations").param("size", "101")
+                        .header("Authorization", authorization))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void authenticatedUsersCanRequestCloudinaryUploadSignature() throws Exception {
         JsonNode user = register("Upload User", "upload-" + UUID.randomUUID() + "@example.com");
 

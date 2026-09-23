@@ -9,8 +9,9 @@ import com.dietapp.security.CurrentUser;
 import com.dietapp.user.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
-import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -34,9 +35,8 @@ public class NotificationService {
     }
 
     @Transactional(readOnly = true)
-    public List<NotificationResponse> list() {
-        return notifications.findAccessible(currentUser.id()).stream()
-                .map(NotificationResponse::from).toList();
+    public Page<NotificationResponse> list(Pageable pageable) {
+        return notifications.findAccessible(currentUser.id(), pageable).map(NotificationResponse::from);
     }
 
     @Transactional(readOnly = true)
@@ -53,7 +53,6 @@ public class NotificationService {
 
     @Transactional
     public void markAllRead() {
-        notifications.findUnreadAccessible(currentUser.id())
-                .forEach(Notification::markRead);
+        notifications.markAllUnread(currentUser.id());
     }
 }

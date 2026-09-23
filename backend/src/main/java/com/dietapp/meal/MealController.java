@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.ResponseEntity;
+import com.dietapp.common.Pagination;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,16 +59,20 @@ public class MealController {
     }
 
     @GetMapping
-    public List<MealResponse> list(
+    public ResponseEntity<List<MealResponse>> list(
             @PathVariable UUID dietId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-        List<Meal> meals = service.list(dietId, from, to);
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
+        var result = service.list(dietId, from, to, Pagination.request(page, size));
+        List<Meal> meals = result.getContent();
         var summaries = reactions.summariesFor(meals);
         var commentCounts = comments.countsFor(meals);
-        return meals.stream().map(meal -> MealResponse.from(
+        List<MealResponse> response = meals.stream().map(meal -> MealResponse.from(
                 meal, summaries.getOrDefault(meal.getId(), List.of()),
                 commentCounts.getOrDefault(meal.getId(), 0L))).toList();
+        return Pagination.headers(ResponseEntity.ok(), result).body(response);
     }
 
     @GetMapping("/{mealId}")

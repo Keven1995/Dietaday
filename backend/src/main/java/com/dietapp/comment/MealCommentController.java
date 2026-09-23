@@ -12,6 +12,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.RequestParam;
+import com.dietapp.common.Pagination;
 
 import java.util.List;
 import java.util.UUID;
@@ -26,8 +29,11 @@ public class MealCommentController {
     }
 
     @GetMapping
-    public List<CommentResponse> list(@PathVariable UUID dietId, @PathVariable UUID mealId) {
-        return service.list(dietId, mealId);
+    public ResponseEntity<List<CommentResponse>> list(@PathVariable UUID dietId, @PathVariable UUID mealId,
+                                                       @RequestParam(defaultValue = "0") int page,
+                                                       @RequestParam(defaultValue = "50") int size) {
+        var result = service.list(dietId, mealId, Pagination.request(page, size));
+        return Pagination.headers(ResponseEntity.ok(), result).body(result.getContent());
     }
 
     @PostMapping

@@ -12,6 +12,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 @Service
 public class DietService {
@@ -39,8 +41,8 @@ public class DietService {
     }
 
     @Transactional(readOnly = true)
-    public List<Diet> list() {
-        return diets.findAllForUser(currentUser.id());
+    public Page<Diet> list(Pageable pageable) {
+        return diets.findAllForUser(currentUser.id(), pageable);
     }
 
     @Transactional(readOnly = true)
@@ -72,9 +74,9 @@ public class DietService {
     }
 
     @Transactional(readOnly = true)
-    public List<DietMember> listMembers(UUID dietId) {
+    public Page<DietMember> listMembers(UUID dietId, Pageable pageable) {
         requireMember(dietId);
-        return members.findAllByDietId(dietId);
+        return members.findAllByDietId(dietId, pageable);
     }
 
     @Transactional
@@ -93,8 +95,7 @@ public class DietService {
             return;
         }
 
-        List<DietMember> currentMembers = members.findAllByDietId(dietId);
-        if (currentMembers.size() == 1) {
+        if (members.countByDietId(dietId) == 1) {
             throw new ConflictException("The only owner cannot leave the diet");
         }
         if (successorId == null) {
@@ -104,10 +105,8 @@ public class DietService {
             throw new BadRequestException("The owner cannot appoint themselves as successor");
         }
 
-        DietMember successor = currentMembers.stream()
-                .filter(member -> member.getUser().getId().equals(successorId))
+        DietMember successor = members.findByDietIdAndUserId(dietId, successorId)
                 .filter(member -> member.getRole() == DietMember.Role.MEMBER)
-                .findFirst()
                 .orElseThrow(() -> new BadRequestException("Successor must be a current member of the diet"));
         successor.promoteToOwner();
         members.delete(membership);
