@@ -9,6 +9,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.http.ResponseEntity;
+import com.dietapp.common.Pagination;
 
 import java.util.List;
 import java.util.UUID;
@@ -30,8 +33,11 @@ public class InvitationController {
     }
 
     @GetMapping("/invitations")
-    public List<InvitationResponse> listPending() {
-        return service.listPending().stream().map(InvitationResponse::from).toList();
+    public ResponseEntity<List<InvitationResponse>> listPending(@RequestParam(defaultValue = "0") int page,
+                                                                @RequestParam(defaultValue = "50") int size) {
+        var result = service.listPending(Pagination.request(page, size));
+        return Pagination.headers(ResponseEntity.ok(), result).body(result.getContent().stream()
+                .map(InvitationResponse::from).toList());
     }
 
     @PostMapping("/invitations/{id}/accept")

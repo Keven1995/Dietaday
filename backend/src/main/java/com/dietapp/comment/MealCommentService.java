@@ -19,6 +19,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 @Service
 public class MealCommentService {
@@ -39,12 +41,12 @@ public class MealCommentService {
     }
 
     @Transactional(readOnly = true)
-    public List<CommentResponse> list(UUID dietId, UUID mealId) {
+    public Page<CommentResponse> list(UUID dietId, UUID mealId, Pageable pageable) {
         meals.get(dietId, mealId);
-        List<MealComment> result = comments.findAllByMealIdOrderByCreatedAtAsc(mealId);
-        Map<UUID, List<CommentReactionSummary>> summaries = summariesFor(result);
-        return result.stream().map(comment -> CommentResponse.from(comment,
-                summaries.getOrDefault(comment.getId(), List.of()))).toList();
+        Page<MealComment> result = comments.findAllByMealIdOrderByCreatedAtAsc(mealId, pageable);
+        Map<UUID, List<CommentReactionSummary>> summaries = summariesFor(result.getContent());
+        return result.map(comment -> CommentResponse.from(comment,
+                summaries.getOrDefault(comment.getId(), List.of())));
     }
 
     @Transactional

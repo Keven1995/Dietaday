@@ -3,6 +3,8 @@ package com.dietapp.comment;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
@@ -12,7 +14,7 @@ import java.util.UUID;
 
 public interface MealCommentRepository extends JpaRepository<MealComment, UUID> {
     @EntityGraph(attributePaths = {"author", "meal"})
-    List<MealComment> findAllByMealIdOrderByCreatedAtAsc(UUID mealId);
+    Page<MealComment> findAllByMealIdOrderByCreatedAtAsc(UUID mealId, Pageable pageable);
 
     @EntityGraph(attributePaths = {"author", "meal"})
     @Query("select c from MealComment c where c.id = :commentId and c.meal.id = :mealId " +
