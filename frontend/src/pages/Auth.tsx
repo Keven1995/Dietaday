@@ -169,10 +169,11 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
             {isDemoMode && isLogin && <div className="demo-note">Modo demonstração: os dados já estão preenchidos.</div>}
             <Button type="submit" loading={loading}>{isLogin ? 'Entrar' : 'Criar conta'}<ArrowRight size={18} /></Button>
           </form>
-          <p className="auth-switch">
+           <p className="auth-switch">
             {isLogin ? 'Ainda não tem conta?' : 'Já possui uma conta?'}{' '}
             <Link to={isLogin ? '/cadastro' : '/login'}>{isLogin ? 'Cadastre-se' : 'Entrar'}</Link>
-          </p>
+           </p>
+           {isLogin && <p className="auth-switch"><Link to="/recuperar-senha">Esqueci minha senha</Link></p>}
         </div>}
       </section>
       <CreatorCredit className="auth-creator-credit" />

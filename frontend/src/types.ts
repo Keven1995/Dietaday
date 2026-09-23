@@ -5,6 +5,7 @@ export type User = {
   weightKg?: number | null
   heightCm?: number | null
   sex: UserSex
+  emailVerified?: boolean
 }
 
 export type UserSex = 'MALE' | 'FEMALE' | 'NEUTRAL'
@@ -85,6 +86,14 @@ export type AuthResponse = {
   email: string
   fullName: string
   sex: UserSex
+}
+
+export type Session = {
+  id: string
+  createdAt: string
+  lastUsedAt: string | null
+  expiresAt: string
+  current: boolean
 }
 
 export type LoginRequest = { email: string; password: string }
