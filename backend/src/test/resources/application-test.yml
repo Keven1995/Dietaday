@@ -11,6 +11,9 @@ spring:
     enabled: true
 
 app:
+  mail:
+    enabled: false
+    from: no-reply@example.test
   jwt:
     secret: test-secret-that-is-long-enough-for-hmac-sha256
     expiration-minutes: 60

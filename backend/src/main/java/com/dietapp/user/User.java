@@ -33,6 +33,8 @@ public class User {
     private UserSex sex;
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
+    @Column(name = "email_verified", nullable = false)
+    private boolean emailVerified;
 
     protected User() {}
 
@@ -44,6 +46,7 @@ public class User {
         this.dailyWaterGoalMl = 2000;
         this.sex = sex;
         this.createdAt = Instant.now();
+        this.emailVerified = false;
     }
 
     public UUID getId() { return id; }
@@ -54,6 +57,10 @@ public class User {
     public Integer getHeightCm() { return heightCm; }
     public int getDailyWaterGoalMl() { return dailyWaterGoalMl; }
     public UserSex getSex() { return sex; }
+    public boolean isEmailVerified() { return emailVerified; }
+
+    public void verifyEmail() { this.emailVerified = true; }
+    public void updatePassword(String passwordHash) { this.passwordHash = passwordHash; }
 
     public void updateProfile(String fullName, BigDecimal weightKg, Integer heightCm, UserSex sex) {
         this.fullName = fullName;

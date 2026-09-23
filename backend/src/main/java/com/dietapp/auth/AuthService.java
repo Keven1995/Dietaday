@@ -27,16 +27,19 @@ public class AuthService {
     private final JwtService jwtService;
     private final LoginAttemptService loginAttempts;
     private final SecurityAuditService audit;
+    private final AccountSecurityService accountSecurity;
 
     public AuthService(UserRepository users, PasswordEncoder passwordEncoder,
                        AuthenticationManager authenticationManager, JwtService jwtService,
-                       LoginAttemptService loginAttempts, SecurityAuditService audit) {
+                       LoginAttemptService loginAttempts, SecurityAuditService audit,
+                       AccountSecurityService accountSecurity) {
         this.users = users;
         this.passwordEncoder = passwordEncoder;
         this.authenticationManager = authenticationManager;
         this.jwtService = jwtService;
         this.loginAttempts = loginAttempts;
         this.audit = audit;
+        this.accountSecurity = accountSecurity;
     }
 
     @Transactional
@@ -56,6 +59,7 @@ public class AuthService {
         } catch (DataIntegrityViolationException exception) {
             throw new ConflictException("Email already registered", exception);
         }
+        accountSecurity.sendVerification(user);
         return responseFor(user);
     }
 
