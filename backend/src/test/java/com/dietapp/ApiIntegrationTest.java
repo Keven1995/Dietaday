@@ -486,6 +486,69 @@ class ApiIntegrationTest {
     }
 
     @Test
+    void competitiveRankingIsProtectedAndUsesOfficialShape() throws Exception {
+        JsonNode owner = register("Ranking Owner", "ranking-owner-" + UUID.randomUUID() + "@example.com");
+        JsonNode outsider = register("Ranking Outsider", "ranking-outsider-" + UUID.randomUUID() + "@example.com");
+        String dietId = createCompetitiveDiet(owner, "Ranking Diet");
+
+        mvc.perform(get("/api/diets/{dietId}/ranking", dietId)
+                        .header("Authorization", bearer(owner))
+                        .param("page", "0")
+                        .param("size", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.dietId").value(dietId))
+                .andExpect(jsonPath("$.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.participants.length()").value(1))
+                .andExpect(jsonPath("$.participants[0].officialPoints").value(0))
+                .andExpect(jsonPath("$.page.number").value(0))
+                .andExpect(jsonPath("$.page.size").value(1))
+                .andExpect(jsonPath("$.page.totalElements").value(1));
+
+        mvc.perform(get("/api/diets/{dietId}/ranking", dietId)
+                        .header("Authorization", bearer(outsider)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void rankingDetailsExposePendingPointsBySource() throws Exception {
+        JsonNode owner = register("Ranking Details Owner", "ranking-details-" + UUID.randomUUID() + "@example.com");
+        String dietId = createCompetitiveDiet(owner, "Ranking Details Diet");
+
+        mvc.perform(post("/api/diets/{dietId}/meals", dietId)
+                        .header("Authorization", bearer(owner))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"mealType":"Almoço","description":"Pending ranking meal","mealDate":"2026-09-24"}
+                                """))
+                .andExpect(status().isCreated());
+
+        mvc.perform(get("/api/diets/{dietId}/ranking/me", dietId)
+                        .header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pendingPoints").value(5))
+                .andExpect(jsonPath("$.mealCountByType.ALMOCO").value(1))
+                .andExpect(jsonPath("$.eligibleWaterChecks").value(0))
+                .andExpect(jsonPath("$.events.length()").value(1))
+                .andExpect(jsonPath("$.page.totalElements").value(1));
+    }
+
+    @Test
+    void rankingRejectsOversizedPages() throws Exception {
+        JsonNode owner = register("Ranking Page Owner", "ranking-page-" + UUID.randomUUID() + "@example.com");
+        String dietId = createCompetitiveDiet(owner, "Ranking Page Diet");
+
+        mvc.perform(get("/api/diets/{dietId}/ranking", dietId)
+                        .header("Authorization", bearer(owner))
+                        .param("size", "101"))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(get("/api/diets/{dietId}/ranking/me", dietId)
+                        .header("Authorization", bearer(owner))
+                        .param("size", "101"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void membersCanReactOnceToMealsFromOtherUsers() throws Exception {
         String firstMemberEmail = "reaction-one-" + UUID.randomUUID() + "@example.com";
         String secondMemberEmail = "reaction-two-" + UUID.randomUUID() + "@example.com";

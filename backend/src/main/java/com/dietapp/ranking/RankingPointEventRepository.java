@@ -18,6 +18,9 @@ public interface RankingPointEventRepository extends JpaRepository<RankingPointE
     List<RankingPointEvent> findAllByDietIdAndEventDateAndStatus(
             UUID dietId, LocalDate eventDate, RankingPointEvent.Status status);
 
+    List<RankingPointEvent> findAllByDietIdAndUserIdAndStatusOrderByEventDateAscCreatedAtAsc(
+            UUID dietId, UUID userId, RankingPointEvent.Status status);
+
     long countByDietIdAndUserId(UUID dietId, UUID userId);
 
     boolean existsByDietIdAndUserIdAndEventDateAndMealTypeAndSourceTypeAndStatusNot(
