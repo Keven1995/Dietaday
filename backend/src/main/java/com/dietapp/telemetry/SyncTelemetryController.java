@@ -18,10 +18,13 @@ public class SyncTelemetryController {
     private static final Logger log = LoggerFactory.getLogger(SyncTelemetryController.class);
     private final CurrentUser currentUser;
     private final SecurityAuditService audit;
+    private final SyncErrorEventService errors;
 
-    public SyncTelemetryController(CurrentUser currentUser, SecurityAuditService audit) {
+    public SyncTelemetryController(CurrentUser currentUser, SecurityAuditService audit,
+                                   SyncErrorEventService errors) {
         this.currentUser = currentUser;
         this.audit = audit;
+        this.errors = errors;
     }
 
     @PostMapping("/sync")
@@ -30,6 +33,7 @@ public class SyncTelemetryController {
         if ("cloudinary-upload".equals(event.phase()) && event.errorType() != null) {
             audit.uploadFailure(currentUser.id(), event.errorType());
         }
+        errors.record(event);
         log.info("sync_event userId={} operationId={} phase={} attempt={} durationMs={} httpStatus={} errorType={} fileType={} fileSizeBytes={}",
                 currentUser.id(), event.operationId(), event.phase(), event.attempt(), event.durationMs(),
                 event.httpStatus(), event.errorType(), event.fileType(), event.fileSizeBytes());

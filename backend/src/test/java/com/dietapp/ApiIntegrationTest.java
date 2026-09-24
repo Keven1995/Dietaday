@@ -3,6 +3,7 @@ package com.dietapp;
 import com.dietapp.user.UserRepository;
 import com.dietapp.ranking.RankingPointEventRepository;
 import com.dietapp.ranking.RankingPointEvent;
+import com.dietapp.telemetry.SyncErrorEventRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -37,6 +38,7 @@ class ApiIntegrationTest {
     @Autowired UserRepository users;
     @Autowired PasswordEncoder passwordEncoder;
     @Autowired RankingPointEventRepository rankingEvents;
+    @Autowired SyncErrorEventRepository syncErrors;
 
     @Test
     void healthEndpointIsPublic() throws Exception {
@@ -145,14 +147,16 @@ class ApiIntegrationTest {
     @Test
     void authenticatedUsersCanReportSanitizedSyncTelemetry() throws Exception {
         JsonNode user = register("Telemetry User", "telemetry-" + UUID.randomUUID() + "@example.com");
+        String dietId = createDiet(user, "Telemetry Diet");
 
         mvc.perform(post("/api/telemetry/sync")
                         .header("Authorization", bearer(user))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"operationId":"00000000-0000-0000-0000-000000000001","phase":"cloudinary-upload","attempt":1,"durationMs":1200,"httpStatus":0,"errorType":"cloudinary-no-response","fileType":"image/webp","fileSizeBytes":1024}
-                                """))
+                                {"operationId":"00000000-0000-0000-0000-000000000001","dietId":"%s","phase":"cloudinary-upload","attempt":1,"durationMs":1200,"httpStatus":0,"errorType":"cloudinary-no-response","fileType":"image/webp","fileSizeBytes":1024}
+                """.formatted(dietId)))
                 .andExpect(status().isNoContent());
+        assertThat(syncErrors.count()).isGreaterThanOrEqualTo(1);
     }
 
     @Test

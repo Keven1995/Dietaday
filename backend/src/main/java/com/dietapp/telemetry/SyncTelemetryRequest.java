@@ -10,6 +10,7 @@ import java.util.UUID;
 
 public record SyncTelemetryRequest(
         @NotNull UUID operationId,
+        @NotNull UUID dietId,
         @NotBlank @Size(max = 32) String phase,
         @Min(1) @Max(1000) int attempt,
         @Min(0) @Max(900_000) Long durationMs,
