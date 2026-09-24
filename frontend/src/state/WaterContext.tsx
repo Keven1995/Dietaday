@@ -3,6 +3,7 @@ import { getErrorMessage, isDemoMode } from '../lib/api'
 import { addWaterCheck, getWaterToday, readCachedWater, updateWaterGoal, WATER_CACHE_RESOURCE } from '../lib/water'
 import { writeCachedResource } from '../lib/resourceCache'
 import { useAuth } from './AuthContext'
+import { useDiets } from './DietContext'
 import type { WaterToday } from '../types'
 
 type WaterContextValue = {
@@ -19,7 +20,10 @@ const WaterContext = createContext<WaterContextValue | null>(null)
 
 export function WaterProvider({ children }: { children: ReactNode }) {
   const { user, token } = useAuth()
-  const [water, setWater] = useState<WaterToday | null>(() => user ? readCachedWater(user.id) : null)
+  const { activeDiet } = useDiets()
+  const competitiveDietId = activeDiet?.competitiveMode ? activeDiet.id : null
+  const cacheResource = competitiveDietId ? `${WATER_CACHE_RESOURCE}:${competitiveDietId}` : WATER_CACHE_RESOURCE
+  const [water, setWater] = useState<WaterToday | null>(() => user ? readCachedWater(user.id, competitiveDietId) : null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -32,8 +36,8 @@ export function WaterProvider({ children }: { children: ReactNode }) {
     setLoading(true)
     setError('')
     try {
-      const next = await getWaterToday(token, user.id)
-      if (!isDemoMode) writeCachedResource(user.id, WATER_CACHE_RESOURCE, next)
+      const next = await getWaterToday(token, user.id, competitiveDietId)
+      if (!isDemoMode) writeCachedResource(user.id, cacheResource, next)
       setWater(next)
     } catch (refreshError) {
       setError(getErrorMessage(refreshError, 'Não foi possível carregar o acompanhamento de água.'))
@@ -43,17 +47,17 @@ export function WaterProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    setWater(user ? readCachedWater(user.id) : null)
+    setWater(user ? readCachedWater(user.id, competitiveDietId) : null)
     void refresh()
-  }, [user?.id, token])
+  }, [user?.id, token, competitiveDietId])
 
   async function saveGoal(goalMl: number) {
     if (!user) return
     setSaving(true)
     setError('')
     try {
-      const next = await updateWaterGoal(token, user.id, goalMl)
-      if (!isDemoMode) writeCachedResource(user.id, WATER_CACHE_RESOURCE, next)
+      const next = await updateWaterGoal(token, user.id, goalMl, competitiveDietId)
+      if (!isDemoMode) writeCachedResource(user.id, cacheResource, next)
       setWater(next)
     } catch (saveError) {
       setError(getErrorMessage(saveError, 'Não foi possível salvar sua meta.'))
@@ -68,8 +72,8 @@ export function WaterProvider({ children }: { children: ReactNode }) {
     setSaving(true)
     setError('')
     try {
-      const next = await addWaterCheck(token, user.id, amountMl)
-      if (!isDemoMode) writeCachedResource(user.id, WATER_CACHE_RESOURCE, next)
+      const next = await addWaterCheck(token, user.id, amountMl, competitiveDietId)
+      if (!isDemoMode) writeCachedResource(user.id, cacheResource, next)
       setWater(next)
     } catch (checkError) {
       setError(getErrorMessage(checkError, 'Não foi possível registrar esse check.'))
