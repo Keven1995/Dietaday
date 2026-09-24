@@ -6,6 +6,7 @@ import com.dietapp.diet.DietMemberRepository;
 import com.dietapp.diet.DietRepository;
 import com.dietapp.user.User;
 import com.dietapp.user.UserSex;
+import com.dietapp.security.SecurityAuditService;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -37,8 +38,9 @@ class DailyClosingServiceTest {
     private final DailyRankingClosureRepository closures = mock(DailyRankingClosureRepository.class);
     private final DailyRankingTotalRepository totals = mock(DailyRankingTotalRepository.class);
     private final RankingAccumulationService accumulation = mock(RankingAccumulationService.class);
+    private final SecurityAuditService audit = mock(SecurityAuditService.class);
     private final DailyClosingService service = new DailyClosingService(
-            diets, members, events, closures, totals, accumulation, CLOCK);
+            diets, members, events, closures, totals, accumulation, CLOCK, audit);
 
     @Test
     void persistsZeroTotalsAndSettlesEventsAtomically() {

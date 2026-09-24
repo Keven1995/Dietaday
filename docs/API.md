@@ -39,6 +39,7 @@ O cadastro exige `sex` com um dos valores `MALE` ou `FEMALE`:
 ```text
 GET    /diets
 POST   /diets
+PUT    /diets/{dietId}
 DELETE /diets/{dietId}
 POST   /diets/{dietId}/invitations
 GET    /invitations
@@ -138,7 +139,7 @@ GET /diets/{dietId}/ranking?page=0&size=20
 GET /diets/{dietId}/ranking/me
 ```
 
-O ranking oficial é atualizado pelo fechamento diário. `officialPoints` e `position` não incluem eventos pendentes. A resposta canônica contém o período da dieta, o status do ranking, a data do último fechamento, o usuário atual, os participantes e a paginação:
+O ranking oficial é atualizado pelo fechamento diário. `officialPoints` e `position` não incluem eventos pendentes. A resposta canônica contém o período da dieta, o status do ranking, a data do último fechamento, o usuário atual, os participantes e a paginação. O endpoint `/ranking/me` aceita os mesmos parâmetros `page` e `size`:
 
 ```json
 {
@@ -199,12 +200,11 @@ O detalhamento do usuário atual separa eventos elegíveis desde o último fecha
 
 ### Ranking finalizado
 
-Depois do encerramento, o status passa para `FINALIZED`. O ranking permanece disponível, mas novos eventos e alterações competitivas são rejeitados. O contrato pode incluir o pódio final:
+Depois do encerramento, o status passa para `FINALIZED`. O ranking permanece disponível, mas novos eventos e alterações competitivas são rejeitados. O contrato inclui o pódio final:
 
 ```json
 {
   "status": "FINALIZED",
-  "finalizedAt": "2026-09-30T23:59:00-03:00",
   "podium": {
     "first": "f1b1b4c0-674c-4b72-8c20-f41dc1a8ec2",
     "second": "0b5c4aa2-11d2-4e4a-b7a6-1f78fcb9f321",
@@ -212,6 +212,8 @@ Depois do encerramento, o status passa para `FINALIZED`. O ranking permanece dis
   }
 }
 ```
+
+`finalizedAt` é persistido internamente para auditoria operacional, mas não faz parte da resposta atual do ranking.
 
 O desempate oficial segue esta ordem: pontos acumulados, dias ativos, primeiro alcance da pontuação e ordem inicial persistida para empates em zero.
 

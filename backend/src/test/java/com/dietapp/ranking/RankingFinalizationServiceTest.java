@@ -4,6 +4,7 @@ import com.dietapp.diet.Diet;
 import com.dietapp.diet.DietRepository;
 import com.dietapp.user.User;
 import com.dietapp.user.UserSex;
+import com.dietapp.security.SecurityAuditService;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -28,8 +29,9 @@ class RankingFinalizationServiceTest {
     private final RankingFinalizationRepository finalizations = mock(RankingFinalizationRepository.class);
     private final Clock clock = Clock.fixed(Instant.parse("2026-10-01T03:00:00Z"),
             ZoneId.of("America/Sao_Paulo"));
+    private final SecurityAuditService audit = mock(SecurityAuditService.class);
     private final RankingFinalizationService service = new RankingFinalizationService(
-            diets, scores, finalizations, clock);
+            diets, scores, finalizations, clock, audit);
 
     @Test
     void freezesTheRankingAndStoresThePodiumAfterTheEndDate() {

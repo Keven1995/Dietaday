@@ -50,7 +50,9 @@ public class MealService {
     public Meal create(UUID dietId, String mealType, String description, LocalDate mealDate,
                        String photoUrl, UUID operationId) {
         photoUrlPolicy.validate(photoUrl);
-        Diet diet = operationId == null ? diets.requireMember(dietId) : diets.requireMemberForUpdate(dietId);
+        // Competitive writes share the diet lock with daily closing, so a meal
+        // cannot be inserted between the pending-event read and settlement.
+        Diet diet = diets.requireMemberForUpdate(dietId);
         User author = currentUser.require();
         ensureCompetitiveWriteAllowed(diet);
         if (operationId == null) {
