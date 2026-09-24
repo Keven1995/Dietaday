@@ -21,7 +21,10 @@ function DietCard({ diet, index, selected, canDelete, onSelect, onDelete }: { di
     <article className={`diet-card ${selected ? 'selected' : ''} ${index % 2 ? 'accent-green' : ''}`}>
       <div className="diet-card-top">
         <div className="diet-symbol"><Salad /></div>
-        {selected && <span className="active-label"><Check /> Ativa</span>}
+        <div className="diet-card-labels">
+          {diet.competitiveMode && <span className="competitive-label">Competitiva</span>}
+          {selected && <span className="active-label"><Check /> Ativa</span>}
+        </div>
       </div>
       <h2>{diet.name}</h2>
       <p>Plano alimentar de {formatDate(diet.startDate)} a {formatDate(diet.endDate)}.</p>
@@ -123,7 +126,7 @@ function CreateDietModal({ onClose, onCreate }: { onClose: () => void; onCreate:
         <button type="button" className="close" onClick={onClose} aria-label="Fechar"><X /></button>
         <span className="overline">NOVO PLANO</span>
         <h2 id="create-diet-title">Crie uma dieta</h2>
-      <p>Defina o nome e o período para começar.</p>
+        <p>Defina o nome e o período para começar.</p>
         <form onSubmit={submit}>
           <label>
             Nome
