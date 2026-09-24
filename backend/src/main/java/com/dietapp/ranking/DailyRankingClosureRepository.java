@@ -8,4 +8,6 @@ import java.util.UUID;
 
 public interface DailyRankingClosureRepository extends JpaRepository<DailyRankingClosure, UUID> {
     Optional<DailyRankingClosure> findByDietIdAndEventDate(UUID dietId, LocalDate eventDate);
+
+    Optional<DailyRankingClosure> findTopByDietIdOrderByEventDateDesc(UUID dietId);
 }
