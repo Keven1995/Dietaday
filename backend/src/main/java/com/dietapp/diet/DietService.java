@@ -31,10 +31,10 @@ public class DietService {
     }
 
     @Transactional
-    public Diet create(String name, LocalDate startDate, LocalDate endDate) {
+    public Diet create(String name, LocalDate startDate, LocalDate endDate, boolean competitiveMode) {
         validateDates(startDate, endDate);
         var owner = currentUser.require();
-        Diet diet = diets.save(new Diet(name.trim(), startDate, endDate));
+        Diet diet = diets.save(new Diet(name.trim(), startDate, endDate, competitiveMode));
         members.save(new DietMember(diet, owner, DietMember.Role.OWNER));
         audit.dietCreated(owner.getId(), diet.getId());
         return diet;
@@ -59,9 +59,12 @@ public class DietService {
     }
 
     @Transactional
-    public Diet update(UUID dietId, String name, LocalDate startDate, LocalDate endDate) {
+    public Diet update(UUID dietId, String name, LocalDate startDate, LocalDate endDate, boolean competitiveMode) {
         validateDates(startDate, endDate);
         Diet diet = requireOwner(dietId);
+        if (diet.isCompetitiveMode() != competitiveMode) {
+            throw new ConflictException("Competitive mode cannot be changed after diet creation");
+        }
         diet.update(name.trim(), startDate, endDate);
         return diet;
     }

@@ -9,7 +9,7 @@ import { useAuth } from '../state/AuthContext'
 import { useDiets } from '../state/DietContext'
 import type { CreateDietRequest, Diet, Member } from '../types'
 
-const EMPTY_FORM: CreateDietRequest = { name: '', startDate: '', endDate: '' }
+const EMPTY_FORM: CreateDietRequest = { name: '', startDate: '', endDate: '', competitiveMode: false }
 const NO_MEMBERS: Member[] = []
 
 function formatDate(value: string) {
@@ -123,7 +123,7 @@ function CreateDietModal({ onClose, onCreate }: { onClose: () => void; onCreate:
         <button type="button" className="close" onClick={onClose} aria-label="Fechar"><X /></button>
         <span className="overline">NOVO PLANO</span>
         <h2 id="create-diet-title">Crie uma dieta</h2>
-        <p>Defina o nome e o período para começar.</p>
+      <p>Defina o nome e o período para começar.</p>
         <form onSubmit={submit}>
           <label>
             Nome
@@ -133,6 +133,10 @@ function CreateDietModal({ onClose, onCreate }: { onClose: () => void; onCreate:
             <label>Data inicial<input required type="date" value={form.startDate} onChange={(event) => setForm({ ...form, startDate: event.target.value })} /></label>
             <label>Data final<input required min={form.startDate} type="date" value={form.endDate} onChange={(event) => setForm({ ...form, endDate: event.target.value })} /></label>
           </div>
+          <label className="competitive-option">
+            <input type="checkbox" checked={form.competitiveMode} onChange={(event) => setForm({ ...form, competitiveMode: event.target.checked })} />
+            <span><strong>Modo competitivo</strong><small>Transforme os registros do grupo em uma competição amigável baseada na consistência.</small></span>
+          </label>
           {error && <div className="error-message" role="alert">{error}</div>}
           <Button loading={saving}>Criar e selecionar</Button>
         </form>

@@ -30,7 +30,7 @@ public class DietController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public DietResponse create(@Valid @RequestBody DietRequest request) {
-        return DietResponse.from(service.create(request.name(), request.startDate(), request.endDate()));
+        return DietResponse.from(service.create(request.name(), request.startDate(), request.endDate(), request.competitiveMode()));
     }
 
     @GetMapping
@@ -48,7 +48,7 @@ public class DietController {
 
     @PutMapping("/{dietId}")
     public DietResponse update(@PathVariable UUID dietId, @Valid @RequestBody DietRequest request) {
-        return DietResponse.from(service.update(dietId, request.name(), request.startDate(), request.endDate()));
+        return DietResponse.from(service.update(dietId, request.name(), request.startDate(), request.endDate(), request.competitiveMode()));
     }
 
     @DeleteMapping("/{dietId}")

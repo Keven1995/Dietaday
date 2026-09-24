@@ -20,16 +20,19 @@ public class Diet {
     private LocalDate startDate;
     @Column(name = "end_date", nullable = false)
     private LocalDate endDate;
+    @Column(name = "competitive_mode", nullable = false)
+    private boolean competitiveMode;
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
     protected Diet() {}
 
-    public Diet(String name, LocalDate startDate, LocalDate endDate) {
+    public Diet(String name, LocalDate startDate, LocalDate endDate, boolean competitiveMode) {
         this.id = UUID.randomUUID();
         this.name = name;
         this.startDate = startDate;
         this.endDate = endDate;
+        this.competitiveMode = competitiveMode;
         this.createdAt = Instant.now();
     }
 
@@ -37,6 +40,7 @@ public class Diet {
     public String getName() { return name; }
     public LocalDate getStartDate() { return startDate; }
     public LocalDate getEndDate() { return endDate; }
+    public boolean isCompetitiveMode() { return competitiveMode; }
 
     public void update(String name, LocalDate startDate, LocalDate endDate) {
         this.name = name;

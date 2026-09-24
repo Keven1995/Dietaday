@@ -1,0 +1,2 @@
+ALTER TABLE diets
+    ADD COLUMN competitive_mode BOOLEAN NOT NULL DEFAULT FALSE;

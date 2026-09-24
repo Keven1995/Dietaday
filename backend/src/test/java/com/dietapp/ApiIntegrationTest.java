@@ -48,6 +48,30 @@ class ApiIntegrationTest {
     }
 
     @Test
+    void competitiveModeIsConfiguredAtCreationAndCannotBeChanged() throws Exception {
+        JsonNode user = register("Competitive User", "competitive-" + UUID.randomUUID() + "@example.com");
+        String authorization = bearer(user);
+        String response = mvc.perform(post("/api/diets")
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Competitive Diet","startDate":"2026-09-01","endDate":"2026-09-30","competitiveMode":true}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.competitiveMode").value(true))
+                .andReturn().getResponse().getContentAsString();
+        String dietId = objectMapper.readTree(response).get("id").asText();
+
+        mvc.perform(put("/api/diets/{dietId}", dietId)
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Changed","startDate":"2026-09-01","endDate":"2026-09-30","competitiveMode":false}
+                                """))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
     void listEndpointsRejectOversizedPages() throws Exception {
         JsonNode user = register("Pagination User", "pagination-" + UUID.randomUUID() + "@example.com");
         String dietId = createDiet(user, "Pagination Diet");
