@@ -1269,6 +1269,41 @@ class ApiIntegrationTest {
     }
 
     @Test
+    void competitiveMemberLeavesWhilePreservingAndRevokingPendingEvents() throws Exception {
+        String memberEmail = "competitive-leaving-member-" + UUID.randomUUID() + "@example.com";
+        JsonNode owner = register("Competitive Leave Owner", "competitive-leave-owner-" + UUID.randomUUID() + "@example.com");
+        JsonNode member = register("Competitive Leaving Member", memberEmail);
+        String dietId = createCompetitiveDiet(owner, "Competitive Leave Diet");
+        joinDiet(owner, member, dietId, memberEmail);
+
+        mvc.perform(post("/api/diets/{dietId}/meals", dietId)
+                        .header("Authorization", bearer(member))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"mealType":"Almoço","description":"Competitive meal before leaving","mealDate":"2026-09-24"}
+                                """))
+                .andExpect(status().isCreated());
+        mvc.perform(post("/api/diets/{dietId}/water/checks", dietId)
+                        .header("Authorization", bearer(member))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amountMl\":500}"))
+                .andExpect(status().isOk());
+
+        leaveDiet(member, dietId, null).andExpect(status().isNoContent());
+
+        assertThat(rankingEvents.findAllByDietIdAndUserIdAndStatusOrderByEventDateAscCreatedAtAsc(
+                UUID.fromString(dietId), UUID.fromString(member.get("userId").asText()), RankingPointEvent.Status.REVOKED))
+                .hasSize(2);
+        mvc.perform(get("/api/diets/{dietId}/ranking", dietId)
+                        .header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(1));
+        mvc.perform(get("/api/diets/{dietId}/ranking", dietId)
+                        .header("Authorization", bearer(member)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void ownerTransfersOwnershipAndLeaves() throws Exception {
         String successorEmail = "successor-" + UUID.randomUUID() + "@example.com";
         JsonNode owner = register("Transfer Owner", "transfer-owner-" + UUID.randomUUID() + "@example.com");

@@ -60,6 +60,18 @@ public class RankingPointEventService {
     }
 
     @Transactional
+    public void revokePending(java.util.UUID dietId, java.util.UUID userId) {
+        var pending = events.findAllByDietIdAndUserIdAndStatusOrderByEventDateAscCreatedAtAsc(
+                dietId, userId, RankingPointEvent.Status.PENDING);
+        pending.forEach(event -> {
+            event.revoke();
+            audit.pointEventRevoked(event.getUser().getId(), event.getDiet().getId(), event.getId(),
+                    event.getSourceType().name());
+        });
+        if (!pending.isEmpty()) events.saveAll(pending);
+    }
+
+    @Transactional
     public void recordWater(WaterCheck check, int remainingBeforeCheck) {
         if (check.getDiet() == null || !check.getDiet().isCompetitiveMode()) return;
         if (alreadyRecorded(RankingPointEvent.SourceType.WATER_CHECK, check.getId())) return;
