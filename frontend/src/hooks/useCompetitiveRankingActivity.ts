@@ -58,6 +58,7 @@ export function useCompetitiveRankingActivity() {
 
   return {
     hasUnseenActivity: Boolean(activity?.eventId && activity.eventId !== seenEventId),
+    activitySourceType: activity?.eventId && activity.eventId !== seenEventId ? activity.sourceType : null,
     acknowledge,
   }
 }
