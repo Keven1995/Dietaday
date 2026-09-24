@@ -32,4 +32,9 @@ public class RankingController {
                                           @RequestParam(defaultValue = "20") int size) {
         return service.details(dietId, Pagination.request(page, size));
     }
+
+    @GetMapping("/activity")
+    public RankingActivityResponse activity(@PathVariable UUID dietId) {
+        return service.latestActivity(dietId);
+    }
 }

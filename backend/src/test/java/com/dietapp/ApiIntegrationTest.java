@@ -533,6 +533,39 @@ class ApiIntegrationTest {
     }
 
     @Test
+    void rankingActivityShowsOnlyTheLatestEventFromAnotherMember() throws Exception {
+        JsonNode owner = register("Activity Owner", "activity-owner-" + UUID.randomUUID() + "@example.com");
+        JsonNode member = register("Activity Member", "activity-member-" + UUID.randomUUID() + "@example.com");
+        JsonNode outsider = register("Activity Outsider", "activity-outsider-" + UUID.randomUUID() + "@example.com");
+        String dietId = createCompetitiveDiet(owner, "Activity Diet");
+        joinDiet(owner, member, dietId, member.get("email").asText());
+
+        mvc.perform(post("/api/diets/{dietId}/meals", dietId)
+                        .header("Authorization", bearer(member))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"mealType":"Almoço","description":"Activity meal","mealDate":"2026-09-24"}
+                                """))
+                .andExpect(status().isCreated());
+
+        mvc.perform(get("/api/diets/{dietId}/ranking/activity", dietId)
+                        .header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.eventId").isNotEmpty())
+                .andExpect(jsonPath("$.sourceType").value("MEAL"))
+                .andExpect(jsonPath("$.createdAt").isNotEmpty());
+
+        mvc.perform(get("/api/diets/{dietId}/ranking/activity", dietId)
+                        .header("Authorization", bearer(member)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.eventId").value((Object) null));
+
+        mvc.perform(get("/api/diets/{dietId}/ranking/activity", dietId)
+                        .header("Authorization", bearer(outsider)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void rankingRejectsOversizedPages() throws Exception {
         JsonNode owner = register("Ranking Page Owner", "ranking-page-" + UUID.randomUUID() + "@example.com");
         String dietId = createCompetitiveDiet(owner, "Ranking Page Diet");

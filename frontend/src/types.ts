@@ -142,3 +142,9 @@ export type RankingDetails = {
   events: Array<{ sourceType: string; mealType: string | null; eventDate: string; points: number; status: string }>
   page: { number: number; size: number; totalElements: number; totalPages: number }
 }
+
+export type RankingActivity = {
+  eventId: string | null
+  sourceType: 'MEAL' | 'WATER_CHECK' | null
+  createdAt: string | null
+}

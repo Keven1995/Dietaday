@@ -111,6 +111,17 @@ public class RankingService {
                         (allResponseEvents.size() + pageable.getPageSize() - 1) / pageable.getPageSize()));
     }
 
+    @Transactional(readOnly = true)
+    public RankingActivityResponse latestActivity(UUID dietId) {
+        Diet diet = diets.requireMember(dietId);
+        if (!diet.isCompetitiveMode()) throw new ConflictException("This diet is not competitive");
+        return events.findLatestActivityFromOtherUsers(dietId, currentUser.id(), Pageable.ofSize(1))
+                .stream()
+                .findFirst()
+                .map(event -> new RankingActivityResponse(event.getId(), event.getSourceType().name(), event.getCreatedAt()))
+                .orElseGet(RankingActivityResponse::empty);
+    }
+
     private List<RankingParticipant> rankingParticipants(UUID dietId) {
         Map<UUID, RankingScore> scoreByUser = scores.findAllByDietId(dietId).stream()
                 .collect(Collectors.toMap(score -> score.getUser().getId(), score -> score));
