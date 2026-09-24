@@ -27,6 +27,7 @@ public interface RankingPointEventRepository extends JpaRepository<RankingPointE
 
     @Query("select event from RankingPointEvent event " +
             "where event.diet.id = :dietId and event.user.id <> :userId " +
+            "and exists (select member.id from DietMember member where member.diet.id = :dietId and member.user.id = event.user.id) " +
             "and event.status <> com.dietapp.ranking.RankingPointEvent$Status.REVOKED " +
             "order by event.createdAt desc")
     List<RankingPointEvent> findLatestActivityFromOtherUsers(@Param("dietId") UUID dietId,

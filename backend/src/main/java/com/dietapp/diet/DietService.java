@@ -4,6 +4,7 @@ import com.dietapp.common.BadRequestException;
 import com.dietapp.common.ConflictException;
 import com.dietapp.common.ForbiddenException;
 import com.dietapp.common.NotFoundException;
+import com.dietapp.ranking.RankingPointEventService;
 import com.dietapp.security.CurrentUser;
 import com.dietapp.security.SecurityAuditService;
 import org.springframework.stereotype.Service;
@@ -21,13 +22,15 @@ public class DietService {
     private final DietMemberRepository members;
     private final CurrentUser currentUser;
     private final SecurityAuditService audit;
+    private final RankingPointEventService rankingEvents;
 
     public DietService(DietRepository diets, DietMemberRepository members, CurrentUser currentUser,
-                       SecurityAuditService audit) {
+                       SecurityAuditService audit, RankingPointEventService rankingEvents) {
         this.diets = diets;
         this.members = members;
         this.currentUser = currentUser;
         this.audit = audit;
+        this.rankingEvents = rankingEvents;
     }
 
     @Transactional
@@ -93,6 +96,7 @@ public class DietService {
             if (successorId != null) {
                 throw new BadRequestException("A member cannot appoint a successor");
             }
+            rankingEvents.revokePending(dietId, membership.getUser().getId());
             members.delete(membership);
             audit.memberLeft(membership.getUser().getId(), dietId);
             return;
@@ -112,6 +116,7 @@ public class DietService {
                 .filter(member -> member.getRole() == DietMember.Role.MEMBER)
                 .orElseThrow(() -> new BadRequestException("Successor must be a current member of the diet"));
         successor.promoteToOwner();
+        rankingEvents.revokePending(dietId, membership.getUser().getId());
         members.delete(membership);
         audit.memberOwnershipTransferred(membership.getUser().getId(), dietId, successorId);
     }

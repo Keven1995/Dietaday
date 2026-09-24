@@ -2,6 +2,8 @@ package com.dietapp.ranking;
 
 import com.dietapp.diet.Diet;
 import com.dietapp.diet.DietRepository;
+import com.dietapp.diet.DietMember;
+import com.dietapp.diet.DietMemberRepository;
 import com.dietapp.user.User;
 import com.dietapp.user.UserSex;
 import com.dietapp.security.SecurityAuditService;
@@ -27,11 +29,12 @@ class RankingFinalizationServiceTest {
     private final DietRepository diets = mock(DietRepository.class);
     private final RankingScoreRepository scores = mock(RankingScoreRepository.class);
     private final RankingFinalizationRepository finalizations = mock(RankingFinalizationRepository.class);
+    private final DietMemberRepository members = mock(DietMemberRepository.class);
     private final Clock clock = Clock.fixed(Instant.parse("2026-10-01T03:00:00Z"),
             ZoneId.of("America/Sao_Paulo"));
     private final SecurityAuditService audit = mock(SecurityAuditService.class);
     private final RankingFinalizationService service = new RankingFinalizationService(
-            diets, scores, finalizations, clock, audit);
+            diets, scores, finalizations, clock, audit, members);
 
     @Test
     void freezesTheRankingAndStoresThePodiumAfterTheEndDate() {
@@ -45,6 +48,9 @@ class RankingFinalizationServiceTest {
         when(diets.findForUpdateById(diet.getId())).thenReturn(Optional.of(diet));
         when(finalizations.findByDietId(diet.getId())).thenReturn(Optional.empty());
         when(scores.findAllByDietId(diet.getId())).thenReturn(List.of(secondScore, firstScore));
+        when(members.findAllByDietId(diet.getId())).thenReturn(List.of(
+                new DietMember(diet, first, DietMember.Role.MEMBER),
+                new DietMember(diet, second, DietMember.Role.MEMBER)));
         when(finalizations.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         assertTrue(service.finalizeIfEnded(diet.getId()));

@@ -1,6 +1,7 @@
 package com.dietapp.ranking;
 
 import com.dietapp.diet.Diet;
+import com.dietapp.diet.DietMemberRepository;
 import com.dietapp.diet.DietRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,15 +17,17 @@ public class RankingFinalizationService {
     private final DietRepository diets;
     private final RankingScoreRepository scores;
     private final RankingFinalizationRepository finalizations;
+    private final DietMemberRepository members;
     private final Clock clock;
     private final SecurityAuditService audit;
 
     public RankingFinalizationService(DietRepository diets, RankingScoreRepository scores,
                                       RankingFinalizationRepository finalizations, Clock clock,
-                                      SecurityAuditService audit) {
+                                      SecurityAuditService audit, DietMemberRepository members) {
         this.diets = diets;
         this.scores = scores;
         this.finalizations = finalizations;
+        this.members = members;
         this.clock = clock;
         this.audit = audit;
     }
@@ -37,12 +40,16 @@ public class RankingFinalizationService {
         if (!diet.isCompetitiveMode() || !today.isAfter(diet.getEndDate())) return false;
         if (finalizations.findByDietId(dietId).isPresent()) return false;
 
+        java.util.Set<java.util.UUID> currentMemberIds = members.findAllByDietId(dietId).stream()
+                .map(member -> member.getUser().getId()).collect(java.util.stream.Collectors.toSet());
         List<RankingParticipant> ordered = RankingOrderingPolicy.sort(scores.findAllByDietId(dietId).stream()
+                .filter(score -> currentMemberIds.contains(score.getUser().getId()))
                 .map(score -> new RankingParticipant(score.getUser().getId(), score.getPoints(),
                         score.getActiveDays(), score.getFirstReachedAt(), score.getInitialOrder()))
                 .toList());
         List<RankingScore> rankingScores = scores.findAllByDietId(dietId);
         java.util.Map<java.util.UUID, com.dietapp.user.User> users = rankingScores.stream()
+                .filter(score -> currentMemberIds.contains(score.getUser().getId()))
                 .collect(java.util.stream.Collectors.toMap(score -> score.getUser().getId(), RankingScore::getUser));
         RankingFinalization finalization = finalizations.save(new RankingFinalization(diet, Instant.now(clock),
                 userAt(ordered, 0, users), userAt(ordered, 1, users), userAt(ordered, 2, users)));
