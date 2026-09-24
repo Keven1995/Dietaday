@@ -35,8 +35,21 @@ Spring Boot (Render)
 - API REST protegida por Spring Security e JWT.
 - JPA/Hibernate para persistência.
 - Flyway para migrations versionadas.
-- Organização por módulos de negócio, como `auth`, `diet`, `meal`, `comment`, `notification`, `water` e `upload`.
+- Organização por módulos de negócio, como `auth`, `diet`, `meal`, `comment`, `notification`, `water`, `ranking` e `upload`.
 - Cada módulo separa controllers, serviços, repositórios, entidades e DTOs quando necessário.
+
+### Módulo competitivo
+
+O pacote `com.dietapp.ranking` concentra o domínio de competição e é dividido em responsabilidades:
+
+- `*Controller`: endpoints protegidos de ranking.
+- `*Service`: coordenação de eventos, consultas e futuros fechamentos.
+- `*ScoringPolicy`: elegibilidade e valores fixos de pontuação.
+- `RankingPointEvent*`: eventos auditáveis de refeição e hidratação.
+- `*Repository`: persistência e consultas agregadas.
+- `*Response`: contratos de saída da API.
+
+Os módulos `meal` e `water` permanecem responsáveis pelos seus registros. A integração competitiva ocorre por um serviço de eventos, mantendo pontuação, liquidação e ranking fora dos controllers desses módulos.
 
 ## Fluxos importantes
 
