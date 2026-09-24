@@ -112,3 +112,33 @@ export type WaterToday = {
   percentage: number
   checks: WaterCheck[]
 }
+
+export type RankingParticipant = {
+  position: number
+  userId: string
+  displayName: string
+  officialPoints: number
+  activeDays: number
+  firstReachedAt: string | null
+}
+
+export type RankingResponse = {
+  dietId: string
+  status: 'ACTIVE' | 'FINALIZED'
+  startDate: string
+  endDate: string
+  lastClosedDate: string | null
+  currentUser: { userId: string; position: number; officialPoints: number; pendingPoints: number }
+  participants: RankingParticipant[]
+  page: { number: number; size: number; totalElements: number; totalPages: number }
+  podium: { first: string | null; second: string | null; third: string | null } | null
+}
+
+export type RankingDetails = {
+  userId: string
+  pendingPoints: number
+  mealCountByType: Record<string, number>
+  eligibleWaterChecks: number
+  events: Array<{ sourceType: string; mealType: string | null; eventDate: string; points: number; status: string }>
+  page: { number: number; size: number; totalElements: number; totalPages: number }
+}
