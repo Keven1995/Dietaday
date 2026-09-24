@@ -4,6 +4,7 @@ export type SyncTelemetryPhase = 'signature' | 'cloudinary-upload' | 'cloudinary
 
 type SyncTelemetryEvent = {
   operationId: string
+  dietId: string
   phase: SyncTelemetryPhase
   attempt: number
   durationMs?: number

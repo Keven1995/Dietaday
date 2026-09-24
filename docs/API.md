@@ -235,4 +235,6 @@ POST /uploads/signature
 POST /telemetry/sync
 ```
 
+Falhas de sincronização informadas por esse endpoint são persistidas internamente em `sync_error_events` para diagnóstico operacional. Essa tabela não é exposta ao usuário final. O corpo inclui `operationId`, `dietId`, `phase`, `attempt`, `durationMs`, `httpStatus`, `errorType`, `fileType` e `fileSizeBytes`.
+
 Detalhes internos de credenciais, chaves privadas e infraestrutura não fazem parte do contrato da API e devem permanecer apenas na configuração operacional.

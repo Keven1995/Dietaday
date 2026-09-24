@@ -126,6 +126,7 @@ Os logs privados do Render são a fonte principal para investigar falhas de prod
 
 - `meal_create_started` e `meal_create_completed` para refeições.
 - `sync_event` para sincronização offline.
+- `sync_error_events` no banco para falhas persistidas de sincronização, incluindo etapa, tentativa, operação e código do erro.
 - `water_push_subscription_saved` para inscrições de push.
 - `water_reminder_sent` e `water_push_failed` para lembretes.
 
