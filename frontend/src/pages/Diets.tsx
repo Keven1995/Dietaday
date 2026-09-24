@@ -1,4 +1,4 @@
-import { Check, Plus, Salad, Trash2, X } from 'lucide-react'
+import { Check, Info, Plus, Salad, Trash2, X } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react'
 import { Button, EmptyState, PageTitle } from '../components/Ui'
 import { initialMembers } from '../data'
@@ -88,14 +88,20 @@ function CreateDietModal({ onClose, onCreate }: { onClose: () => void; onCreate:
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [form, setForm] = useState<CreateDietRequest>(EMPTY_FORM)
+  const [competitiveHelpOpen, setCompetitiveHelpOpen] = useState(false)
 
   useEffect(() => {
     function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose()
+      if (event.key !== 'Escape') return
+      if (competitiveHelpOpen) {
+        setCompetitiveHelpOpen(false)
+        return
+      }
+      onClose()
     }
     window.addEventListener('keydown', closeOnEscape)
     return () => window.removeEventListener('keydown', closeOnEscape)
-  }, [onClose])
+  }, [competitiveHelpOpen, onClose])
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -136,10 +142,23 @@ function CreateDietModal({ onClose, onCreate }: { onClose: () => void; onCreate:
             <label>Data inicial<input required type="date" value={form.startDate} onChange={(event) => setForm({ ...form, startDate: event.target.value })} /></label>
             <label>Data final<input required min={form.startDate} type="date" value={form.endDate} onChange={(event) => setForm({ ...form, endDate: event.target.value })} /></label>
           </div>
-          <label className="competitive-option">
-            <input type="checkbox" checked={form.competitiveMode} onChange={(event) => setForm({ ...form, competitiveMode: event.target.checked })} />
-            <span><strong>Modo competitivo</strong><small>Transforme os registros do grupo em uma competição amigável baseada na consistência.</small></span>
-          </label>
+          <div className={`competitive-option${form.competitiveMode ? ' selected' : ''}`}>
+            <label className="competitive-option-main">
+              <input type="checkbox" checked={form.competitiveMode} onChange={(event) => setForm({ ...form, competitiveMode: event.target.checked })} />
+              <span><strong>Modo competitivo</strong><small>Registre, pontue e suba no ranking.</small></span>
+            </label>
+            <button
+              type="button"
+              className="competitive-info"
+              aria-label="Saiba mais sobre o modo competitivo"
+              aria-expanded={competitiveHelpOpen}
+              aria-controls="competitive-help"
+              onClick={() => setCompetitiveHelpOpen((open) => !open)}
+            >
+              <Info size={17} aria-hidden="true" />
+            </button>
+            {competitiveHelpOpen && <p id="competitive-help" className="competitive-help" role="status">Registre refeições e água, ganhe pontos e suba no ranking. É a competição mais saudável desde a corrida até a geladeira.</p>}
+          </div>
           {error && <div className="error-message" role="alert">{error}</div>}
           <Button loading={saving}>Criar e selecionar</Button>
         </form>
