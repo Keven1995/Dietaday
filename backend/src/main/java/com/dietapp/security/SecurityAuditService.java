@@ -38,6 +38,14 @@ public class SecurityAuditService {
         audit("diet_deleted", userId, dietId, null, null);
     }
 
+    public void pointEventCreated(UUID userId, UUID dietId, UUID eventId, String sourceType) {
+        audit("ranking_point_event_created", userId, dietId, eventId, safeType(sourceType));
+    }
+
+    public void pointEventRevoked(UUID userId, UUID dietId, UUID eventId, String sourceType) {
+        audit("ranking_point_event_revoked", userId, dietId, eventId, safeType(sourceType));
+    }
+
     public void memberInvitationCreated(UUID userId, UUID dietId, UUID inviteeId) {
         audit("member_invitation_created", userId, dietId, inviteeId, null);
     }

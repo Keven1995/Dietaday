@@ -9,5 +9,6 @@ import java.time.LocalDate;
 public record DietRequest(
         @NotBlank @Size(max = 120) String name,
         @NotNull LocalDate startDate,
-        @NotNull LocalDate endDate) {
+        @NotNull LocalDate endDate,
+        boolean competitiveMode) {
 }

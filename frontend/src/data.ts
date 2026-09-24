@@ -1,11 +1,11 @@
 import type { Diet, Invitation, Meal, Member } from './types'
 
 export const initialDiets: Diet[] = [
-  { id: '1', name: 'Equilíbrio diário', startDate: '2026-09-01', endDate: '2026-09-30' },
-  { id: '2', name: 'Mais energia', startDate: '2026-10-01', endDate: '2026-10-21' },
+  { id: '1', name: 'Equilíbrio diário', startDate: '2026-09-01', endDate: '2026-09-30', competitiveMode: false },
+  { id: '2', name: 'Mais energia', startDate: '2026-10-01', endDate: '2026-10-21', competitiveMode: false },
 ]
 
-const invitedDemoDiet: Diet = { id: '3', name: 'Hábitos em família', startDate: '2026-09-05', endDate: '2026-10-05' }
+const invitedDemoDiet: Diet = { id: '3', name: 'Hábitos em família', startDate: '2026-09-05', endDate: '2026-10-05', competitiveMode: false }
 let demoInvitationResponse: 'accepted' | 'declined' | null = null
 const leftDemoDietIds = new Set<string>()
 

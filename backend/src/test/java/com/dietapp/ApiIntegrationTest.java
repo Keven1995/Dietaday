@@ -1,6 +1,8 @@
 package com.dietapp;
 
 import com.dietapp.user.UserRepository;
+import com.dietapp.ranking.RankingPointEventRepository;
+import com.dietapp.ranking.RankingPointEvent;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -34,6 +36,7 @@ class ApiIntegrationTest {
     @Autowired ObjectMapper objectMapper;
     @Autowired UserRepository users;
     @Autowired PasswordEncoder passwordEncoder;
+    @Autowired RankingPointEventRepository rankingEvents;
 
     @Test
     void healthEndpointIsPublic() throws Exception {
@@ -45,6 +48,44 @@ class ApiIntegrationTest {
                 .andExpect(header().string("Referrer-Policy", "no-referrer"))
                 .andExpect(header().string("Content-Security-Policy",
                         "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"));
+    }
+
+    @Test
+    void competitiveModeIsConfiguredAtCreationAndCannotBeChanged() throws Exception {
+        JsonNode user = register("Competitive User", "competitive-" + UUID.randomUUID() + "@example.com");
+        String authorization = bearer(user);
+        String response = mvc.perform(post("/api/diets")
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Competitive Diet","startDate":"2026-09-01","endDate":"2026-09-30","competitiveMode":true}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.competitiveMode").value(true))
+                .andReturn().getResponse().getContentAsString();
+        String dietId = objectMapper.readTree(response).get("id").asText();
+
+        mvc.perform(put("/api/diets/{dietId}", dietId)
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Changed","startDate":"2026-09-01","endDate":"2026-09-30","competitiveMode":false}
+                                """))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void dietWithoutCompetitiveModeRemainsNonCompetitive() throws Exception {
+        JsonNode user = register("Regular User", "regular-diet-" + UUID.randomUUID() + "@example.com");
+
+        mvc.perform(post("/api/diets")
+                        .header("Authorization", bearer(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Regular Diet","startDate":"2026-09-01","endDate":"2026-09-30"}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.competitiveMode").value(false));
     }
 
     @Test
@@ -163,6 +204,73 @@ class ApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.percentage").value(100))
                 .andExpect(jsonPath("$.remainingMl").value(0));
+    }
+
+    @Test
+    void competitiveWaterIsDietScopedAndSnapshotsTheGoal() throws Exception {
+        JsonNode owner = register("Competitive Water Owner", "competitive-water-" + UUID.randomUUID() + "@example.com");
+        JsonNode outsider = register("Competitive Water Outsider", "competitive-water-outsider-" + UUID.randomUUID() + "@example.com");
+        String dietId = createCompetitiveDiet(owner, "Competitive Water Diet");
+        String authorization = bearer(owner);
+
+        String response = mvc.perform(post("/api/diets/{dietId}/water/checks", dietId)
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amountMl\":500}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.consumedMl").value(500))
+                .andReturn().getResponse().getContentAsString();
+        String checkId = objectMapper.readTree(response).get("checks").get(0).get("id").asText();
+
+        RankingPointEvent event = rankingEvents.findBySourceTypeAndSourceId(
+                RankingPointEvent.SourceType.WATER_CHECK, UUID.fromString(checkId)).orElseThrow();
+        assertThat(event.getPoints()).isEqualTo(2);
+        assertThat(event.getWaterGoalMl()).isEqualTo(2000);
+
+        mvc.perform(put("/api/diets/{dietId}/water/goal", dietId)
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"goalMl\":1000}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.goalMl").value(1000));
+        assertThat(rankingEvents.findById(event.getId()).orElseThrow().getWaterGoalMl()).isEqualTo(2000);
+
+        mvc.perform(get("/api/diets/{dietId}/water/today", dietId)
+                        .header("Authorization", bearer(outsider)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void nonCompetitiveWaterKeepsTheLegacyFlowWithoutPointEvents() throws Exception {
+        JsonNode owner = register("Legacy Water Owner", "legacy-water-" + UUID.randomUUID() + "@example.com");
+        String dietId = createDiet(owner, "Legacy Water Diet");
+
+        mvc.perform(post("/api/water/checks")
+                        .header("Authorization", bearer(owner))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amountMl\":500}"))
+                .andExpect(status().isOk());
+
+        assertThat(rankingEvents.countByDietIdAndUserId(UUID.fromString(dietId),
+                UUID.fromString(owner.get("userId").asText()))).isZero();
+    }
+
+    @Test
+    void competitiveWaterRejectsWritesAfterDietEnd() throws Exception {
+        JsonNode owner = register("Ended Water Owner", "ended-water-" + UUID.randomUUID() + "@example.com");
+        String dietId = createCompetitiveDiet(owner, "Ended Water Diet", "2026-09-01", "2026-09-23");
+        String authorization = bearer(owner);
+
+        mvc.perform(put("/api/diets/{dietId}/water/goal", dietId)
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"goalMl\":1500}"))
+                .andExpect(status().isConflict());
+        mvc.perform(post("/api/diets/{dietId}/water/checks", dietId)
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amountMl\":500}"))
+                .andExpect(status().isConflict());
     }
 
     @Test
@@ -345,6 +453,36 @@ class ApiIntegrationTest {
                         .header("Authorization", bearer(owner)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1));
+    }
+
+    @Test
+    void competitiveOfflineRetryCreatesOneMealAndOnePointEvent() throws Exception {
+        JsonNode owner = register("Competitive Offline Owner", "competitive-offline-" + UUID.randomUUID() + "@example.com");
+        String dietId = createCompetitiveDiet(owner, "Competitive Offline Diet");
+        String operationId = UUID.randomUUID().toString();
+        String request = """
+                {"mealType":"Almoço","description":"Queued competitive meal","mealDate":"2026-09-24"}
+                """;
+
+        String response = mvc.perform(post("/api/diets/{dietId}/meals", dietId)
+                        .header("Authorization", bearer(owner))
+                        .header("Idempotency-Key", operationId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String mealId = objectMapper.readTree(response).get("id").asText();
+
+        mvc.perform(post("/api/diets/{dietId}/meals", dietId)
+                        .header("Authorization", bearer(owner))
+                        .header("Idempotency-Key", operationId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(mealId));
+
+        assertThat(rankingEvents.countByDietIdAndUserId(UUID.fromString(dietId), UUID.fromString(owner.get("userId").asText())))
+                .isEqualTo(1);
     }
 
     @Test
@@ -1089,6 +1227,22 @@ class ApiIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
                                 new DietRequest(name, "2026-09-01", "2026-10-01"))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(response).get("id").asText();
+    }
+
+    private String createCompetitiveDiet(JsonNode auth, String name) throws Exception {
+        return createCompetitiveDiet(auth, name, "2026-09-01", "2026-10-01");
+    }
+
+    private String createCompetitiveDiet(JsonNode auth, String name, String startDate, String endDate) throws Exception {
+        String response = mvc.perform(post("/api/diets")
+                        .header("Authorization", bearer(auth))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"%s","startDate":"%s","endDate":"%s","competitiveMode":true}
+                                """.formatted(name, startDate, endDate)))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(response).get("id").asText();

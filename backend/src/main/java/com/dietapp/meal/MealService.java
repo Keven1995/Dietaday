@@ -8,6 +8,8 @@ import com.dietapp.diet.Diet;
 import com.dietapp.diet.DietService;
 import com.dietapp.security.CurrentUser;
 import com.dietapp.upload.PhotoUrlPolicy;
+import com.dietapp.ranking.RankingPointEventService;
+import com.dietapp.ranking.CompetitivePeriodPolicy;
 import com.dietapp.user.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +22,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.UUID;
+import java.time.ZoneId;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -30,14 +33,17 @@ public class MealService {
     private final DietService diets;
     private final CurrentUser currentUser;
     private final PhotoUrlPolicy photoUrlPolicy;
+    private final RankingPointEventService rankingEvents;
 
     public MealService(MealRepository meals, MealSyncOperationRepository syncOperations,
-                       DietService diets, CurrentUser currentUser, PhotoUrlPolicy photoUrlPolicy) {
+                       DietService diets, CurrentUser currentUser, PhotoUrlPolicy photoUrlPolicy,
+                       RankingPointEventService rankingEvents) {
         this.meals = meals;
         this.syncOperations = syncOperations;
         this.diets = diets;
         this.currentUser = currentUser;
         this.photoUrlPolicy = photoUrlPolicy;
+        this.rankingEvents = rankingEvents;
     }
 
     @Transactional
@@ -46,8 +52,11 @@ public class MealService {
         photoUrlPolicy.validate(photoUrl);
         Diet diet = operationId == null ? diets.requireMember(dietId) : diets.requireMemberForUpdate(dietId);
         User author = currentUser.require();
+        ensureCompetitiveWriteAllowed(diet);
         if (operationId == null) {
-            return meals.save(new Meal(diet, author, mealType, description, mealDate, photoUrl));
+            Meal meal = meals.save(new Meal(diet, author, mealType, description, mealDate, photoUrl));
+            rankingEvents.recordMeal(meal);
+            return meal;
         }
 
         String requestHash = requestHash(mealType, description, mealDate, photoUrl);
@@ -63,6 +72,7 @@ public class MealService {
         }
 
         Meal meal = meals.save(new Meal(diet, author, mealType, description, mealDate, photoUrl));
+        rankingEvents.recordMeal(meal);
         try {
             syncOperations.saveAndFlush(new MealSyncOperation(operationId, author, diet, meal, requestHash));
         } catch (DataIntegrityViolationException exception) {
@@ -99,6 +109,7 @@ public class MealService {
         photoUrlPolicy.validate(photoUrl);
         Meal meal = get(dietId, mealId);
         requireAuthor(meal);
+        ensureCompetitiveWriteAllowed(meal.getDiet());
         meal.update(mealType, description, mealDate, photoUrl);
         return meal;
     }
@@ -107,6 +118,8 @@ public class MealService {
     public void delete(UUID dietId, UUID mealId) {
         Meal meal = get(dietId, mealId);
         requireAuthor(meal);
+        ensureCompetitiveWriteAllowed(meal.getDiet());
+        rankingEvents.revokeMeal(meal.getId());
         meals.delete(meal);
     }
 
@@ -114,6 +127,10 @@ public class MealService {
         if (!meal.getAuthor().getId().equals(currentUser.id())) {
             throw new ForbiddenException("Only the meal author can perform this action");
         }
+    }
+
+    private void ensureCompetitiveWriteAllowed(Diet diet) {
+        CompetitivePeriodPolicy.validateWriteToday(diet, LocalDate.now(ZoneId.of("America/Sao_Paulo")));
     }
 
     private String requestHash(String mealType, String description, LocalDate mealDate, String photoUrl) {

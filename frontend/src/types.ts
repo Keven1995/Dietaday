@@ -15,6 +15,7 @@ export type Diet = {
   name: string
   startDate: string
   endDate: string
+  competitiveMode: boolean
 }
 
 export type MealReaction = {
