@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { ApiError, api, isDemoMode } from '../lib/api'
 import { PhotoUploadError, uploadPhoto } from '../lib/cloudinary'
-import { notifyCompetitiveScoreUpdated } from '../lib/competitiveRanking'
 import { dietResourceKey, readCachedResource, writeCachedResource } from '../lib/resourceCache'
 import { SERVER_STATUS_EVENT, type ServerStatus } from '../lib/serverWakeup'
 import {
@@ -123,7 +122,6 @@ async function synchronize(userId: string, token: string) {
           created,
           ...cachedMeals.filter((meal) => meal.id !== created.id),
         ])
-        notifyCompetitiveScoreUpdated({ dietId: operation.dietId, source: 'MEAL' })
         operation = { ...operation, phase: 'completed' }
         void reportSyncEvent(token, {
           operationId: operation.id,

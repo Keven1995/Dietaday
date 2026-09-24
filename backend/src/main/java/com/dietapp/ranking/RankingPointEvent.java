@@ -74,6 +74,7 @@ public class RankingPointEvent {
     public Integer getWaterGoalMl() { return waterGoalMl; }
     public int getPoints() { return points; }
     public LocalDate getEventDate() { return eventDate; }
+    public Instant getCreatedAt() { return createdAt; }
     public Status getStatus() { return status; }
     public void revoke() { status = Status.REVOKED; }
     public void settle(Instant at) { status = Status.SETTLED; settledAt = at; }

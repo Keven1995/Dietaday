@@ -23,6 +23,14 @@ public interface RankingPointEventRepository extends JpaRepository<RankingPointE
 
     long countByDietIdAndUserId(UUID dietId, UUID userId);
 
+    @Query("select event from RankingPointEvent event " +
+            "where event.diet.id = :dietId and event.user.id <> :userId " +
+            "and event.status <> com.dietapp.ranking.RankingPointEvent$Status.REVOKED " +
+            "order by event.createdAt desc")
+    List<RankingPointEvent> findLatestActivityFromOtherUsers(@Param("dietId") UUID dietId,
+                                                               @Param("userId") UUID userId,
+                                                               Pageable pageable);
+
     boolean existsByDietIdAndUserIdAndEventDateAndMealTypeAndSourceTypeAndStatusNot(
             UUID dietId, UUID userId, LocalDate eventDate, String mealType,
             RankingPointEvent.SourceType sourceType, RankingPointEvent.Status status);

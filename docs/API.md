@@ -137,9 +137,12 @@ O contrato abaixo é o contrato-alvo do módulo competitivo para as fases de fec
 ```text
 GET /diets/{dietId}/ranking?page=0&size=20
 GET /diets/{dietId}/ranking/me
+GET /diets/{dietId}/ranking/activity
 ```
 
 O ranking oficial é atualizado pelo fechamento diário. `officialPoints` e `position` não incluem eventos pendentes. A resposta canônica contém o período da dieta, o status do ranking, a data do último fechamento, o usuário atual, os participantes e a paginação. O endpoint `/ranking/me` aceita os mesmos parâmetros `page` e `size`:
+
+`/ranking/activity` exige membership e retorna a pontuação mais recente registrada por outro participante. O frontend consulta esse recurso periodicamente para destacar o acesso ao ranking até que o usuário clique no ícone. O autor da própria pontuação não recebe essa notificação.
 
 ```json
 {
