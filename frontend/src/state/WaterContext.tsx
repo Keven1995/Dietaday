@@ -1,8 +1,10 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { getErrorMessage, isDemoMode } from '../lib/api'
+import { notifyCompetitiveScoreUpdated } from '../lib/competitiveRanking'
 import { addWaterCheck, getWaterToday, readCachedWater, updateWaterGoal, WATER_CACHE_RESOURCE } from '../lib/water'
 import { writeCachedResource } from '../lib/resourceCache'
 import { useAuth } from './AuthContext'
+import { useDiets } from './DietContext'
 import type { WaterToday } from '../types'
 
 type WaterContextValue = {
@@ -19,6 +21,7 @@ const WaterContext = createContext<WaterContextValue | null>(null)
 
 export function WaterProvider({ children }: { children: ReactNode }) {
   const { user, token } = useAuth()
+  const { activeDiet } = useDiets()
   const [water, setWater] = useState<WaterToday | null>(() => user ? readCachedWater(user.id) : null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -55,6 +58,7 @@ export function WaterProvider({ children }: { children: ReactNode }) {
       const next = await updateWaterGoal(token, user.id, goalMl)
       if (!isDemoMode) writeCachedResource(user.id, WATER_CACHE_RESOURCE, next)
       setWater(next)
+      if (activeDiet?.competitiveMode) notifyCompetitiveScoreUpdated({ dietId: activeDiet.id, source: 'WATER_CHECK' })
     } catch (saveError) {
       setError(getErrorMessage(saveError, 'Não foi possível salvar sua meta.'))
       throw saveError
