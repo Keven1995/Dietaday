@@ -37,18 +37,6 @@ O app combina uma interface React/PWA com uma API Spring Boot e persistência em
 
 Este repositório contém o código-fonte e os artefatos de operação do Dietaday. O produto é disponibilizado como uma aplicação web/PWA hospedada.
 
-## Execução local do backend
-
-Para iniciar o banco e o backend localmente no PowerShell:
-
-```powershell
-.\backend\scripts\start-local.ps1
-```
-
-Na primeira execução, o script cria `backend/.env` com um segredo JWT local persistente. Esse arquivo é ignorado pelo Git. O banco usa os valores padrão definidos em `application.yml` e é iniciado via Docker Compose.
-
-Em produção, configure `JWT_SECRET` e mantenha `SECURE_COOKIES=true` no provedor de deploy, como o Render, sem colocar segredos no código ou no frontend.
-
 ## Documentação técnica
 
 - [Arquitetura](docs/ARCHITECTURE.md): visão dos componentes e fluxos principais.
