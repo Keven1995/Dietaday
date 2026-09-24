@@ -6,6 +6,10 @@ import { readCachedResource } from './resourceCache'
 const DEFAULT_GOAL_ML = 2000
 export const WATER_CACHE_RESOURCE = 'water:today'
 
+function waterResource(dietId?: string | null) {
+  return dietId ? `${WATER_CACHE_RESOURCE}:${dietId}` : WATER_CACHE_RESOURCE
+}
+
 function storageKey(userId: string) {
   return `Dietaday_water_${userId}`
 }
@@ -32,8 +36,8 @@ function saveDemoState(userId: string, state: WaterToday) {
   return state
 }
 
-export function readCachedWater(userId: string) {
-  const cached = readCachedResource<WaterToday>(userId, WATER_CACHE_RESOURCE)
+export function readCachedWater(userId: string, dietId?: string | null) {
+  const cached = readCachedResource<WaterToday>(userId, waterResource(dietId))
   if (!cached || cached.data.date === todayKey()) return cached?.data ?? null
   return {
     ...cached.data,
@@ -45,21 +49,21 @@ export function readCachedWater(userId: string) {
   }
 }
 
-export async function getWaterToday(token: string | null, userId: string): Promise<WaterToday> {
+export async function getWaterToday(token: string | null, userId: string, dietId?: string | null): Promise<WaterToday> {
   if (isDemoMode) return createDemoState(userId)
-  return api<WaterToday>('/water/today', { token })
+  return api<WaterToday>(dietId ? `/diets/${dietId}/water/today` : '/water/today', { token })
 }
 
-export async function updateWaterGoal(token: string | null, userId: string, goalMl: number): Promise<WaterToday> {
+export async function updateWaterGoal(token: string | null, userId: string, goalMl: number, dietId?: string | null): Promise<WaterToday> {
   if (isDemoMode) {
     const state = createDemoState(userId)
     const next: WaterToday = { ...state, goalMl, remainingMl: Math.max(0, goalMl - state.consumedMl), percentage: Math.min(100, Math.round(state.consumedMl * 100 / goalMl)) }
     return saveDemoState(userId, next)
   }
-  return api<WaterToday>('/water/goal', { method: 'PUT', token, body: JSON.stringify({ goalMl }) })
+  return api<WaterToday>(dietId ? `/diets/${dietId}/water/goal` : '/water/goal', { method: 'PUT', token, body: JSON.stringify({ goalMl }) })
 }
 
-export async function addWaterCheck(token: string | null, userId: string, amountMl: number): Promise<WaterToday> {
+export async function addWaterCheck(token: string | null, userId: string, amountMl: number, dietId?: string | null): Promise<WaterToday> {
   if (isDemoMode) {
     const state = createDemoState(userId)
     if (amountMl > state.remainingMl) throw new Error('Esse check ultrapassa o volume restante da sua meta.')
@@ -73,5 +77,5 @@ export async function addWaterCheck(token: string | null, userId: string, amount
     }
     return saveDemoState(userId, next)
   }
-  return api<WaterToday>('/water/checks', { method: 'POST', token, body: JSON.stringify({ amountMl }) })
+  return api<WaterToday>(dietId ? `/diets/${dietId}/water/checks` : '/water/checks', { method: 'POST', token, body: JSON.stringify({ amountMl }) })
 }
