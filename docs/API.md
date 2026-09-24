@@ -132,7 +132,7 @@ Exemplo de check:
 
 ## Ranking competitivo
 
-O contrato abaixo é o contrato-alvo do módulo competitivo para as fases de fechamento e ranking oficial. O ranking só está disponível para dietas competitivas e exige membership:
+O contrato abaixo é o contrato do módulo competitivo para ranking ao vivo e fechamento. O ranking só está disponível para dietas competitivas e exige membership:
 
 ```text
 GET /diets/{dietId}/ranking?page=0&size=20
@@ -140,7 +140,7 @@ GET /diets/{dietId}/ranking/me
 GET /diets/{dietId}/ranking/activity
 ```
 
-O ranking oficial é atualizado pelo fechamento diário. `officialPoints` e `position` não incluem eventos pendentes. A resposta canônica contém o período da dieta, o status do ranking, a data do último fechamento, o usuário atual, os participantes e a paginação. O endpoint `/ranking/me` aceita os mesmos parâmetros `page` e `size`:
+Enquanto a dieta está ativa, `officialPoints` e `position` incluem imediatamente os eventos pendentes não revogados. O fechamento diário consolida esses eventos em `ranking_scores`, sem alterar o resultado exibido nem duplicar pontos. `pendingPoints` indica a parcela ainda não consolidada. A resposta canônica contém o período da dieta, o status do ranking, a data do último fechamento, o usuário atual, os participantes e a paginação. O endpoint `/ranking/me` aceita os mesmos parâmetros `page` e `size`:
 
 `/ranking/activity` exige membership e retorna a pontuação mais recente registrada por outro participante. O frontend consulta esse recurso periodicamente para destacar o acesso ao ranking até que o usuário clique no ícone. O autor da própria pontuação não recebe essa notificação.
 
@@ -178,7 +178,7 @@ O ranking oficial é atualizado pelo fechamento diário. `officialPoints` e `pos
 
 ### Pontos pendentes
 
-O detalhamento do usuário atual separa eventos elegíveis desde o último fechamento. Esses valores não alteram a posição oficial:
+O detalhamento do usuário atual separa eventos elegíveis desde o último fechamento. Esses valores já aparecem na pontuação ao vivo e aguardam apenas a consolidação diária:
 
 ```json
 {

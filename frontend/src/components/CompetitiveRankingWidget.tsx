@@ -10,7 +10,9 @@ export function CompetitiveRankingWidget() {
   const { ranking, loading } = useCompetitiveRanking(0, 3)
   const { hasUnseenActivity, acknowledge } = useCompetitiveRankingActivity()
 
-  if (!activeDiet?.competitiveMode || location.pathname === '/ranking' || (!ranking && !loading)) return null
-  const label = loading ? 'Abrir ranking competitivo. Carregando dados.' : `Abrir ranking competitivo. ${ranking?.currentUser.position}º lugar, ${ranking?.currentUser.officialPoints} pontos${ranking?.currentUser.pendingPoints ? ` e ${ranking.currentUser.pendingPoints} pontos pendentes` : ''}.`
+  if (!activeDiet?.competitiveMode || location.pathname === '/ranking') return null
+  const label = loading ? 'Abrir ranking competitivo. Carregando dados.' : ranking
+    ? `Abrir ranking competitivo. ${ranking.currentUser.position}º lugar, ${ranking.currentUser.officialPoints} pontos${ranking.currentUser.pendingPoints ? ` e ${ranking.currentUser.pendingPoints} pontos pendentes` : ''}.`
+    : 'Abrir ranking competitivo.'
   return <Link to="/ranking" className={`competitive-widget${hasUnseenActivity ? ' reacting' : ''}`} aria-label={label} title={label} onClick={acknowledge}><Trophy size={19} aria-hidden="true" /></Link>
 }

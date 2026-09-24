@@ -12,11 +12,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -46,7 +50,8 @@ public class RankingService {
         Diet diet = diets.requireMember(dietId);
         if (!diet.isCompetitiveMode()) throw new ConflictException("This diet is not competitive");
         UUID currentUserId = currentUser.id();
-        List<RankingParticipant> ordered = rankingParticipants(dietId);
+        RankingFinalization finalization = finalizations.findByDietId(dietId).orElse(null);
+        List<RankingParticipant> ordered = rankingParticipants(dietId, finalization == null);
         Map<UUID, RankingScore> scoreByUser = scores.findAllByDietId(dietId).stream()
                 .collect(Collectors.toMap(score -> score.getUser().getId(), score -> score));
         int from = Math.min((int) pageable.getOffset(), ordered.size());
@@ -68,7 +73,6 @@ public class RankingService {
         int pendingPoints = pending.stream().mapToInt(RankingPointEvent::getPoints).sum();
         LocalDate lastClosedDate = closures.findTopByDietIdOrderByEventDateDesc(dietId)
                 .map(DailyRankingClosure::getEventDate).orElse(null);
-        RankingFinalization finalization = finalizations.findByDietId(dietId).orElse(null);
         RankingPodiumResponse podium = finalization == null ? null : new RankingPodiumResponse(
                 id(finalization.getFirst()), id(finalization.getSecond()), id(finalization.getThird()));
         return new OfficialRankingResponse(dietId, finalization == null ? "ACTIVE" : "FINALIZED",
@@ -122,17 +126,38 @@ public class RankingService {
                 .orElseGet(RankingActivityResponse::empty);
     }
 
-    private List<RankingParticipant> rankingParticipants(UUID dietId) {
+    private List<RankingParticipant> rankingParticipants(UUID dietId, boolean includePending) {
         Map<UUID, RankingScore> scoreByUser = scores.findAllByDietId(dietId).stream()
                 .collect(Collectors.toMap(score -> score.getUser().getId(), score -> score));
+        Map<UUID, List<RankingPointEvent>> pendingByUser = new HashMap<>();
+        if (includePending) {
+            events.findAllByDietIdAndStatus(dietId, RankingPointEvent.Status.PENDING)
+                    .forEach(event -> pendingByUser.computeIfAbsent(event.getUser().getId(), ignored -> new ArrayList<>())
+                            .add(event));
+        }
         List<RankingParticipant> participants = new ArrayList<>();
         for (DietMember member : members.findAllByDietId(dietId)) {
             RankingScore score = scoreByUser.get(member.getUser().getId());
-            participants.add(score == null
-                    ? new RankingParticipant(member.getUser().getId(), 0, 0, null,
-                    member.getUser().getId().getMostSignificantBits())
-                    : new RankingParticipant(score.getUser().getId(), score.getPoints(), score.getActiveDays(),
-                    score.getFirstReachedAt(), score.getInitialOrder()));
+            List<RankingPointEvent> pending = pendingByUser.getOrDefault(member.getUser().getId(), List.of());
+            int points = score == null ? 0 : score.getPoints();
+            int activeDays = score == null ? 0 : score.getActiveDays();
+            Instant firstReachedAt = score == null ? null : score.getFirstReachedAt();
+            long initialOrder = score == null ? member.getUser().getId().getMostSignificantBits() : score.getInitialOrder();
+            if (!pending.isEmpty()) {
+                points += pending.stream().mapToInt(RankingPointEvent::getPoints).sum();
+                Set<LocalDate> pendingDates = new HashSet<>();
+                pending.forEach(event -> pendingDates.add(event.getEventDate()));
+                activeDays += pendingDates.size();
+                Instant pendingFirstReachedAt = pending.stream()
+                        .map(RankingPointEvent::getCreatedAt)
+                        .min(Instant::compareTo)
+                        .orElse(null);
+                if (firstReachedAt == null || (pendingFirstReachedAt != null && pendingFirstReachedAt.isBefore(firstReachedAt))) {
+                    firstReachedAt = pendingFirstReachedAt;
+                }
+            }
+            participants.add(new RankingParticipant(member.getUser().getId(), points, activeDays,
+                    firstReachedAt, initialOrder));
         }
         return RankingOrderingPolicy.sort(participants);
     }

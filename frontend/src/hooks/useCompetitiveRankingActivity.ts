@@ -4,7 +4,7 @@ import { useAuth } from '../state/AuthContext'
 import { useDiets } from '../state/DietContext'
 import type { RankingActivity } from '../types'
 
-const POLL_INTERVAL_MS = 10_000
+const POLL_INTERVAL_MS = 5_000
 
 function seenKey(userId: string, dietId: string) {
   return `Dietaday_ranking_activity_seen:${userId}:${dietId}`

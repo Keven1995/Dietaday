@@ -227,6 +227,12 @@ class ApiIntegrationTest {
         assertThat(event.getPoints()).isEqualTo(2);
         assertThat(event.getWaterGoalMl()).isEqualTo(2000);
 
+        mvc.perform(get("/api/diets/{dietId}/ranking", dietId)
+                        .header("Authorization", authorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.currentUser.officialPoints").value(2))
+                .andExpect(jsonPath("$.participants[0].officialPoints").value(2));
+
         mvc.perform(put("/api/diets/{dietId}/water/goal", dietId)
                         .header("Authorization", authorization)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -520,7 +526,14 @@ class ApiIntegrationTest {
                         .content("""
                                 {"mealType":"Almoço","description":"Pending ranking meal","mealDate":"2026-09-24"}
                                 """))
-                .andExpect(status().isCreated());
+                        .andExpect(status().isCreated());
+
+        mvc.perform(get("/api/diets/{dietId}/ranking", dietId)
+                        .header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.currentUser.officialPoints").value(5))
+                .andExpect(jsonPath("$.participants[0].officialPoints").value(5))
+                .andExpect(jsonPath("$.currentUser.pendingPoints").value(5));
 
         mvc.perform(get("/api/diets/{dietId}/ranking/me", dietId)
                         .header("Authorization", bearer(owner)))

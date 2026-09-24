@@ -26,7 +26,7 @@ export function Ranking() {
 
   return <div className="page ranking-page">
     <PageTitle eyebrow="MODO COMPETITIVO" title="Ranking" action={<button className="button outline ranking-refresh" onClick={reload} disabled={loading}><RefreshCw size={16} className={loading ? 'spin' : ''} /> Atualizar</button>} />
-    <p className="page-lead">Pontuação oficial da dieta <strong>{activeDiet.name}</strong>. O ranking muda somente após o fechamento diário.</p>
+    <p className="page-lead">Pontuação atualizada em tempo real na dieta <strong>{activeDiet.name}</strong>. O fechamento diário apenas consolida os pontos.</p>
     {error && <div className="error-message ranking-error" role="alert"><AlertTriangle size={17} />{error}</div>}
     {loading && !ranking && <div className="ranking-loading"><span /><span /><span /></div>}
     {ranking && <>
