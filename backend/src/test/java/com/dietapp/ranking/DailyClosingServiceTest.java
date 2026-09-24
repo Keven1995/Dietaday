@@ -36,8 +36,9 @@ class DailyClosingServiceTest {
     private final RankingPointEventRepository events = mock(RankingPointEventRepository.class);
     private final DailyRankingClosureRepository closures = mock(DailyRankingClosureRepository.class);
     private final DailyRankingTotalRepository totals = mock(DailyRankingTotalRepository.class);
+    private final RankingAccumulationService accumulation = mock(RankingAccumulationService.class);
     private final DailyClosingService service = new DailyClosingService(
-            diets, members, events, closures, totals, CLOCK);
+            diets, members, events, closures, totals, accumulation, CLOCK);
 
     @Test
     void persistsZeroTotalsAndSettlesEventsAtomically() {

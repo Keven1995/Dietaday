@@ -20,12 +20,13 @@ class DailyClosingSchedulerTest {
     void closesThePreviousSaoPauloDayForEveryCompetitiveDiet() {
         DietRepository diets = mock(DietRepository.class);
         DailyClosingService closing = mock(DailyClosingService.class);
+        RankingFinalizationService finalization = mock(RankingFinalizationService.class);
         Clock clock = Clock.fixed(Instant.parse("2026-09-24T03:30:00Z"),
                 ZoneId.of("America/Sao_Paulo"));
         Diet first = new Diet("First", LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30), true);
         Diet second = new Diet("Second", LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30), true);
         when(diets.findAllByCompetitiveModeTrue()).thenReturn(List.of(first, second));
-        DailyClosingScheduler scheduler = new DailyClosingScheduler(diets, closing, clock);
+        DailyClosingScheduler scheduler = new DailyClosingScheduler(diets, closing, finalization, clock);
 
         scheduler.closePreviousDay();
 
@@ -37,9 +38,10 @@ class DailyClosingSchedulerTest {
     void supportsExplicitDateReprocessing() {
         DietRepository diets = mock(DietRepository.class);
         DailyClosingService closing = mock(DailyClosingService.class);
+        RankingFinalizationService finalization = mock(RankingFinalizationService.class);
         Diet diet = new Diet("Competition", LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30), true);
         when(diets.findAllByCompetitiveModeTrue()).thenReturn(List.of(diet));
-        DailyClosingScheduler scheduler = new DailyClosingScheduler(diets, closing,
+        DailyClosingScheduler scheduler = new DailyClosingScheduler(diets, closing, finalization,
                 Clock.system(ZoneId.of("America/Sao_Paulo")));
 
         scheduler.closeDate(LocalDate.of(2026, 9, 20));

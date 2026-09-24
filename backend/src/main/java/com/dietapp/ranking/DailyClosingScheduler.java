@@ -14,11 +14,14 @@ public class DailyClosingScheduler {
 
     private final DietRepository diets;
     private final DailyClosingService closing;
+    private final RankingFinalizationService finalization;
     private final Clock clock;
 
-    public DailyClosingScheduler(DietRepository diets, DailyClosingService closing, Clock clock) {
+    public DailyClosingScheduler(DietRepository diets, DailyClosingService closing,
+                                 RankingFinalizationService finalization, Clock clock) {
         this.diets = diets;
         this.closing = closing;
+        this.finalization = finalization;
         this.clock = clock;
     }
 
@@ -30,6 +33,7 @@ public class DailyClosingScheduler {
     public void closeDate(LocalDate eventDate) {
         for (Diet diet : diets.findAllByCompetitiveModeTrue()) {
             closing.closeDiet(diet.getId(), eventDate);
+            finalization.finalizeIfEnded(diet.getId());
         }
     }
 }

@@ -22,6 +22,7 @@ public class DailyClosingService {
     private final RankingPointEventRepository events;
     private final DailyRankingClosureRepository closures;
     private final DailyRankingTotalRepository totals;
+    private final RankingAccumulationService accumulation;
     private final DailyClosingCalculator calculator;
     private final Clock clock;
 
@@ -29,12 +30,14 @@ public class DailyClosingService {
                                RankingPointEventRepository events,
                                DailyRankingClosureRepository closures,
                                DailyRankingTotalRepository totals,
+                               RankingAccumulationService accumulation,
                                Clock clock) {
         this.diets = diets;
         this.members = members;
         this.events = events;
         this.closures = closures;
         this.totals = totals;
+        this.accumulation = accumulation;
         this.clock = clock;
         this.calculator = new DailyClosingCalculator(clock);
     }
@@ -59,7 +62,8 @@ public class DailyClosingService {
 
         Map<UUID, DailyClosingTotals.ParticipantTotals> calculatedByUser = calculated.participants();
         List<DailyRankingTotal> snapshots = new ArrayList<>();
-        for (DietMember member : members.findAllByDietId(dietId)) {
+        List<DietMember> dietMembers = members.findAllByDietId(dietId);
+        for (DietMember member : dietMembers) {
             DailyClosingTotals.ParticipantTotals participant = calculatedByUser.get(member.getUser().getId());
             if (participant == null) {
                 participant = new DailyClosingTotals.ParticipantTotals(0, 0, 0);
@@ -68,6 +72,7 @@ public class DailyClosingService {
                     participant.waterChecks(), participant.points()));
         }
         totals.saveAll(snapshots);
+        accumulation.accumulate(closure, snapshots, dietMembers);
 
         pendingEvents.forEach(event -> event.settle(closedAt));
         events.saveAll(pendingEvents);
