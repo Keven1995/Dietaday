@@ -29,6 +29,8 @@ public class RankingPointEvent {
     private UUID sourceId;
     @Column(name = "meal_type", length = 30)
     private String mealType;
+    @Column(name = "water_goal_ml")
+    private Integer waterGoalMl;
     @Column(nullable = false)
     private int points;
     @Column(name = "event_date", nullable = false)
@@ -45,12 +47,18 @@ public class RankingPointEvent {
 
     public RankingPointEvent(Diet diet, User user, SourceType sourceType, UUID sourceId,
                              String mealType, int points, LocalDate eventDate) {
+        this(diet, user, sourceType, sourceId, mealType, null, points, eventDate);
+    }
+
+    public RankingPointEvent(Diet diet, User user, SourceType sourceType, UUID sourceId,
+                             String mealType, Integer waterGoalMl, int points, LocalDate eventDate) {
         this.id = UUID.randomUUID();
         this.diet = diet;
         this.user = user;
         this.sourceType = sourceType;
         this.sourceId = sourceId;
         this.mealType = mealType;
+        this.waterGoalMl = waterGoalMl;
         this.points = points;
         this.eventDate = eventDate;
         this.status = Status.PENDING;
@@ -63,6 +71,7 @@ public class RankingPointEvent {
     public SourceType getSourceType() { return sourceType; }
     public UUID getSourceId() { return sourceId; }
     public String getMealType() { return mealType; }
+    public Integer getWaterGoalMl() { return waterGoalMl; }
     public int getPoints() { return points; }
     public LocalDate getEventDate() { return eventDate; }
     public Status getStatus() { return status; }

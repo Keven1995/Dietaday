@@ -14,6 +14,8 @@ import org.springframework.data.domain.Pageable;
 public interface RankingPointEventRepository extends JpaRepository<RankingPointEvent, UUID> {
     Optional<RankingPointEvent> findBySourceTypeAndSourceId(RankingPointEvent.SourceType sourceType, UUID sourceId);
 
+    long countByDietIdAndUserId(UUID dietId, UUID userId);
+
     boolean existsByDietIdAndUserIdAndEventDateAndMealTypeAndSourceTypeAndStatusNot(
             UUID dietId, UUID userId, LocalDate eventDate, String mealType,
             RankingPointEvent.SourceType sourceType, RankingPointEvent.Status status);
