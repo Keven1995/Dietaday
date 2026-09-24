@@ -18,4 +18,6 @@ public interface DietMemberRepository extends JpaRepository<DietMember, UUID> {
     Page<DietMember> findAllByDietId(UUID dietId, Pageable pageable);
 
     long countByDietId(UUID dietId);
+
+    List<DietMember> findAllByDietId(UUID dietId);
 }
