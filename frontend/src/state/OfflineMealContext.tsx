@@ -43,11 +43,19 @@ const activeSyncs = new Map<string, Promise<void>>()
 const syncOwner = createUuid()
 const SYNC_ERROR_MESSAGE = 'Não foi possível sincronizar esta refeição agora. Ela continua salva neste dispositivo.'
 const RETRY_DELAYS_MS = [30_000, 60_000, 5 * 60_000, 15 * 60_000]
+const MEAL_CREATE_TIMEOUT_MS = 60_000
 
 class SyncPersistenceError extends Error {
   constructor() {
     super('A fila offline perdeu a posse da operação.')
     this.name = 'SyncPersistenceError'
+  }
+}
+
+class SyncTimeoutError extends Error {
+  constructor(phase: string) {
+    super(`${phase}-timeout`)
+    this.name = 'SyncTimeoutError'
   }
 }
 
@@ -60,6 +68,7 @@ function diagnosticErrorType(error: unknown) {
   if (error instanceof PhotoUploadError) return error.status ? `cloudinary-http-${error.status}` : 'cloudinary-no-response'
   if (error instanceof ApiError) return `api-http-${error.status}`
   if (error instanceof SyncPersistenceError) return 'offline-persistence'
+  if (error instanceof SyncTimeoutError) return error.message
   if (error instanceof DOMException && error.name === 'AbortError') return 'upload-timeout'
   if (error instanceof Error) return error.name || 'Error'
   return 'UnknownError'
@@ -81,6 +90,7 @@ async function synchronize(userId: string, token: string) {
         if (!await saveClaimedOfflineMeal(operation, syncOwner)) throw new SyncPersistenceError()
         void reportSyncEvent(token, {
           operationId: operation.id,
+          dietId: operation.dietId,
           phase,
           attempt: operation.attempts + 1,
           fileType: operation.photo?.type,
@@ -110,12 +120,25 @@ async function synchronize(userId: string, token: string) {
         if (!renewed) continue
         operation = renewed
         await updatePhase('meal-create')
-        const created = await api<Meal>(`/diets/${operation.dietId}/meals`, {
-          method: 'POST',
-          token,
-          headers: { 'Idempotency-Key': operation.id },
-          body: JSON.stringify({ ...operation.request, photoUrl: operation.uploadedPhotoUrl ?? null }),
-        })
+        const mealController = new AbortController()
+        const mealTimeout = window.setTimeout(() => mealController.abort(), MEAL_CREATE_TIMEOUT_MS)
+        let created: Meal
+        try {
+          created = await api<Meal>(`/diets/${operation.dietId}/meals`, {
+            method: 'POST',
+            token,
+            signal: mealController.signal,
+            headers: { 'Idempotency-Key': operation.id },
+            body: JSON.stringify({ ...operation.request, photoUrl: operation.uploadedPhotoUrl ?? null }),
+          })
+        } catch (error) {
+          if (error instanceof DOMException && error.name === 'AbortError') {
+            throw new SyncTimeoutError('meal-create')
+          }
+          throw error
+        } finally {
+          window.clearTimeout(mealTimeout)
+        }
         const resource = dietResourceKey(operation.dietId, 'meals')
         const cachedMeals = readCachedResource<Meal[]>(userId, resource)?.data ?? []
         writeCachedResource(userId, resource, [
@@ -125,6 +148,7 @@ async function synchronize(userId: string, token: string) {
         operation = { ...operation, phase: 'completed' }
         void reportSyncEvent(token, {
           operationId: operation.id,
+          dietId: operation.dietId,
           phase: 'completed',
           attempt: operation.attempts + 1,
           durationMs: Date.now() - syncStartedAt,
@@ -151,6 +175,7 @@ async function synchronize(userId: string, token: string) {
         if (failureSaved) {
           void reportSyncEvent(token, {
             operationId: operation.id,
+            dietId: operation.dietId,
             phase: operation.phase === 'signature' || operation.phase === 'cloudinary-upload' || operation.phase === 'meal-create'
               ? operation.phase
               : operation.phase === 'cloudinary-uploaded' ? 'cloudinary-uploaded' : 'meal-create',
