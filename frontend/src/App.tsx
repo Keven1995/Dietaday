@@ -8,6 +8,7 @@ import { MealForm } from './pages/MealForm'
 import { Members } from './pages/Members'
 import { Profile } from './pages/Profile'
 import { Water } from './pages/Water'
+import { Ranking } from './pages/Ranking'
 import { PasswordResetPage, VerifyEmailPage } from './pages/AccountSecurity'
 import { useAuth } from './state/AuthContext'
 
@@ -36,6 +37,7 @@ export default function App() {
         <Route path="membros" element={<Members />} />
         <Route path="perfil" element={<Profile />} />
         <Route path="agua" element={<Water />} />
+        <Route path="ranking" element={<Ranking />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
