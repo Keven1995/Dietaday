@@ -10,8 +10,11 @@ import org.springframework.data.domain.Pageable;
 
 import java.util.Optional;
 import java.util.UUID;
+import java.util.List;
 
 public interface DietRepository extends JpaRepository<Diet, UUID> {
+    List<Diet> findAllByCompetitiveModeTrue();
+
     @Query("select d from Diet d join DietMember m on m.diet = d where m.user.id = :userId order by d.startDate desc")
     Page<Diet> findAllForUser(@Param("userId") UUID userId, Pageable pageable);
 

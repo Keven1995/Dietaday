@@ -8,11 +8,15 @@ import org.springframework.data.repository.query.Param;
 import java.time.LocalDate;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 public interface RankingPointEventRepository extends JpaRepository<RankingPointEvent, UUID> {
     Optional<RankingPointEvent> findBySourceTypeAndSourceId(RankingPointEvent.SourceType sourceType, UUID sourceId);
+
+    List<RankingPointEvent> findAllByDietIdAndEventDateAndStatus(
+            UUID dietId, LocalDate eventDate, RankingPointEvent.Status status);
 
     long countByDietIdAndUserId(UUID dietId, UUID userId);
 
