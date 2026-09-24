@@ -46,6 +46,20 @@ public class SecurityAuditService {
         audit("ranking_point_event_revoked", userId, dietId, eventId, safeType(sourceType));
     }
 
+    public void rankingDayClosed(UUID dietId, UUID closureId, String eventDate, int eventCount, long durationMs) {
+        audit("ranking_day_closed", null, dietId, closureId,
+                "date=" + safeType(eventDate) + ",events=" + eventCount + ",durationMs=" + durationMs);
+    }
+
+    public void rankingDayCloseFailed(UUID dietId, String eventDate, long durationMs) {
+        audit("ranking_day_close_failed", null, dietId, null,
+                "date=" + safeType(eventDate) + ",durationMs=" + durationMs);
+    }
+
+    public void rankingFinalized(UUID dietId, UUID finalizationId, long durationMs) {
+        audit("ranking_finalized", null, dietId, finalizationId, "durationMs=" + durationMs);
+    }
+
     public void memberInvitationCreated(UUID userId, UUID dietId, UUID inviteeId) {
         audit("member_invitation_created", userId, dietId, inviteeId, null);
     }

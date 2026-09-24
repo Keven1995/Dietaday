@@ -4,6 +4,7 @@ import com.dietapp.diet.Diet;
 import com.dietapp.diet.DietRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.dietapp.security.SecurityAuditService;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -16,17 +17,21 @@ public class RankingFinalizationService {
     private final RankingScoreRepository scores;
     private final RankingFinalizationRepository finalizations;
     private final Clock clock;
+    private final SecurityAuditService audit;
 
     public RankingFinalizationService(DietRepository diets, RankingScoreRepository scores,
-                                      RankingFinalizationRepository finalizations, Clock clock) {
+                                      RankingFinalizationRepository finalizations, Clock clock,
+                                      SecurityAuditService audit) {
         this.diets = diets;
         this.scores = scores;
         this.finalizations = finalizations;
         this.clock = clock;
+        this.audit = audit;
     }
 
     @Transactional
     public boolean finalizeIfEnded(java.util.UUID dietId) {
+        long startedAt = System.nanoTime();
         Diet diet = diets.findForUpdateById(dietId).orElseThrow();
         LocalDate today = LocalDate.now(clock.withZone(DailyClosingCalculator.ZONE));
         if (!diet.isCompetitiveMode() || !today.isAfter(diet.getEndDate())) return false;
@@ -39,8 +44,9 @@ public class RankingFinalizationService {
         List<RankingScore> rankingScores = scores.findAllByDietId(dietId);
         java.util.Map<java.util.UUID, com.dietapp.user.User> users = rankingScores.stream()
                 .collect(java.util.stream.Collectors.toMap(score -> score.getUser().getId(), RankingScore::getUser));
-        finalizations.save(new RankingFinalization(diet, Instant.now(clock),
+        RankingFinalization finalization = finalizations.save(new RankingFinalization(diet, Instant.now(clock),
                 userAt(ordered, 0, users), userAt(ordered, 1, users), userAt(ordered, 2, users)));
+        audit.rankingFinalized(dietId, finalization.getId(), (System.nanoTime() - startedAt) / 1_000_000);
         return true;
     }
 

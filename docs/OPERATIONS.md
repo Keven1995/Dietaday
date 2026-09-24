@@ -137,6 +137,9 @@ Eventos de auditoria de segurança usam o formato `security_audit event=...` e i
 - `logout`.
 - `profile_updated`.
 - `diet_created` e `diet_deleted`.
+- `ranking_point_event_created` e `ranking_point_event_revoked`.
+- `ranking_day_closed` e `ranking_day_close_failed`, incluindo data, quantidade de eventos e duração.
+- `ranking_finalized`, incluindo a duração da finalização.
 - `member_invitation_created`, `member_invitation_accepted`, `member_invitation_declined`.
 - `member_left` e `member_ownership_transferred`.
 - `upload_failure`.
@@ -148,11 +151,25 @@ Alertas recomendados no provedor de logs:
 - Mais de 20 eventos `login_failure` para o mesmo intervalo curto.
 - Aumento repentino de `upload_failure`.
 - Aumento repentino de `push_failure`.
+- Qualquer `ranking_day_close_failed`.
+- Fechamentos com duração anormalmente alta ou dias pendentes além do período esperado.
 - Qualquer tentativa de log contendo `password`, `token`, `authorization`, `cookie`, `vapid` ou corpo JSON.
 
 O job `security_maintenance event=refresh_tokens_cleanup` remove refresh tokens expirados diariamente às 03:15 no fuso `America/Sao_Paulo`. O número removido é registrado, mas nenhum token é registrado.
 
 Não registre tokens, senhas, chaves VAPID privadas, URLs privadas de fotos ou dados pessoais desnecessários.
+
+## Fechamento competitivo
+
+O fechamento diário executa à meia-noite no fuso `America/Sao_Paulo` e processa todas as datas da dieta até ontem. Isso permite recuperar dias perdidos após indisponibilidade da API. Cada dieta é bloqueada durante a leitura dos eventos, criação do snapshot e liquidação, e a restrição única de `(diet, data, tipo de refeição)` continua protegendo duplicidades.
+
+O fechamento é idempotente: uma data já registrada em `ranking_daily_closures` não é processada novamente. Para reprocessar uma data específica, execute o método operacional `DailyClosingScheduler.closeDate(dietId, eventDate)` por uma tarefa administrativa controlada; ele mantém a mesma transação e não duplica uma closure existente. Nunca altere diretamente eventos ou snapshots em produção.
+
+## Migrations e rollback
+
+As migrations Flyway são aplicadas automaticamente na inicialização do backend e são forward-only. Antes de publicar uma migration, faça backup do PostgreSQL e valide o `mvn test` com o perfil de teste. Não edite ou remova migrations já aplicadas. Em caso de falha, interrompa o deploy, preserve o histórico Flyway e restaure o backup somente conforme o procedimento de recuperação do provedor; a correção do schema deve ser uma nova migration versionada.
+
+As migrations competitivas são `V12` a `V19` e cobrem dietas, eventos, checks, fechamentos, saldos acumulados e finalização. O rollback operacional não desfaz parcialmente pontuação: restaure o banco inteiro para manter eventos, snapshots e pódio consistentes.
 
 ## Incidentes
 

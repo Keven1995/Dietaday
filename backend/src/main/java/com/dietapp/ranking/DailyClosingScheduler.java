@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.util.UUID;
 
 @Component
 public class DailyClosingScheduler {
@@ -27,12 +28,30 @@ public class DailyClosingScheduler {
 
     @Scheduled(cron = "0 0 0 * * *", zone = ZONE)
     public void closePreviousDay() {
-        closeDate(LocalDate.now(clock.withZone(DailyClosingCalculator.ZONE)).minusDays(1));
+        closeUntil(LocalDate.now(clock.withZone(DailyClosingCalculator.ZONE)).minusDays(1));
     }
 
     public void closeDate(LocalDate eventDate) {
         for (Diet diet : diets.findAllByCompetitiveModeTrue()) {
             closing.closeDiet(diet.getId(), eventDate);
+            finalization.finalizeIfEnded(diet.getId());
+        }
+    }
+
+    public void closeDate(UUID dietId, LocalDate eventDate) {
+        diets.findById(dietId).filter(Diet::isCompetitiveMode).ifPresent(diet -> {
+            closing.closeDiet(diet.getId(), eventDate);
+            finalization.finalizeIfEnded(diet.getId());
+        });
+    }
+
+    private void closeUntil(LocalDate lastDate) {
+        for (Diet diet : diets.findAllByCompetitiveModeTrue()) {
+            LocalDate firstDate = diet.getStartDate();
+            LocalDate finalDate = lastDate.isBefore(diet.getEndDate()) ? lastDate : diet.getEndDate();
+            for (LocalDate date = firstDate; !date.isAfter(finalDate); date = date.plusDays(1)) {
+                closing.closeDiet(diet.getId(), date);
+            }
             finalization.finalizeIfEnded(diet.getId());
         }
     }

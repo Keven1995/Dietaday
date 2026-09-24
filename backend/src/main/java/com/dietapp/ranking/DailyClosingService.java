@@ -6,6 +6,7 @@ import com.dietapp.diet.DietMemberRepository;
 import com.dietapp.diet.DietRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.dietapp.security.SecurityAuditService;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -25,13 +26,14 @@ public class DailyClosingService {
     private final RankingAccumulationService accumulation;
     private final DailyClosingCalculator calculator;
     private final Clock clock;
+    private final SecurityAuditService audit;
 
     public DailyClosingService(DietRepository diets, DietMemberRepository members,
                                RankingPointEventRepository events,
                                DailyRankingClosureRepository closures,
                                DailyRankingTotalRepository totals,
                                RankingAccumulationService accumulation,
-                               Clock clock) {
+                               Clock clock, SecurityAuditService audit) {
         this.diets = diets;
         this.members = members;
         this.events = events;
@@ -39,11 +41,13 @@ public class DailyClosingService {
         this.totals = totals;
         this.accumulation = accumulation;
         this.clock = clock;
+        this.audit = audit;
         this.calculator = new DailyClosingCalculator(clock);
     }
 
     @Transactional
     public boolean closeDiet(UUID dietId, LocalDate eventDate) {
+        long startedAt = System.nanoTime();
         Diet diet = diets.findForUpdateById(dietId).orElseThrow();
         if (!diet.isCompetitiveMode()
                 || eventDate.isBefore(diet.getStartDate())
@@ -54,28 +58,38 @@ public class DailyClosingService {
             return false;
         }
 
-        Instant closedAt = Instant.now(clock);
-        List<RankingPointEvent> pendingEvents = events.findAllByDietIdAndEventDateAndStatus(
-                dietId, eventDate, RankingPointEvent.Status.PENDING);
-        DailyClosingTotals calculated = calculator.calculate(pendingEvents, eventDate);
-        DailyRankingClosure closure = closures.saveAndFlush(new DailyRankingClosure(diet, eventDate, closedAt));
+        try {
+            Instant closedAt = Instant.now(clock);
+            List<RankingPointEvent> pendingEvents = events.findAllByDietIdAndEventDateAndStatus(
+                    dietId, eventDate, RankingPointEvent.Status.PENDING);
+            DailyClosingTotals calculated = calculator.calculate(pendingEvents, eventDate);
+            DailyRankingClosure closure = closures.saveAndFlush(new DailyRankingClosure(diet, eventDate, closedAt));
 
-        Map<UUID, DailyClosingTotals.ParticipantTotals> calculatedByUser = calculated.participants();
-        List<DailyRankingTotal> snapshots = new ArrayList<>();
-        List<DietMember> dietMembers = members.findAllByDietId(dietId);
-        for (DietMember member : dietMembers) {
-            DailyClosingTotals.ParticipantTotals participant = calculatedByUser.get(member.getUser().getId());
-            if (participant == null) {
-                participant = new DailyClosingTotals.ParticipantTotals(0, 0, 0);
+            Map<UUID, DailyClosingTotals.ParticipantTotals> calculatedByUser = calculated.participants();
+            List<DailyRankingTotal> snapshots = new ArrayList<>();
+            List<DietMember> dietMembers = members.findAllByDietId(dietId);
+            for (DietMember member : dietMembers) {
+                DailyClosingTotals.ParticipantTotals participant = calculatedByUser.get(member.getUser().getId());
+                if (participant == null) {
+                    participant = new DailyClosingTotals.ParticipantTotals(0, 0, 0);
+                }
+                snapshots.add(new DailyRankingTotal(closure, member.getUser(), participant.meals(),
+                        participant.waterChecks(), participant.points()));
             }
-            snapshots.add(new DailyRankingTotal(closure, member.getUser(), participant.meals(),
-                    participant.waterChecks(), participant.points()));
-        }
-        totals.saveAll(snapshots);
-        accumulation.accumulate(closure, snapshots, dietMembers);
+            totals.saveAll(snapshots);
+            accumulation.accumulate(closure, snapshots, dietMembers);
 
-        pendingEvents.forEach(event -> event.settle(closedAt));
-        events.saveAll(pendingEvents);
-        return true;
+            pendingEvents.forEach(event -> event.settle(closedAt));
+            events.saveAll(pendingEvents);
+            audit.rankingDayClosed(dietId, closure.getId(), eventDate.toString(), pendingEvents.size(), elapsedMs(startedAt));
+            return true;
+        } catch (RuntimeException exception) {
+            audit.rankingDayCloseFailed(dietId, eventDate.toString(), elapsedMs(startedAt));
+            throw exception;
+        }
+    }
+
+    private long elapsedMs(long startedAt) {
+        return (System.nanoTime() - startedAt) / 1_000_000;
     }
 }
