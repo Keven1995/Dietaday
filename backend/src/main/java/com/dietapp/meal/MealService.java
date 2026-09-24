@@ -9,6 +9,7 @@ import com.dietapp.diet.DietService;
 import com.dietapp.security.CurrentUser;
 import com.dietapp.upload.PhotoUrlPolicy;
 import com.dietapp.ranking.RankingPointEventService;
+import com.dietapp.ranking.CompetitivePeriodPolicy;
 import com.dietapp.user.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -129,9 +130,7 @@ public class MealService {
     }
 
     private void ensureCompetitiveWriteAllowed(Diet diet) {
-        if (diet.isCompetitiveMode() && LocalDate.now(ZoneId.of("America/Sao_Paulo")).isAfter(diet.getEndDate())) {
-            throw new ConflictException("The competitive diet has ended");
-        }
+        CompetitivePeriodPolicy.validateWriteToday(diet, LocalDate.now(ZoneId.of("America/Sao_Paulo")));
     }
 
     private String requestHash(String mealType, String description, LocalDate mealDate, String photoUrl) {
