@@ -1,4 +1,4 @@
-import { CalendarDays, Droplets, Home, Salad, Trophy, UserRound, Users } from 'lucide-react'
+import { CalendarDays, Droplets, Home, Salad, UserRound, Users } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../state/AuthContext'
 import { InvitationNotifications } from './InvitationNotifications'
@@ -6,7 +6,6 @@ import { CreatorCredit } from './CreatorCredit'
 import { ServerConnectionNotice } from './ServerConnectionNotice'
 import { OfflineMealNotice } from './OfflineMealNotice'
 import { CompetitiveRankingWidget } from './CompetitiveRankingWidget'
-import { useDiets } from '../state/DietContext'
 
 const nav = [
   { to: '/', label: 'Início', icon: Home },
@@ -17,9 +16,8 @@ const nav = [
   { to: '/agua', label: 'Água', icon: Droplets },
 ]
 
-function NavigationLinks({ competitive }: { competitive: boolean }) {
-  const links = competitive ? [...nav, { to: '/ranking', label: 'Ranking', icon: Trophy }] : nav
-  return links.map(({ to, label, icon: Icon }) => (
+function NavigationLinks() {
+  return nav.map(({ to, label, icon: Icon }) => (
     <NavLink key={to} to={to} end={to === '/'}>
       <Icon size={20} aria-hidden="true" />
       <span>{label}</span>
@@ -29,10 +27,8 @@ function NavigationLinks({ competitive }: { competitive: boolean }) {
 
 export function Layout() {
   const { user } = useAuth()
-  const { activeDiet } = useDiets()
   const location = useLocation()
-  const competitive = Boolean(activeDiet?.competitiveMode)
-  const title = (competitive ? [...nav, { to: '/ranking', label: 'Ranking', icon: Trophy }] : nav).find((item) => item.to === location.pathname)?.label ?? 'Dietaday'
+  const title = nav.find((item) => item.to === location.pathname)?.label ?? 'Dietaday'
 
   return (
     <div className="app-shell">
@@ -43,7 +39,7 @@ export function Layout() {
           <span className="brand-mark">N</span>
           <span>Dietaday</span>
         </div>
-        <nav aria-label="Navegação principal"><NavigationLinks competitive={competitive} /></nav>
+        <nav aria-label="Navegação principal"><NavigationLinks /></nav>
         <div className="side-profile">
           <div className="avatar" aria-hidden="true">{user?.fullName.charAt(0)}</div>
           <div><strong>{user?.fullName}</strong><small>Conta pessoal</small></div>
@@ -59,7 +55,7 @@ export function Layout() {
         <main><Outlet /></main>
         <CompetitiveRankingWidget />
         <CreatorCredit className="app-creator-credit" />
-        <nav className="bottom-nav" aria-label="Navegação principal"><NavigationLinks competitive={competitive} /></nav>
+        <nav className="bottom-nav" aria-label="Navegação principal"><NavigationLinks /></nav>
       </div>
     </div>
   )
