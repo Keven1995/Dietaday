@@ -53,6 +53,13 @@ class ApiIntegrationTest {
     }
 
     @Test
+    void readinessEndpointIsPublic() throws Exception {
+        mvc.perform(get("/api/health/ready"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UP"));
+    }
+
+    @Test
     void competitiveModeIsConfiguredAtCreationAndCannotBeChanged() throws Exception {
         JsonNode user = register("Competitive User", "competitive-" + UUID.randomUUID() + "@example.com");
         String authorization = bearer(user);

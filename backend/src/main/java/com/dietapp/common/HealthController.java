@@ -19,6 +19,11 @@ public class HealthController {
 
     @GetMapping
     public Map<String, String> health() {
+        return Map.of("status", "UP");
+    }
+
+    @GetMapping("/ready")
+    public Map<String, String> ready() {
         jdbc.execute((ConnectionCallback<Void>) connection -> {
             try (var statement = connection.createStatement()) {
                 statement.setQueryTimeout(10);
