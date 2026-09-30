@@ -20,7 +20,8 @@ export function AnimatedProgress({ value, max = 100, label, className = '' }: { 
     >
       <motion.span
         initial={false}
-        animate={{ width: `${percentage}%` }}
+        animate={{ scaleX: percentage / 100 }}
+        style={{ transformOrigin: 'left center' }}
         transition={reducedMotion ? { duration: 0 } : { duration: MOTION_DURATION.slow / 1000, ease: 'easeOut' }}
       />
     </div>

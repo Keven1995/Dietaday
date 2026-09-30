@@ -1,4 +1,4 @@
-import { CalendarDays, ChevronLeft, ChevronRight, Coffee, LoaderCircle, MessageCircle, Pencil, RotateCcw, SmilePlus, Trash2, Moon, Sun } from 'lucide-react'
+import { CalendarDays, ChevronLeft, ChevronRight, Coffee, ImageOff, LoaderCircle, MessageCircle, Pencil, RotateCcw, SmilePlus, Trash2, Moon, Sun } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -35,6 +35,13 @@ function QueuedPhoto({ photo, description }: { photo: Blob; description: string 
     return () => URL.revokeObjectURL(objectUrl)
   }, [photo])
   return source ? <img className="meal-thumb" src={source} alt={`Refeição: ${description}`} /> : null
+}
+
+function MealPhoto({ source, description }: { source: string; description: string }) {
+  const [loaded, setLoaded] = useState(false)
+  const [failed, setFailed] = useState(false)
+  if (failed) return <div className="meal-photo-fallback" role="img" aria-label={`Foto indisponível: ${description}`}><ImageOff aria-hidden="true" /></div>
+  return <img className={`meal-thumb${loaded ? ' is-revealed' : ' is-loading'}`} src={source} alt={`Refeição: ${description}`} onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />
 }
 
 export function History() {
@@ -237,8 +244,8 @@ export function History() {
                 <div className="timeline-dot" />
                 <AnimatedCard delay={mealIndex} className="timeline-card-motion">
                  <div className="timeline-card" tabIndex={-1}>
-                  {meal.photoUrl
-                    ? <img className="meal-thumb" src={meal.photoUrl} alt={`Refeição: ${meal.description}`} />
+                   {meal.photoUrl
+                     ? <MealPhoto source={meal.photoUrl} description={meal.description} />
                     : queuedOperation?.photo
                       ? <QueuedPhoto photo={queuedOperation.photo} description={meal.description} />
                       : <Icon aria-hidden="true" />}

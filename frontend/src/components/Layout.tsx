@@ -21,8 +21,10 @@ const nav = [
 function NavigationLinks() {
   return nav.map(({ to, label, icon: Icon }) => (
     <NavLink key={to} to={to} end={to === '/'}>
-      <Icon size={20} aria-hidden="true" />
-      <span>{label}</span>
+      {({ isActive }) => <>
+        <span className="nav-icon" data-active={isActive || undefined}><Icon size={20} aria-hidden="true" /></span>
+        <span>{label}</span>
+      </>}
     </NavLink>
   ))
 }

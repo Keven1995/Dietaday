@@ -10,6 +10,7 @@ const MESSAGES = {
   DAILY_GOAL_COMPLETED: 'Meta diária concluída!',
   HYDRATION_GOAL_COMPLETED: 'Meta de hidratação concluída!',
   STREAK_INCREMENTED: 'Sua constância aumentou!',
+  RANKING_FINALIZED: 'Resultado final do ranking!',
 } as const
 
 type CelebrationOverlayProps = {

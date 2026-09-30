@@ -7,7 +7,7 @@ export function PageTransition() {
   const location = useLocation()
   const reducedMotion = useReducedMotionPreference()
 
-  return <AnimatePresence initial={false} mode="wait">
+  return <AnimatePresence initial={false} mode="sync">
     <motion.div
       key={location.pathname}
       className="page-transition"

@@ -1,4 +1,5 @@
 import { ArrowRight, Camera, Droplets, Plus, Sparkles, Users } from 'lucide-react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { DailyGoalCard } from '../components/DailyGoalCard'
 import { AnimatedCard } from '../components/motion/AnimatedCard'
@@ -11,6 +12,7 @@ import { initialMeals, initialMembers } from '../data'
 import { useDietResource } from '../hooks/useDietResource'
 import { useDailyProgress } from '../hooks/useDailyProgress'
 import { localDateKey, mealDateKey, mealTime, parseLocalDate } from '../lib/date'
+import { getCalendarMealStatus } from '../lib/dailyCalendar'
 import { useAuth } from '../state/AuthContext'
 import { useDiets } from '../state/DietContext'
 import { useOfflineMeals } from '../state/OfflineMealContext'
@@ -20,7 +22,7 @@ import type { Meal, Member } from '../types'
 const NO_MEALS: Meal[] = []
 const NO_MEMBERS: Member[] = []
 
-function WeekCalendar({ dates, meals, todayKey, periodStart }: { dates: Date[]; meals: Meal[]; todayKey: string; periodStart: Date }) {
+function WeekCalendar({ dates, meals, todayKey, selectedKey, periodStart, onSelect }: { dates: Date[]; meals: Meal[]; todayKey: string; selectedKey: string; periodStart: Date; onSelect: (dateKey: string) => void }) {
   return (
     <section className="calendar-card">
       <div className="section-heading">
@@ -29,13 +31,24 @@ function WeekCalendar({ dates, meals, todayKey, periodStart }: { dates: Date[]; 
       <div className="week" aria-label="Refeições nesta semana">
         {dates.map((date) => {
           const key = localDateKey(date)
-          const hasMeals = meals.some((meal) => mealDateKey(meal.mealDate) === key)
+          const dayMeals = meals.filter((meal) => mealDateKey(meal.mealDate) === key)
+          const status = getCalendarMealStatus(dayMeals)
+          const isSelected = key === selectedKey
+          const isToday = key === todayKey
           return (
-            <div className={key === todayKey ? 'active' : ''} key={key} aria-current={key === todayKey ? 'date' : undefined}>
+            <button
+              className={`calendar-day is-${status}${isSelected ? ' is-selected' : ''}${isToday ? ' is-today' : ''}`}
+              type="button"
+              key={key}
+              aria-current={isToday ? 'date' : undefined}
+              aria-pressed={isSelected}
+              aria-label={`${date.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}: ${status === 'completed' ? 'meta completa' : status === 'partial' ? 'progresso parcial' : 'sem refeições'}${isToday ? ', hoje' : ''}`}
+              onClick={() => onSelect(key)}
+            >
               <span>{date.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '').toUpperCase()}</span>
               <strong>{date.getDate()}</strong>
-              {hasMeals && <i aria-label="Possui refeição registrada" />}
-            </div>
+              <i aria-hidden="true" />
+            </button>
           )
         })}
       </div>
@@ -43,11 +56,12 @@ function WeekCalendar({ dates, meals, todayKey, periodStart }: { dates: Date[]; 
   )
 }
 
-function TodayMeals({ meals, loading }: { meals: Meal[]; loading: boolean }) {
+function TodayMeals({ meals, loading, dateKey }: { meals: Meal[]; loading: boolean; dateKey: string }) {
+  const isToday = dateKey === localDateKey()
   return (
     <section>
       <div className="section-heading">
-        <div><span>HOJE</span><h2>Refeições da dieta</h2></div>
+        <div><span>{isToday ? 'HOJE' : parseLocalDate(dateKey).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '')}</span><h2>Refeições da dieta</h2></div>
         <Link to="/historico">Ver histórico <ArrowRight size={16} /></Link>
       </div>
       {loading && !meals.length ? <SkeletonList count={3} /> : meals.length ? (
@@ -116,6 +130,7 @@ export function Dashboard() {
   const mealsResource = useDietResource('meals', initialMeals, NO_MEALS, 'Não foi possível carregar as refeições.')
   const membersResource = useDietResource('members', initialMembers, NO_MEMBERS, 'Não foi possível carregar os membros.')
   const dailyProgress = useDailyProgress()
+  const [selectedDate, setSelectedDate] = useState(localDateKey())
   const meals = activeDiet
     ? [...offlineMeals.filter((meal) => operations.some((operation) => operation.id === meal.operationId && operation.dietId === activeDiet.id)), ...mealsResource.data]
     : mealsResource.data
@@ -129,7 +144,7 @@ export function Dashboard() {
   const elapsed = Math.min(totalDays, Math.max(0, Math.floor((today.getTime() - start.getTime()) / 86400000) + 1))
   const remaining = Math.max(0, totalDays - elapsed)
   const progress = Math.round(elapsed / totalDays * 100)
-  const todayMeals = meals.filter((meal) => mealDateKey(meal.mealDate) === todayKey)
+  const selectedMeals = meals.filter((meal) => mealDateKey(meal.mealDate) === selectedDate)
   const weekStart = new Date(today)
   weekStart.setDate(today.getDate() - ((today.getDay() + 6) % 7))
   const days = Array.from({ length: 7 }, (_, index) => {
@@ -162,9 +177,9 @@ export function Dashboard() {
            </AnimatedCard>
            <AnimatedCard delay={1}><WaterSummary /></AnimatedCard>
            {showCompetitiveProgress && <div className="daily-progress-grid"><AnimatedCard delay={2}><DailyGoalCard progress={dailyProgress.data} /></AnimatedCard><AnimatedCard delay={3}><StreakAnimation days={dailyProgress.data.streakDays} dietId={dailyProgress.data.dietId} eventDate={dailyProgress.data.date} /></AnimatedCard></div>}
-           <AnimatedCard delay={showCompetitiveProgress ? 4 : 2}><WeekCalendar dates={days} meals={meals} todayKey={todayKey} periodStart={start} /></AnimatedCard>
-           <div className="dashboard-grid">
-             <AnimatedCard delay={showCompetitiveProgress ? 5 : 3}><TodayMeals meals={todayMeals} loading={mealsResource.loading} /></AnimatedCard>
+            <AnimatedCard delay={showCompetitiveProgress ? 4 : 2}><WeekCalendar dates={days} meals={meals} todayKey={todayKey} selectedKey={selectedDate} periodStart={start} onSelect={setSelectedDate} /></AnimatedCard>
+            <div className="dashboard-grid">
+              <AnimatedCard delay={showCompetitiveProgress ? 5 : 3}><TodayMeals meals={selectedMeals} loading={mealsResource.loading} dateKey={selectedDate} /></AnimatedCard>
              <AnimatedCard delay={showCompetitiveProgress ? 6 : 4}><MembersSummary members={members} loading={membersResource.loading} /></AnimatedCard>
           </div>
         </>

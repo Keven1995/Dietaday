@@ -3,6 +3,7 @@ import { API_URL } from './apiConfig'
 import type { SyncTelemetryPhase } from './syncTelemetry'
 
 type CloudinaryResponse = { secure_url?: string; error?: { message?: string } }
+type UploadProgressHandler = (progress: number) => void
 type CloudinarySignature = {
   apiKey: string
   timestamp: number
@@ -78,6 +79,7 @@ export async function uploadPhoto(
   token: string,
   signal?: AbortSignal,
   onPhase?: (phase: SyncTelemetryPhase) => Promise<void>,
+  onProgress?: UploadProgressHandler,
 ) {
   await onPhase?.('signature')
   const signedUpload = await api<CloudinarySignature>('/uploads/signature', {
@@ -92,27 +94,62 @@ export async function uploadPhoto(
   body.append('timestamp', String(signedUpload.timestamp))
   body.append('signature', signedUpload.signature)
   const endpoint = signedUpload.uploadUrl
-  let response: Response
-  try {
-    response = await fetch(endpoint, { method: 'POST', body, signal })
-  } catch (error) {
+  onProgress?.(0)
+  const { status, value } = await uploadWithProgress(endpoint, body, signal, onProgress).catch((error: unknown) => {
     if (signal?.aborted) throw error
     throw new PhotoUploadError(
       `Falha de rede no upload (sem resposta HTTP). Arquivo: ${fileName}, ${file.type || 'tipo desconhecido'}, ${file.size} bytes. `
       + `Endpoint: ${endpoint}`,
       0,
     )
-  }
-  const value: unknown = await response.json().catch(() => null)
+  })
   const data = isCloudinaryResponse(value) ? value : null
-  if (!response.ok || !data?.secure_url) {
+  if (status < 200 || status >= 300 || !data?.secure_url) {
     const cloudinaryMessage = data?.error?.message || 'Resposta sem secure_url.'
     throw new PhotoUploadError(
-      `Cloudinary HTTP ${response.status}: ${cloudinaryMessage} `
+      `Cloudinary HTTP ${status}: ${cloudinaryMessage} `
       + `Arquivo: ${fileName}, ${file.type || 'tipo desconhecido'}, ${file.size} bytes. Upload assinado.`,
-      response.status,
+      status,
     )
   }
+  onProgress?.(100)
   await onPhase?.('cloudinary-uploaded')
   return data.secure_url
+}
+
+function uploadWithProgress(endpoint: string, body: FormData, signal: AbortSignal | undefined, onProgress?: UploadProgressHandler) {
+  return new Promise<{ status: number; value: unknown }>((resolve, reject) => {
+    const request = new XMLHttpRequest()
+    const cleanup = () => signal?.removeEventListener('abort', abort)
+    const abort = () => request.abort()
+
+    request.open('POST', endpoint)
+    request.upload.addEventListener('progress', (event) => {
+      if (event.lengthComputable) onProgress?.(Math.round(event.loaded / event.total * 100))
+    })
+    request.addEventListener('load', () => {
+      cleanup()
+      let value: unknown
+      try {
+        value = JSON.parse(request.responseText || 'null') as unknown
+      } catch {
+        value = null
+      }
+      resolve({ status: request.status, value })
+    })
+    request.addEventListener('error', () => {
+      cleanup()
+      reject(new Error('Falha de rede no upload.'))
+    })
+    request.addEventListener('abort', () => {
+      cleanup()
+      reject(new DOMException('Upload cancelado.', 'AbortError'))
+    })
+    signal?.addEventListener('abort', abort, { once: true })
+    if (signal?.aborted) {
+      abort()
+      return
+    }
+    request.send(body)
+  })
 }

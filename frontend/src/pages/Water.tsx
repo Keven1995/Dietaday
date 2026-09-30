@@ -10,6 +10,7 @@ import { useCompetitiveMode } from '../hooks/useCompetitiveMode'
 import { crossedThreshold } from '../lib/motionRules'
 import { useCelebration } from '../state/CelebrationContext'
 import { useWater } from '../state/WaterContext'
+import { useToast } from '../state/ToastContext'
 
 const WATER_OPTIONS = [500, 1000, 1500, 2000, 2500, 3000, 3500, 4000]
 
@@ -21,6 +22,7 @@ export function Water() {
   const { water, loading, saving, error, saveGoal, addCheck } = useWater()
   const { dietId: competitiveDietId } = useCompetitiveMode()
   const { celebrate } = useCelebration()
+  const { showToast } = useToast()
   const [goal, setGoal] = useState(2000)
   const [checkAmount, setCheckAmount] = useState('')
   const [message, setMessage] = useState('')
@@ -41,8 +43,10 @@ export function Water() {
       await saveGoal(goal)
       setMessage('Sua meta diária foi atualizada.')
       setFeedbackStatus('success')
+      showToast({ message: 'Meta de hidratação atualizada.', tone: 'success' })
     } catch {
       setFeedbackStatus('error')
+      showToast({ message: 'Não foi possível atualizar sua meta de hidratação.', tone: 'error' })
     }
   }
 
@@ -61,8 +65,10 @@ export function Water() {
       }
       setMessage(completedNow ? `Meta de hidratação concluída!${pointsMessage}` : `Check registrado. Continue cuidando da sua hidratação! 💧${pointsMessage}`)
       setFeedbackStatus('success')
+      showToast({ message: completedNow ? 'Meta de hidratação concluída.' : `Check de ${amount} ml registrado.`, tone: 'success' })
     } catch {
       setFeedbackStatus('error')
+      showToast({ message: 'Não foi possível registrar esse check de água.', tone: 'error' })
     }
   }
 
