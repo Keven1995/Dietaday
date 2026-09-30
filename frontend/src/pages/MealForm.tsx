@@ -1,5 +1,5 @@
 import { Camera, Check, ImagePlus, X } from 'lucide-react'
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useEffect, useEffectEvent, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { AnimatedCheck, type AnimatedCheckStatus } from '../components/motion/AnimatedCheck'
 import { AnimatedError } from '../components/motion/AnimatedError'
@@ -9,16 +9,19 @@ import { compressPhoto, isPhotoUploadConfigured, validatePhoto } from '../lib/cl
 import { localDateKey } from '../lib/date'
 import { useAuth } from '../state/AuthContext'
 import { useDiets } from '../state/DietContext'
-import { useOfflineMeals } from '../state/OfflineMealContext'
+import { MEAL_SYNCED_EVENT, MEAL_SYNC_PROGRESS_EVENT, useOfflineMeals, type MealSyncProgressDetail } from '../state/OfflineMealContext'
+import { useToast } from '../state/ToastContext'
 
-function PhotoField({ preview, onChoose, onRemove }: { preview: string; onChoose: (event: ChangeEvent<HTMLInputElement>) => void; onRemove: () => void }) {
+function PhotoField({ preview, onChoose, onRemove, uploadProgress }: { preview: string; onChoose: (event: ChangeEvent<HTMLInputElement>) => void; onRemove: () => void; uploadProgress: number | null }) {
+  const uploading = uploadProgress !== null && uploadProgress < 100
   return (
     <div>
       <span className="field-label">Foto da refeição <small>(opcional)</small></span>
       {preview ? (
         <div className="photo-preview">
-          <img src={preview} alt="Prévia da refeição" />
-          <button type="button" aria-label="Remover foto" onClick={onRemove}><X /></button>
+          <img className={uploading ? 'is-uploading' : undefined} src={preview} alt="Prévia da refeição" />
+          {uploading && <span className="photo-upload-progress" role="status">Enviando foto: {uploadProgress}%</span>}
+          <button type="button" aria-label="Remover foto" disabled={uploading} onClick={onRemove}><X /></button>
         </div>
       ) : (
         <label className="photo-input">
@@ -37,13 +40,20 @@ export function MealForm() {
   const { token } = useAuth()
   const { activeDiet } = useDiets()
   const { enqueue, operations } = useOfflineMeals()
+  const { showToast } = useToast()
+  const notify = useEffectEvent(showToast)
   const editId = (location.state as { offlineOperationId?: string } | null)?.offlineOperationId
   const editedOperation = operations.find((operation) => operation.id === editId)
   const initializedEditRef = useRef<string | null>(null)
   const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const submittedAtRef = useRef(0)
+  const notifiedFailureRef = useRef('')
   const [loading, setLoading] = useState(false)
   const [saved, setSaved] = useState(false)
   const [saveStatus, setSaveStatus] = useState<AnimatedCheckStatus>('idle')
+  const [saveMessage, setSaveMessage] = useState('')
+  const [submittedOperationId, setSubmittedOperationId] = useState<string | null>(null)
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
   const [error, setError] = useState('')
   const [preview, setPreview] = useState('')
   const [photo, setPhoto] = useState<File | null>(null)
@@ -57,6 +67,46 @@ export function MealForm() {
   useEffect(() => () => {
     if (preview) URL.revokeObjectURL(preview)
   }, [preview])
+
+  useEffect(() => {
+    const handleProgress = (event: Event) => {
+      const detail = (event as CustomEvent<MealSyncProgressDetail>).detail
+      if (!detail || detail.operationId !== submittedOperationId) return
+      if (detail.phase === 'cloudinary-upload') setUploadProgress(detail.progress ?? 0)
+      if (detail.phase === 'cloudinary-uploaded') setUploadProgress(100)
+    }
+    const handleSynced = (event: Event) => {
+      const detail = (event as CustomEvent<{ operationId?: string }>).detail
+      if (!detail?.operationId || detail.operationId !== submittedOperationId) return
+      setUploadProgress(null)
+      setSaved(true)
+      setSaveStatus('success')
+      setSaveMessage('Refeição registrada e sincronizada com sucesso.')
+      notify({ message: 'Refeição sincronizada com sucesso.', tone: 'success' })
+      redirectTimerRef.current = setTimeout(() => navigate('/historico'), 700)
+    }
+    window.addEventListener(MEAL_SYNC_PROGRESS_EVENT, handleProgress)
+    window.addEventListener(MEAL_SYNCED_EVENT, handleSynced)
+    return () => {
+      window.removeEventListener(MEAL_SYNC_PROGRESS_EVENT, handleProgress)
+      window.removeEventListener(MEAL_SYNCED_EVENT, handleSynced)
+    }
+  }, [navigate, submittedOperationId])
+
+  useEffect(() => {
+    if (!submittedOperationId) return
+    const operation = operations.find((item) => item.id === submittedOperationId)
+    if (operation?.status !== 'failed' || Date.parse(operation.lastFailureAt ?? '') < submittedAtRef.current) return
+    setUploadProgress(null)
+    setSaved(true)
+    setSaveStatus('error')
+    setSaveMessage(operation.error ?? 'Não foi possível sincronizar a refeição. Tente novamente.')
+    const failureKey = `${operation.id}:${operation.lastFailureAt ?? operation.attempts}`
+    if (notifiedFailureRef.current !== failureKey) {
+      notifiedFailureRef.current = failureKey
+      notify({ message: operation.error ?? 'Não foi possível sincronizar a refeição.', tone: 'error' })
+    }
+  }, [operations, submittedOperationId])
 
   useEffect(() => {
     if (!editedOperation || initializedEditRef.current === editedOperation.id) return
@@ -77,6 +127,7 @@ export function MealForm() {
       } catch (photoError) {
         setPhoto(null)
         setPhotoChanged(false)
+        setUploadProgress(null)
         setPreview('')
         setError(photoError instanceof Error ? photoError.message : 'A foto selecionada não é válida.')
         event.target.value = ''
@@ -85,6 +136,7 @@ export function MealForm() {
     }
     setPhoto(file)
     setPhotoChanged(true)
+    setUploadProgress(null)
     setPreview(file ? URL.createObjectURL(file) : '')
     setError('')
   }
@@ -92,6 +144,7 @@ export function MealForm() {
   function removePhoto() {
     setPhoto(null)
     setPhotoChanged(true)
+    setUploadProgress(null)
     setPreview('')
   }
 
@@ -109,26 +162,40 @@ export function MealForm() {
     }
 
     setLoading(true)
+    setSaved(false)
+    setSaveMessage('')
+    setSubmittedOperationId(null)
+    setUploadProgress(null)
     setSaveStatus('loading')
     try {
       if (photo && !isDemoMode && !isPhotoUploadConfigured) {
         throw new Error('O upload de fotos não está configurado. Remova a foto ou configure o Cloudinary.')
       }
       const storedPhoto = photo && !isDemoMode ? await compressPhoto(photo) : photo
-      if (!isDemoMode) await enqueue({
-        operationId: editedOperation?.id,
-        dietId: editedOperation?.dietId ?? activeDiet!.id,
-        dietName: editedOperation?.dietName ?? activeDiet!.name,
-        request: {
-          mealType: form.mealType,
-          description,
-          mealDate: editedOperation?.request.mealDate ?? localDateKey(),
-        },
-        photo: editedOperation && !photoChanged ? undefined : storedPhoto,
-      })
-      setSaved(true)
-      setSaveStatus('success')
-      redirectTimerRef.current = setTimeout(() => navigate('/historico'), 500)
+      if (isDemoMode) {
+        setSaved(true)
+        setSaveStatus('success')
+        setSaveMessage('Refeição registrada com sucesso.')
+        notify({ message: 'Refeição registrada com sucesso.', tone: 'success' })
+        redirectTimerRef.current = setTimeout(() => navigate('/historico'), 500)
+      } else {
+        const operationId = await enqueue({
+          operationId: editedOperation?.id,
+          dietId: editedOperation?.dietId ?? activeDiet!.id,
+          dietName: editedOperation?.dietName ?? activeDiet!.name,
+          request: {
+            mealType: form.mealType,
+            description,
+            mealDate: editedOperation?.request.mealDate ?? localDateKey(),
+          },
+          photo: editedOperation && !photoChanged ? undefined : storedPhoto,
+        })
+        submittedAtRef.current = Date.now()
+        setSubmittedOperationId(operationId)
+        setSaved(true)
+        setSaveStatus('loading')
+        setSaveMessage('Refeição salva neste dispositivo. Aguardando sincronização...')
+      }
     } catch (submitError) {
       setSaveStatus('error')
       setError(getErrorMessage(submitError, 'Não foi possível salvar a refeição neste dispositivo.'))
@@ -163,12 +230,12 @@ export function MealForm() {
           Descrição
           <textarea required rows={5} placeholder="Descreva alimentos, porções e observações..." value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
         </label>
-        <PhotoField preview={preview} onChoose={choosePhoto} onRemove={removePhoto} />
+        <PhotoField preview={preview} onChoose={choosePhoto} onRemove={removePhoto} uploadProgress={uploadProgress} />
         {error && <AnimatedError>{error}</AnimatedError>}
-        {saved && <AnimatedCheck status={saveStatus} label="Refeição salva neste dispositivo. A sincronização ocorrerá quando houver conexão." />}
+        {saved && <AnimatedCheck status={saveStatus} label={saveMessage} />}
         <div className="form-actions">
           <Button type="button" className="ghost" onClick={() => navigate(-1)}>Cancelar</Button>
-          <Button loading={loading}>{saved ? <><Check /> Salvo</> : loading && photo ? 'Preparando foto...' : editedOperation ? 'Salvar correção' : 'Salvar refeição'}</Button>
+          <Button loading={loading || (submittedOperationId !== null && saveStatus === 'loading')} success={saveStatus === 'success'}>{saveStatus === 'success' ? <><Check /> Sincronizada</> : loading && photo ? 'Preparando foto...' : submittedOperationId && saveStatus === 'loading' ? 'Aguardando sincronização...' : editedOperation ? 'Salvar correção' : 'Salvar refeição'}</Button>
         </div>
       </form>
     </div>

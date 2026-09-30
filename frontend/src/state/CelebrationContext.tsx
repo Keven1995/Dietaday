@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, type ReactNode } from 'react'
 import { CelebrationOverlay } from '../components/CelebrationOverlay'
 
-export type CelebrationType = 'DAILY_GOAL_COMPLETED' | 'HYDRATION_GOAL_COMPLETED' | 'STREAK_INCREMENTED'
+export type CelebrationType = 'DAILY_GOAL_COMPLETED' | 'HYDRATION_GOAL_COMPLETED' | 'STREAK_INCREMENTED' | 'RANKING_FINALIZED'
 export type CelebrationRequest = { type: CelebrationType; id: string }
 export type ActiveCelebration = CelebrationRequest & { key: string }
 

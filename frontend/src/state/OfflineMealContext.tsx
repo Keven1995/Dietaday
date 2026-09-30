@@ -34,7 +34,7 @@ type OfflineMealContextValue = {
   operations: OfflineMealOperation[]
   offlineMeals: Meal[]
   syncing: boolean
-  enqueue: (input: QueueMealInput) => Promise<void>
+  enqueue: (input: QueueMealInput) => Promise<string>
   retry: (id: string) => Promise<void>
   discard: (id: string) => Promise<void>
   syncNow: () => Promise<void>
@@ -47,6 +47,16 @@ const SYNC_ERROR_MESSAGE = 'Não foi possível sincronizar esta refeição agora
 const RETRY_DELAYS_MS = [30_000, 60_000, 5 * 60_000, 15 * 60_000]
 const MEAL_CREATE_TIMEOUT_MS = 60_000
 export const MEAL_SYNCED_EVENT = 'dietaday:meal-synced'
+export const MEAL_SYNC_PROGRESS_EVENT = 'dietaday:meal-sync-progress'
+export type MealSyncProgressDetail = {
+  operationId: string
+  phase: SyncTelemetryPhase
+  progress?: number
+}
+
+function emitMealSyncProgress(detail: MealSyncProgressDetail) {
+  window.dispatchEvent(new CustomEvent<MealSyncProgressDetail>(MEAL_SYNC_PROGRESS_EVENT, { detail }))
+}
 
 class SyncPersistenceError extends Error {
   constructor() {
@@ -91,6 +101,7 @@ async function synchronize(userId: string, token: string) {
       const updatePhase = async (phase: SyncTelemetryPhase) => {
         operation = { ...operation, phase, lastAttemptAt: new Date().toISOString() }
         if (!await saveClaimedOfflineMeal(operation, syncOwner)) throw new SyncPersistenceError()
+        emitMealSyncProgress({ operationId: operation.id, phase })
         void reportSyncEvent(token, {
           operationId: operation.id,
           dietId: operation.dietId,
@@ -111,6 +122,7 @@ async function synchronize(userId: string, token: string) {
               token,
               controller.signal,
               updatePhase,
+              (progress) => emitMealSyncProgress({ operationId: operation.id, phase: 'cloudinary-upload', progress }),
             )
             operation = { ...operation, uploadedPhotoUrl }
             if (!await saveClaimedOfflineMeal(operation, syncOwner)) throw new SyncPersistenceError()
@@ -287,6 +299,7 @@ export function OfflineMealProvider({ children }: { children: ReactNode }) {
     if (existing) await saveOfflineMeal(operation)
     else await addOfflineMeal(operation)
     void syncNow().catch(() => undefined)
+    return operation.id
   }
 
   async function retry(id: string) {

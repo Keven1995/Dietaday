@@ -1,6 +1,6 @@
 import { RefreshCw, Trophy } from 'lucide-react'
 import { motion } from 'motion/react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AnimatedCounter } from '../components/motion/AnimatedCounter'
 import { AnimatedError } from '../components/motion/AnimatedError'
@@ -13,6 +13,7 @@ import { useCompetitiveMode } from '../hooks/useCompetitiveMode'
 import { useReducedMotionPreference } from '../hooks/useReducedMotionPreference'
 import { parseLocalDate } from '../lib/date'
 import { getRankingMovement, type RankingMovementDirection } from '../lib/rankingMovement'
+import { useCelebration } from '../state/CelebrationContext'
 import type { RankingParticipant } from '../types'
 
 function date(value: string | null) {
@@ -21,9 +22,13 @@ function date(value: string | null) {
 
 function initials(name: string) { return name.split(' ').filter(Boolean).map((part) => part[0]).slice(0, 2).join('') }
 
-function Podium({ participants, reducedMotion }: { participants: RankingParticipant[]; reducedMotion: boolean }) {
-  if (!participants.length) return null
-  return <div className="ranking-podium">{participants.slice(0, 3).map((participant, index) => <motion.div
+function Podium({ participants, podium, reducedMotion }: { participants: RankingParticipant[]; podium: { first: string | null; second: string | null; third: string | null }; reducedMotion: boolean }) {
+  const participantsById = new Map(participants.map((participant) => [participant.userId, participant]))
+  const podiumParticipants = [podium.second, podium.first, podium.third]
+    .map((userId) => userId ? participantsById.get(userId) : undefined)
+    .filter((participant): participant is RankingParticipant => Boolean(participant))
+  if (!podiumParticipants.length) return null
+  return <div className="ranking-podium">{podiumParticipants.map((participant, index) => <motion.div
     className={`podium-place podium-place-${participant.position}${participant.position === 1 ? ' is-winner' : ''}`}
     key={participant.userId}
     layout={!reducedMotion ? 'position' : false}
@@ -41,6 +46,8 @@ export function Ranking() {
   const previousPosition = useRef<{ dietId: string; position: number } | null>(null)
   const reducedMotion = useReducedMotionPreference()
   const { ranking, details, loading, error, reload } = useCompetitiveRanking(page)
+  const { celebrate } = useCelebration()
+  const celebrateFinal = useEffectEvent(celebrate)
 
   useEffect(() => {
     if (!ranking || !activeDiet || ranking.dietId !== activeDiet.id) return
@@ -51,6 +58,11 @@ export function Ranking() {
     setMovement(direction ? { direction, position: ranking.currentUser.position } : null)
     previousPosition.current = { dietId: activeDiet.id, position: ranking.currentUser.position }
   }, [activeDiet?.id, ranking?.currentUser.position, ranking?.dietId])
+
+  useEffect(() => {
+    if (!ranking || ranking.status !== 'FINALIZED' || !ranking.podium) return
+    celebrateFinal({ type: 'RANKING_FINALIZED', id: `${ranking.dietId}:${ranking.endDate}` })
+  }, [ranking?.dietId, ranking?.endDate, ranking?.podium?.first, ranking?.podium?.second, ranking?.podium?.third, ranking?.status])
 
   if (!activeDiet || !enabled) return <div className="page ranking-page"><EmptyState icon={<Trophy />} title="Ranking competitivo" text="Selecione uma dieta competitiva para acompanhar sua posição." /><Link className="button empty-action" to="/dietas">Ver dietas</Link></div>
 
@@ -64,7 +76,7 @@ export function Ranking() {
        <RankingMovement direction={movement?.direction ?? null} position={movement?.position ?? ranking.currentUser.position} onComplete={() => setMovement(null)} />
       <div className="ranking-meta-row"><span><b>{ranking.status === 'FINALIZED' ? 'FINALIZADO' : 'ATIVO'}</b> · {date(ranking.startDate)} a {date(ranking.endDate)}</span><span>Último fechamento: {date(ranking.lastClosedDate)}</span></div>
       {ranking.status === 'FINALIZED' && <div className="ranking-final-note">Este ranking está congelado e representa o resultado final.</div>}
-       <Podium participants={ranking.participants} reducedMotion={reducedMotion} />
+        {ranking.status === 'FINALIZED' && ranking.podium && <Podium participants={ranking.participants} podium={ranking.podium} reducedMotion={reducedMotion} />}
        <section className="ranking-table-card card"><div className="section-heading"><div><span>CLASSIFICAÇÃO</span><h2>Participantes</h2></div><small>{ranking.page.totalElements} pessoas</small></div><div className="ranking-list">{ranking.participants.map((participant) => <motion.div layout={!reducedMotion ? 'position' : false} transition={{ duration: reducedMotion ? 0 : MOTION_DURATION.normal / 1000 }} className={participant.userId === ranking.currentUser.userId ? 'ranking-row is-current' : 'ranking-row'} key={participant.userId}><b className="ranking-position">{participant.position}</b><i className="ranking-avatar">{initials(participant.displayName)}</i><div><strong>{participant.displayName}</strong>{participant.userId === ranking.currentUser.userId && <small>Você</small>}</div><span><strong><AnimatedCounter value={participant.officialPoints} /></strong><small>{participant.activeDays} dias ativos</small></span></motion.div>)}{!ranking.participants.length && <p className="muted-text">Nenhum participante encontrado.</p>}</div>{ranking.page.totalPages > 1 && <div className="ranking-pagination"><button onClick={() => setPage((current) => current - 1)} disabled={page === 0} aria-label="Página anterior">‹</button><span>Página {page + 1} de {ranking.page.totalPages}</span><button onClick={() => setPage((current) => current + 1)} disabled={page + 1 >= ranking.page.totalPages} aria-label="Próxima página">›</button></div>}</section>
       {details && <section className="ranking-detail-card card"><div className="section-heading"><div><span>SEUS PONTOS</span><h2>O que está pendente</h2></div></div><p>{details.pendingPoints ? `Você tem ${details.pendingPoints} pontos aguardando o próximo fechamento.` : 'Nenhum ponto pendente por enquanto.'}</p></section>}
     </>}
