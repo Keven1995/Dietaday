@@ -19,12 +19,14 @@ public class SyncTelemetryController {
     private final CurrentUser currentUser;
     private final SecurityAuditService audit;
     private final SyncErrorEventService errors;
+    private final UxEventService uxEvents;
 
     public SyncTelemetryController(CurrentUser currentUser, SecurityAuditService audit,
-                                   SyncErrorEventService errors) {
+                                   SyncErrorEventService errors, UxEventService uxEvents) {
         this.currentUser = currentUser;
         this.audit = audit;
         this.errors = errors;
+        this.uxEvents = uxEvents;
     }
 
     @PostMapping("/sync")
@@ -37,5 +39,13 @@ public class SyncTelemetryController {
         log.info("sync_event userId={} operationId={} phase={} attempt={} durationMs={} httpStatus={} errorType={} fileType={} fileSizeBytes={}",
                 currentUser.id(), event.operationId(), event.phase(), event.attempt(), event.durationMs(),
                 event.httpStatus(), event.errorType(), event.fileType(), event.fileSizeBytes());
+    }
+
+    @PostMapping("/ux")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void ux(@Valid @RequestBody UxEventRequest event) {
+        uxEvents.record(event);
+        log.info("ux_event userId={} eventName={} eventId={} dietId={}",
+                currentUser.id(), event.eventName(), event.eventId(), event.dietId());
     }
 }

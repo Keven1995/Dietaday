@@ -20,6 +20,7 @@ import { createUuid } from '../lib/uuid'
 import { reportSyncEvent, type SyncTelemetryPhase } from '../lib/syncTelemetry'
 import { emitCompetitivePoints, emitCompetitiveRankingInvalidated } from '../lib/competitiveFeedback'
 import { emitDailyProgressInvalidated } from '../lib/dailyProgress'
+import { reportUxEvent } from '../lib/uxTelemetry'
 import { useAuth } from './AuthContext'
 
 type QueueMealInput = {
@@ -169,6 +170,12 @@ async function synchronize(userId: string, token: string) {
           points: created.pointsEarned ?? 0,
           source: 'MEAL',
           eventId: created.id,
+        })
+        void reportUxEvent(token, {
+          eventName: 'meal_created',
+          eventId: `meal:${created.id}`,
+          dietId: operation.dietId,
+          details: { pointsEarned: created.pointsEarned ?? 0, hasPhoto: Boolean(operation.uploadedPhotoUrl) },
         })
         emitDailyProgressInvalidated(operation.dietId)
         operation = { ...operation, phase: 'completed' }

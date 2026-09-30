@@ -262,8 +262,11 @@ DELETE /push/subscriptions?endpoint={endpoint}
 ```text
 POST /uploads/signature
 POST /telemetry/sync
+POST /telemetry/ux
 ```
 
 Falhas de sincronização informadas por esse endpoint são persistidas internamente em `sync_error_events` para diagnóstico operacional. Essa tabela não é exposta ao usuário final. O corpo inclui `operationId`, `dietId`, `phase`, `attempt`, `durationMs`, `httpStatus`, `errorType`, `fileType` e `fileSizeBytes`.
+
+Eventos de UX confirmados pelo frontend são enviados para `/telemetry/ux` e persistidos internamente em `ux_events`. O corpo inclui `eventName`, `eventId`, `dietId` e, opcionalmente, `details`. Os nomes aceitos são `meal_created`, `water_logged`, `daily_goal_completed`, `hydration_goal_completed`, `reaction_created`, `ranking_position_changed` e `streak_incremented`. O `eventId` é idempotente por usuário; a telemetria não participa do fluxo da ação principal.
 
 Detalhes internos de credenciais, chaves privadas e infraestrutura não fazem parte do contrato da API e devem permanecer apenas na configuração operacional.

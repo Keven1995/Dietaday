@@ -11,6 +11,8 @@ import { crossedThreshold } from '../lib/motionRules'
 import { useCelebration } from '../state/CelebrationContext'
 import { useWater } from '../state/WaterContext'
 import { useToast } from '../state/ToastContext'
+import { useAuth } from '../state/AuthContext'
+import { reportUxEvent } from '../lib/uxTelemetry'
 
 const WATER_OPTIONS = [500, 1000, 1500, 2000, 2500, 3000, 3500, 4000]
 
@@ -20,7 +22,8 @@ function formatLiters(amountMl: number) {
 
 export function Water() {
   const { water, loading, saving, error, saveGoal, addCheck } = useWater()
-  const { dietId: competitiveDietId } = useCompetitiveMode()
+  const { activeDiet, dietId: competitiveDietId } = useCompetitiveMode()
+  const { token } = useAuth()
   const { celebrate } = useCelebration()
   const { showToast } = useToast()
   const [goal, setGoal] = useState(2000)
@@ -62,6 +65,14 @@ export function Water() {
       const completedNow = crossedThreshold(previousConsumed, next.consumedMl, next.goalMl)
       if (completedNow && competitiveDietId) {
         celebrate({ type: 'HYDRATION_GOAL_COMPLETED', id: `${competitiveDietId}:${next.date}` })
+      }
+      if (completedNow && activeDiet) {
+        void reportUxEvent(token, {
+          eventName: 'hydration_goal_completed',
+          eventId: `hydration-goal:${activeDiet.id}:${next.date}`,
+          dietId: activeDiet.id,
+          details: { consumedMl: next.consumedMl, goalMl: next.goalMl },
+        })
       }
       setMessage(completedNow ? `Meta de hidratação concluída!${pointsMessage}` : `Check registrado. Continue cuidando da sua hidratação! 💧${pointsMessage}`)
       setFeedbackStatus('success')

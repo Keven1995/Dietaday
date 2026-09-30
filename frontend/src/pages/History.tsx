@@ -17,6 +17,7 @@ import { api, getErrorMessage, isDemoMode } from '../lib/api'
 import { mealCommentCount } from '../lib/comments'
 import { localDateKey, mealDateKey, mealTime, parseLocalDate } from '../lib/date'
 import { nextReactionEmoji, optimisticReactions } from '../lib/mealReactions'
+import { createUxEventId, reportUxEvent } from '../lib/uxTelemetry'
 import { dietResourceKey, expireCachedResource, readCachedResource, writeCachedResource } from '../lib/resourceCache'
 import { useAuth } from '../state/AuthContext'
 import { useDiets } from '../state/DietContext'
@@ -186,7 +187,15 @@ export function History() {
       })
       writeConfirmedReactions(meal.id, result.reactions)
       setReactionOverride(meal.id, null)
-      if (nextEmoji) setFloatingReaction({ mealId: meal.id, emoji: nextEmoji, key: Date.now() })
+      if (nextEmoji) {
+        setFloatingReaction({ mealId: meal.id, emoji: nextEmoji, key: Date.now() })
+        void reportUxEvent(token, {
+          eventName: 'reaction_created',
+          eventId: createUxEventId(`reaction:${meal.id}`),
+          dietId: activeDiet.id,
+          details: { emoji: nextEmoji },
+        })
+      }
     } catch (reactionRequestError) {
       setReactionOverride(meal.id, null)
       setReactionError(getErrorMessage(reactionRequestError, 'Não foi possível salvar sua reação.'))

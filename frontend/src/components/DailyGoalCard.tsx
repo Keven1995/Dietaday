@@ -2,6 +2,8 @@ import { useEffect, useEffectEvent, useRef } from 'react'
 import { AnimatedCounter } from './motion/AnimatedCounter'
 import { AnimatedProgress } from './motion/AnimatedProgress'
 import { useCelebration } from '../state/CelebrationContext'
+import { useAuth } from '../state/AuthContext'
+import { reportUxEvent } from '../lib/uxTelemetry'
 import type { DailyProgress } from '../types'
 
 type DailyGoalCardProps = {
@@ -10,6 +12,7 @@ type DailyGoalCardProps = {
 
 export function DailyGoalCard({ progress }: DailyGoalCardProps) {
   const { celebrate } = useCelebration()
+  const { token } = useAuth()
   const celebrateEvent = useEffectEvent(celebrate)
   const previousCompleted = useRef<{ dietId: string; completed: boolean } | null>(null)
 
@@ -18,8 +21,14 @@ export function DailyGoalCard({ progress }: DailyGoalCardProps) {
     previousCompleted.current = { dietId: progress.dietId, completed: progress.dailyGoalCompleted }
     if (previous?.dietId === progress.dietId && previous.completed === false && progress.dailyGoalCompleted) {
       celebrateEvent({ type: 'DAILY_GOAL_COMPLETED', id: `${progress.dietId}:${progress.date}` })
+      void reportUxEvent(token, {
+        eventName: 'daily_goal_completed',
+        eventId: `daily-goal:${progress.dietId}:${progress.date}`,
+        dietId: progress.dietId,
+        details: { completedMeals: progress.completedMeals, dailyGoal: progress.dailyGoal },
+      })
     }
-  }, [progress.dailyGoalCompleted, progress.dietId, progress.date])
+  }, [progress.dailyGoalCompleted, progress.dietId, progress.date, token])
 
   const percentage = progress.dailyGoal ? progress.completedMeals * 100 / progress.dailyGoal : 0
   return <section className="daily-goal-card card">
