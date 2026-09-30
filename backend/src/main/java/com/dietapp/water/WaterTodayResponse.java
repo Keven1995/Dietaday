@@ -9,4 +9,10 @@ public record WaterTodayResponse(
         int consumedMl,
         int remainingMl,
         int percentage,
-        List<WaterCheckResponse> checks) {}
+        List<WaterCheckResponse> checks,
+        int pointsEarned) {
+    public WaterTodayResponse(LocalDate date, int goalMl, int consumedMl, int remainingMl,
+                              int percentage, List<WaterCheckResponse> checks) {
+        this(date, goalMl, consumedMl, remainingMl, percentage, checks, 0);
+    }
+}

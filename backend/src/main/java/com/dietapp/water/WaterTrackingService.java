@@ -90,8 +90,10 @@ public class WaterTrackingService {
             throw new BadRequestException("Esse check ultrapassa o volume restante da sua meta.");
         }
         WaterCheck check = checks.save(new WaterCheck(user, diet, amountMl, date));
-        rankingEvents.recordWater(check, remaining);
-        return competitiveSnapshot(diet, user, date);
+        int pointsEarned = rankingEvents.recordWater(check, remaining);
+        WaterTodayResponse snapshot = competitiveSnapshot(diet, user, date);
+        return new WaterTodayResponse(snapshot.date(), snapshot.goalMl(), snapshot.consumedMl(), snapshot.remainingMl(),
+                snapshot.percentage(), snapshot.checks(), pointsEarned);
     }
 
     private Diet requireCompetitiveDiet(java.util.UUID dietId) {

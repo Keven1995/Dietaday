@@ -18,6 +18,8 @@ import org.springframework.test.web.servlet.MvcResult;
 
 import java.util.UUID;
 import java.util.Map;
+import java.time.LocalDate;
+import java.time.ZoneId;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -95,6 +97,41 @@ class ApiIntegrationTest {
                                 """))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.competitiveMode").value(false));
+    }
+
+    @Test
+    void dailyProgressCountsTheSixOfficialMealsAndCurrentStreak() throws Exception {
+        JsonNode user = register("Progress User", "progress-" + UUID.randomUUID() + "@example.com");
+        String authorization = bearer(user);
+        LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+        String dietId = mvc.perform(post("/api/diets")
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "name", "Progress Diet",
+                                "startDate", today.minusDays(3).toString(),
+                                "endDate", today.plusDays(3).toString()))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        dietId = objectMapper.readTree(dietId).get("id").asText();
+
+        for (String mealType : new String[]{"Café da manhã", "Lanche da manhã", "Almoço", "Lanche da tarde", "Jantar", "Ceia"}) {
+            mvc.perform(post("/api/diets/{dietId}/meals", dietId)
+                            .header("Authorization", authorization)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of(
+                                    "mealType", mealType,
+                                    "description", mealType + " confirmado",
+                                    "mealDate", today.toString()))))
+                    .andExpect(status().isCreated());
+        }
+
+        mvc.perform(get("/api/diets/{dietId}/progress", dietId).header("Authorization", authorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.dailyGoal").value(6))
+                .andExpect(jsonPath("$.completedMeals").value(6))
+                .andExpect(jsonPath("$.dailyGoalCompleted").value(true))
+                .andExpect(jsonPath("$.streakDays").value(1));
     }
 
     @Test
@@ -230,6 +267,7 @@ class ApiIntegrationTest {
                         .content("{\"amountMl\":500}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.consumedMl").value(500))
+                .andExpect(jsonPath("$.pointsEarned").value(2))
                 .andReturn().getResponse().getContentAsString();
         String checkId = objectMapper.readTree(response).get("checks").get(0).get("id").asText();
 
@@ -437,6 +475,7 @@ class ApiIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(request))
                 .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.pointsEarned").value(0))
                 .andReturn().getResponse().getContentAsString();
 
         mvc.perform(post("/api/diets/{dietId}/meals", dietId)
@@ -487,6 +526,7 @@ class ApiIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(request))
                 .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.pointsEarned").value(5))
                 .andReturn().getResponse().getContentAsString();
         String mealId = objectMapper.readTree(response).get("id").asText();
 
@@ -496,7 +536,8 @@ class ApiIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(request))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.id").value(mealId));
+                .andExpect(jsonPath("$.id").value(mealId))
+                .andExpect(jsonPath("$.pointsEarned").value(5));
 
         assertThat(rankingEvents.countByDietIdAndUserId(UUID.fromString(dietId), UUID.fromString(owner.get("userId").asText())))
                 .isEqualTo(1);

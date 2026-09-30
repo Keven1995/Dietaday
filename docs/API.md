@@ -70,6 +70,7 @@ POST   /diets/{dietId}/meals
 GET    /diets/{dietId}/meals/{mealId}
 PUT    /diets/{dietId}/meals/{mealId}
 DELETE /diets/{dietId}/meals/{mealId}
+```
 
 Comentários e reações usam os recursos abaixo:
 
@@ -90,9 +91,33 @@ GET /notifications/unread-count
 PUT /notifications/{id}/read
 PUT /notifications/read-all
 ```
+
+O progresso diário da dieta considera os seis tipos oficiais de refeição
+(`Café da manhã`, `Lanche da manhã`, `Almoço`, `Lanche da tarde`, `Jantar` e
+`Ceia`). A resposta também informa o streak de dias consecutivos completos:
+
+```text
+GET /diets/{dietId}/progress
+```
+
+```json
+{
+  "dietId": "7b9d6c2f-3e0f-4f55-bf5b-4f3c0e6bc123",
+  "date": "2026-09-29",
+  "dailyGoal": 6,
+  "completedMeals": 4,
+  "completedMealTypes": ["Café da manhã", "Almoço", "Jantar", "Ceia"],
+  "dailyGoalCompleted": false,
+  "streakDays": 3
+}
 ```
 
 O envio de refeições sincronizadas pode incluir `operationId` para garantir idempotência.
+
+O `POST /diets/{dietId}/meals` retorna a refeição criada com o campo
+`pointsEarned`. Esse valor é calculado pelo backend, vale `0` fora do modo
+competitivo e permanece idempotente em novas tentativas com o mesmo
+`Idempotency-Key`.
 
 ## Hidratação
 
@@ -113,6 +138,10 @@ POST /diets/{dietId}/water/checks
 Esses endpoints exigem que o usuário seja membro da dieta. A meta continua sendo do usuário, mas os checks competitivos são associados à dieta. Dietas não competitivas continuam usando os endpoints gerais acima.
 
 Os valores de meta e check são enviados em mililitros. Os valores válidos ficam entre `500` e `4000`, em intervalos de `500`.
+
+As respostas de registro de check incluem `pointsEarned`, calculado pelo
+backend. O campo vale `0` para hidratação não competitiva e contém o delta
+confirmado quando o check gera um evento competitivo.
 
 Exemplo de atualização da meta:
 

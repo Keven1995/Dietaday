@@ -47,8 +47,8 @@ public class MealService {
     }
 
     @Transactional
-    public Meal create(UUID dietId, String mealType, String description, LocalDate mealDate,
-                       String photoUrl, UUID operationId) {
+    public MealCreationResult create(UUID dietId, String mealType, String description, LocalDate mealDate,
+                                     String photoUrl, UUID operationId) {
         photoUrlPolicy.validate(photoUrl);
         // Competitive writes share the diet lock with daily closing, so a meal
         // cannot be inserted between the pending-event read and settlement.
@@ -57,8 +57,7 @@ public class MealService {
         ensureCompetitiveWriteAllowed(diet);
         if (operationId == null) {
             Meal meal = meals.save(new Meal(diet, author, mealType, description, mealDate, photoUrl));
-            rankingEvents.recordMeal(meal);
-            return meal;
+            return new MealCreationResult(meal, rankingEvents.recordMeal(meal));
         }
 
         String requestHash = requestHash(mealType, description, mealDate, photoUrl);
@@ -70,18 +69,21 @@ public class MealService {
                     || !operation.getRequestHash().equals(requestHash)) {
                 throw new ConflictException("Idempotency key has already been used for another request");
             }
-            return operation.getMeal();
+            Meal meal = operation.getMeal();
+            return new MealCreationResult(meal, rankingEvents.recordMeal(meal));
         }
 
         Meal meal = meals.save(new Meal(diet, author, mealType, description, mealDate, photoUrl));
-        rankingEvents.recordMeal(meal);
+        int pointsEarned = rankingEvents.recordMeal(meal);
         try {
             syncOperations.saveAndFlush(new MealSyncOperation(operationId, author, diet, meal, requestHash));
         } catch (DataIntegrityViolationException exception) {
             throw new ConflictException("Idempotency key has already been used for another request", exception);
         }
-        return meal;
+        return new MealCreationResult(meal, pointsEarned);
     }
+
+    public record MealCreationResult(Meal meal, int pointsEarned) {}
 
     @Transactional(readOnly = true)
     public Page<Meal> list(UUID dietId, LocalDate fromDate, LocalDate toDate, Pageable pageable) {
