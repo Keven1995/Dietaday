@@ -10,6 +10,15 @@ export default defineConfig({
       srcDir: 'src',
       filename: 'sw.ts',
       registerType: 'autoUpdate',
+      integration: {
+        configureCustomSWViteBuild: (config) => {
+          const output = config.build?.rollupOptions?.output
+          if (!output || Array.isArray(output)) return
+          // Keep the service worker as one bundle without the deprecated option.
+          delete output.inlineDynamicImports
+          output.codeSplitting = false
+        },
+      },
       includeAssets: ['favicon.svg'],
       manifest: {
         name: 'Dietaday - Diário Alimentar',
