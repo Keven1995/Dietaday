@@ -229,8 +229,13 @@ label, .field-label { display: grid; gap: 7px; color: #34433f; font-size: .86rem
 .celebration-overlay { position: fixed; top: max(78px, calc(env(safe-area-inset-top) + 18px)); left: 50%; z-index: 120; pointer-events: none; transform: translateX(-50%); }
 .celebration-message { position: relative; z-index: 1; display: flex; align-items: center; gap: 7px; padding: 11px 16px; border: 1px solid #efc36d; border-radius: 999px; background: #fff9e8; box-shadow: 0 10px 26px #15372a20; color: #80551c; font-size: .78rem; font-weight: 800; white-space: nowrap; }
 .celebration-message span { color: #e19b30; }
+.celebration-message small { margin-left: 2px; color: var(--muted); font-size: .62rem; font-weight: 700; text-transform: uppercase; }
+.celebration-ranking_finalized .celebration-message { border-color: #d8af52; background: linear-gradient(135deg, #fff9e8, #fff3ca); box-shadow: 0 12px 35px #d49b3e35; }
+.celebration-ranking_finalized .celebration-message::after { content: ''; position: absolute; inset: -5px; z-index: -1; border: 1px solid #f4c95d88; border-radius: inherit; animation: celebration-ring 1s ease-out; }
+@keyframes celebration-ring { from { opacity: .9; transform: scale(.94); } to { opacity: 0; transform: scale(1.12); } }
 .confetti { position: absolute; top: 18px; left: 50%; width: min(88vw, 560px); height: 90px; transform: translateX(-50%); }
 .confetti-piece { position: absolute; top: 0; display: block; width: 7px; height: 13px; border-radius: 2px; }
+.confetti-piece.is-ribbon { width: 4px !important; border-radius: 999px; }
 
 /* Hidratação */
 .water-summary-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 13px; margin: 16px 0 30px; padding: 15px 17px; border: 1px solid #c9dcd5; border-radius: 18px; background: #edf5f0; color: var(--green); transition: transform .2s, border-color .2s; }
