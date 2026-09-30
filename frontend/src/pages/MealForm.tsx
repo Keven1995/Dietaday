@@ -1,6 +1,8 @@
 import { Camera, Check, ImagePlus, X } from 'lucide-react'
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { AnimatedCheck, type AnimatedCheckStatus } from '../components/motion/AnimatedCheck'
+import { AnimatedError } from '../components/motion/AnimatedError'
 import { Button, EmptyState, PageTitle } from '../components/Ui'
 import { getErrorMessage, isDemoMode } from '../lib/api'
 import { compressPhoto, isPhotoUploadConfigured, validatePhoto } from '../lib/cloudinary'
@@ -41,6 +43,7 @@ export function MealForm() {
   const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [loading, setLoading] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<AnimatedCheckStatus>('idle')
   const [error, setError] = useState('')
   const [preview, setPreview] = useState('')
   const [photo, setPhoto] = useState<File | null>(null)
@@ -106,6 +109,7 @@ export function MealForm() {
     }
 
     setLoading(true)
+    setSaveStatus('loading')
     try {
       if (photo && !isDemoMode && !isPhotoUploadConfigured) {
         throw new Error('O upload de fotos não está configurado. Remova a foto ou configure o Cloudinary.')
@@ -123,8 +127,10 @@ export function MealForm() {
         photo: editedOperation && !photoChanged ? undefined : storedPhoto,
       })
       setSaved(true)
+      setSaveStatus('success')
       redirectTimerRef.current = setTimeout(() => navigate('/historico'), 500)
     } catch (submitError) {
+      setSaveStatus('error')
       setError(getErrorMessage(submitError, 'Não foi possível salvar a refeição neste dispositivo.'))
     } finally {
       setLoading(false)
@@ -158,7 +164,8 @@ export function MealForm() {
           <textarea required rows={5} placeholder="Descreva alimentos, porções e observações..." value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
         </label>
         <PhotoField preview={preview} onChoose={choosePhoto} onRemove={removePhoto} />
-        {error && <div className="error-message" role="alert">{error}</div>}
+        {error && <AnimatedError>{error}</AnimatedError>}
+        {saved && <AnimatedCheck status={saveStatus} label="Refeição salva neste dispositivo. A sincronização ocorrerá quando houver conexão." />}
         <div className="form-actions">
           <Button type="button" className="ghost" onClick={() => navigate(-1)}>Cancelar</Button>
           <Button loading={loading}>{saved ? <><Check /> Salvo</> : loading && photo ? 'Preparando foto...' : editedOperation ? 'Salvar correção' : 'Salvar refeição'}</Button>

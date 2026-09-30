@@ -1,8 +1,15 @@
 import { ArrowRight, Camera, Droplets, Plus, Sparkles, Users } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { DailyGoalCard } from '../components/DailyGoalCard'
+import { AnimatedCard } from '../components/motion/AnimatedCard'
+import { AnimatedError } from '../components/motion/AnimatedError'
+import { AnimatedProgress } from '../components/motion/AnimatedProgress'
+import { SkeletonCard, SkeletonList } from '../components/motion/SkeletonCard'
+import { StreakAnimation } from '../components/motion/StreakAnimation'
 import { EmptyState, PageTitle } from '../components/Ui'
 import { initialMeals, initialMembers } from '../data'
 import { useDietResource } from '../hooks/useDietResource'
+import { useDailyProgress } from '../hooks/useDailyProgress'
 import { localDateKey, mealDateKey, mealTime, parseLocalDate } from '../lib/date'
 import { useAuth } from '../state/AuthContext'
 import { useDiets } from '../state/DietContext'
@@ -43,7 +50,7 @@ function TodayMeals({ meals, loading }: { meals: Meal[]; loading: boolean }) {
         <div><span>HOJE</span><h2>Refeições da dieta</h2></div>
         <Link to="/historico">Ver histórico <ArrowRight size={16} /></Link>
       </div>
-      {loading && !meals.length ? <p className="loading-text">Carregando refeições...</p> : meals.length ? (
+      {loading && !meals.length ? <SkeletonList count={3} /> : meals.length ? (
         <div className="meal-list">
           {meals.map((meal, index) => (
             <article className="meal-row" key={meal.id}>
@@ -63,7 +70,8 @@ function TodayMeals({ meals, loading }: { meals: Meal[]; loading: boolean }) {
   )
 }
 
-function MembersSummary({ members }: { members: Member[] }) {
+function MembersSummary({ members, loading }: { members: Member[]; loading: boolean }) {
+  if (loading && !members.length) return <SkeletonCard lines={3} className="members-card" />
   return (
     <aside className="members-card">
       <div className="members-icon"><Users /></div>
@@ -90,7 +98,7 @@ function WaterSummary() {
       <div>
         <span>HIDRATAÇÃO</span>
         <h2>{consumed} L <small>de {goal} L</small></h2>
-        <div className="water-summary-progress"><span style={{ width: `${water.percentage}%` }} /></div>
+        <AnimatedProgress className="water-summary-progress" value={water.percentage} label="Progresso da hidratação" />
       </div>
       <ArrowRight size={18} />
     </Link>
@@ -107,6 +115,7 @@ export function Dashboard() {
   const { offlineMeals, operations } = useOfflineMeals()
   const mealsResource = useDietResource('meals', initialMeals, NO_MEALS, 'Não foi possível carregar as refeições.')
   const membersResource = useDietResource('members', initialMembers, NO_MEMBERS, 'Não foi possível carregar os membros.')
+  const dailyProgress = useDailyProgress()
   const meals = activeDiet
     ? [...offlineMeals.filter((meal) => operations.some((operation) => operation.id === meal.operationId && operation.dietId === activeDiet.id)), ...mealsResource.data]
     : mealsResource.data
@@ -130,29 +139,33 @@ export function Dashboard() {
   })
   const firstName = user?.fullName.split(' ')[0] ?? ''
 
-  const error = dietsError || mealsResource.error || membersResource.error
+  const error = dietsError || mealsResource.error || membersResource.error || dailyProgress.error
+  const showCompetitiveProgress = Boolean(activeDiet?.competitiveMode && dailyProgress.data.dietId === activeDiet.id)
 
   return (
     <div className="page dashboard">
       <PageTitle eyebrow={today.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })} title={`Olá, ${firstName}.`} action={activeDiet && <Link className="button desktop-action" to="/refeicoes/nova"><Plus size={18} /> Registrar refeição</Link>} />
-      {error && <div className="error-message" role="alert">{error}</div>}
+      {error && <AnimatedError>{error}</AnimatedError>}
       {activeDiet ? (
         <>
-          <section className="hero-card">
+          <AnimatedCard delay={0}>
+           <section className="hero-card">
             <div>
               <span className="pill"><Sparkles size={14} /> Dieta ativa</span>
               <h2>{activeDiet.name}</h2>
               <p>Você está no {elapsed}º dia de {totalDays}. Um passo de cada vez.</p>
-              <div className="progress" role="progressbar" aria-label="Progresso da dieta" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${progress}%` }} /></div>
+              <AnimatedProgress className="progress" value={progress} label="Progresso da dieta" />
               <small>{elapsed} dias no período <b>{progress}%</b></small>
             </div>
             <div className="hero-number"><strong>{remaining}</strong><span>dias restantes</span></div>
-          </section>
-          <WaterSummary />
-          <WeekCalendar dates={days} meals={meals} todayKey={todayKey} periodStart={start} />
-          <div className="dashboard-grid">
-            <TodayMeals meals={todayMeals} loading={mealsResource.loading} />
-            <MembersSummary members={members} />
+           </section>
+           </AnimatedCard>
+           <AnimatedCard delay={1}><WaterSummary /></AnimatedCard>
+           {showCompetitiveProgress && <div className="daily-progress-grid"><AnimatedCard delay={2}><DailyGoalCard progress={dailyProgress.data} /></AnimatedCard><AnimatedCard delay={3}><StreakAnimation days={dailyProgress.data.streakDays} dietId={dailyProgress.data.dietId} eventDate={dailyProgress.data.date} /></AnimatedCard></div>}
+           <AnimatedCard delay={showCompetitiveProgress ? 4 : 2}><WeekCalendar dates={days} meals={meals} todayKey={todayKey} periodStart={start} /></AnimatedCard>
+           <div className="dashboard-grid">
+             <AnimatedCard delay={showCompetitiveProgress ? 5 : 3}><TodayMeals meals={todayMeals} loading={mealsResource.loading} /></AnimatedCard>
+             <AnimatedCard delay={showCompetitiveProgress ? 6 : 4}><MembersSummary members={members} loading={membersResource.loading} /></AnimatedCard>
           </div>
         </>
       ) : !dietsLoading && <EmptyState icon={<Sparkles />} title="Crie sua primeira dieta" text="Escolha um período para começar a registrar suas refeições." />}

@@ -1,19 +1,7 @@
-import { LoaderCircle } from 'lucide-react'
-import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import type { ReactNode } from 'react'
+import { AnimatedButton } from './motion/AnimatedButton'
 
-export function Button({ loading, children, className = '', ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { loading?: boolean }) {
-  return (
-    <button
-      className={`button ${className}`}
-      disabled={loading || props.disabled}
-      aria-busy={loading || undefined}
-      {...props}
-    >
-      {loading && <LoaderCircle className="spin" size={18} aria-hidden="true" />}
-      {children}
-    </button>
-  )
-}
+export const Button = AnimatedButton
 
 export function EmptyState({ icon, title, text }: { icon: ReactNode; title: string; text: string }) {
   return (

@@ -18,6 +18,8 @@ import {
 import type { CreateMealRequest, Meal } from '../types'
 import { createUuid } from '../lib/uuid'
 import { reportSyncEvent, type SyncTelemetryPhase } from '../lib/syncTelemetry'
+import { emitCompetitivePoints, emitCompetitiveRankingInvalidated } from '../lib/competitiveFeedback'
+import { emitDailyProgressInvalidated } from '../lib/dailyProgress'
 import { useAuth } from './AuthContext'
 
 type QueueMealInput = {
@@ -44,6 +46,7 @@ const syncOwner = createUuid()
 const SYNC_ERROR_MESSAGE = 'Não foi possível sincronizar esta refeição agora. Ela continua salva neste dispositivo.'
 const RETRY_DELAYS_MS = [30_000, 60_000, 5 * 60_000, 15 * 60_000]
 const MEAL_CREATE_TIMEOUT_MS = 60_000
+export const MEAL_SYNCED_EVENT = 'dietaday:meal-synced'
 
 class SyncPersistenceError extends Error {
   constructor() {
@@ -145,6 +148,17 @@ async function synchronize(userId: string, token: string) {
           created,
           ...cachedMeals.filter((meal) => meal.id !== created.id),
         ])
+        window.dispatchEvent(new CustomEvent(MEAL_SYNCED_EVENT, {
+          detail: { operationId: operation.id, mealId: created.id, pointsEarned: created.pointsEarned ?? 0 },
+        }))
+        emitCompetitiveRankingInvalidated(operation.dietId)
+        emitCompetitivePoints({
+          dietId: operation.dietId,
+          points: created.pointsEarned ?? 0,
+          source: 'MEAL',
+          eventId: created.id,
+        })
+        emitDailyProgressInvalidated(operation.dietId)
         operation = { ...operation, phase: 'completed' }
         void reportSyncEvent(token, {
           operationId: operation.id,

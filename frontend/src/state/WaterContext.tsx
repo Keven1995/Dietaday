@@ -2,8 +2,9 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { getErrorMessage, isDemoMode } from '../lib/api'
 import { addWaterCheck, getWaterToday, readCachedWater, updateWaterGoal, WATER_CACHE_RESOURCE } from '../lib/water'
 import { writeCachedResource } from '../lib/resourceCache'
+import { emitCompetitivePoints, emitCompetitiveRankingInvalidated } from '../lib/competitiveFeedback'
+import { useCompetitiveMode } from '../hooks/useCompetitiveMode'
 import { useAuth } from './AuthContext'
-import { useDiets } from './DietContext'
 import type { WaterToday } from '../types'
 
 type WaterContextValue = {
@@ -13,15 +14,14 @@ type WaterContextValue = {
   error: string
   refresh: () => Promise<void>
   saveGoal: (goalMl: number) => Promise<void>
-  addCheck: (amountMl: number) => Promise<void>
+  addCheck: (amountMl: number) => Promise<WaterToday>
 }
 
 const WaterContext = createContext<WaterContextValue | null>(null)
 
 export function WaterProvider({ children }: { children: ReactNode }) {
   const { user, token } = useAuth()
-  const { activeDiet } = useDiets()
-  const competitiveDietId = activeDiet?.competitiveMode ? activeDiet.id : null
+  const { dietId: competitiveDietId } = useCompetitiveMode()
   const cacheResource = competitiveDietId ? `${WATER_CACHE_RESOURCE}:${competitiveDietId}` : WATER_CACHE_RESOURCE
   const [water, setWater] = useState<WaterToday | null>(() => user ? readCachedWater(user.id, competitiveDietId) : null)
   const [loading, setLoading] = useState(false)
@@ -68,13 +68,23 @@ export function WaterProvider({ children }: { children: ReactNode }) {
   }
 
   async function addCheck(amountMl: number) {
-    if (!user) return
+    if (!user) throw new Error('Sua sessão expirou. Entre novamente.')
     setSaving(true)
     setError('')
     try {
       const next = await addWaterCheck(token, user.id, amountMl, competitiveDietId)
       if (!isDemoMode) writeCachedResource(user.id, cacheResource, next)
       setWater(next)
+      if (competitiveDietId) {
+        emitCompetitiveRankingInvalidated(competitiveDietId)
+        emitCompetitivePoints({
+          dietId: competitiveDietId,
+          points: next.pointsEarned ?? 0,
+          source: 'WATER_CHECK',
+          eventId: next.checks[next.checks.length - 1]?.id,
+        })
+      }
+      return next
     } catch (checkError) {
       setError(getErrorMessage(checkError, 'Não foi possível registrar esse check.'))
       throw checkError

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { optimisticReactions } from './mealReactions'
+import { nextReactionEmoji, optimisticReactions } from './mealReactions'
 
 describe('optimisticReactions', () => {
   it('adds, changes and removes the current user reaction', () => {
@@ -21,5 +21,13 @@ describe('optimisticReactions', () => {
     const original = [{ emoji: '👍', count: 1, reactedByMe: true }]
     optimisticReactions(original, '🙏')
     expect(original).toEqual([{ emoji: '👍', count: 1, reactedByMe: true }])
+  })
+})
+
+describe('nextReactionEmoji', () => {
+  it('adds or changes a reaction and toggles the selected one off', () => {
+    expect(nextReactionEmoji(undefined, '🔥')).toBe('🔥')
+    expect(nextReactionEmoji('❤️', '🔥')).toBe('🔥')
+    expect(nextReactionEmoji('🔥', '🔥')).toBeNull()
   })
 })

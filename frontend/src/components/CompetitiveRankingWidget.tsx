@@ -1,12 +1,13 @@
 import { Trophy } from 'lucide-react'
-import { motion, useReducedMotion } from 'motion/react'
+import { motion } from 'motion/react'
 import { Link, useLocation } from 'react-router-dom'
+import { useReducedMotionPreference } from '../hooks/useReducedMotionPreference'
 import { useCompetitiveRanking } from '../hooks/useCompetitiveRanking'
 import { useCompetitiveRankingActivity } from '../hooks/useCompetitiveRankingActivity'
-import { useDiets } from '../state/DietContext'
+import { useCompetitiveMode } from '../hooks/useCompetitiveMode'
 
 function WaterDrops() {
-  const reducedMotion = useReducedMotion()
+  const reducedMotion = useReducedMotionPreference()
   const animate = reducedMotion ? { opacity: 0.85 } : { y: [-8, 7], opacity: [0, 1, 0] }
   const transition = reducedMotion
     ? { duration: 0 }
@@ -20,12 +21,12 @@ function WaterDrops() {
 }
 
 export function CompetitiveRankingWidget() {
-  const { activeDiet } = useDiets()
+  const { enabled } = useCompetitiveMode()
   const location = useLocation()
   const { ranking, loading } = useCompetitiveRanking(0, 3)
   const { hasUnseenActivity, activitySourceType, acknowledge } = useCompetitiveRankingActivity()
 
-  if (!activeDiet?.competitiveMode || location.pathname === '/ranking') return null
+  if (!enabled || location.pathname === '/ranking') return null
   const label = loading ? 'Abrir ranking competitivo. Carregando dados.' : ranking
     ? `Abrir ranking competitivo. ${ranking.currentUser.position}º lugar, ${ranking.currentUser.officialPoints} pontos${ranking.currentUser.pendingPoints ? ` e ${ranking.currentUser.pendingPoints} pontos pendentes` : ''}.`
     : 'Abrir ranking competitivo.'

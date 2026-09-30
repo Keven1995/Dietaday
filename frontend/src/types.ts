@@ -38,6 +38,7 @@ export type Meal = {
   operationId?: string
   reactions?: MealReaction[]
   commentCount?: number
+  pointsEarned?: number
 }
 
 export type MealComment = {
@@ -111,6 +112,17 @@ export type WaterToday = {
   remainingMl: number
   percentage: number
   checks: WaterCheck[]
+  pointsEarned?: number
+}
+
+export type DailyProgress = {
+  dietId: string
+  date: string
+  dailyGoal: number
+  completedMeals: number
+  completedMealTypes: string[]
+  dailyGoalCompleted: boolean
+  streakDays: number
 }
 
 export type RankingParticipant = {

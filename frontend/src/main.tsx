@@ -5,6 +5,7 @@ import { AuthProvider } from './state/AuthContext'
 import { DietProvider } from './state/DietContext'
 import { OfflineMealProvider } from './state/OfflineMealContext'
 import { WaterProvider } from './state/WaterContext'
+import { CelebrationProvider } from './state/CelebrationContext'
 import App from './App'
 import { prepareApi } from './lib/serverWakeup'
 import './styles.css'
@@ -19,9 +20,11 @@ createRoot(root).render(
     <BrowserRouter>
       <AuthProvider>
         <DietProvider>
-          <OfflineMealProvider>
-            <WaterProvider><App /></WaterProvider>
-          </OfflineMealProvider>
+          <CelebrationProvider>
+            <OfflineMealProvider>
+              <WaterProvider><App /></WaterProvider>
+            </OfflineMealProvider>
+          </CelebrationProvider>
         </DietProvider>
       </AuthProvider>
     </BrowserRouter>

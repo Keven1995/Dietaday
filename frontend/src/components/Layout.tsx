@@ -1,11 +1,13 @@
 import { CalendarDays, Droplets, Home, Salad, UserRound, Users } from 'lucide-react'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../state/AuthContext'
 import { InvitationNotifications } from './InvitationNotifications'
 import { CreatorCredit } from './CreatorCredit'
 import { ServerConnectionNotice } from './ServerConnectionNotice'
 import { OfflineMealNotice } from './OfflineMealNotice'
 import { CompetitiveRankingWidget } from './CompetitiveRankingWidget'
+import { CompetitiveFeedbackOverlay } from './CompetitiveFeedbackOverlay'
+import { PageTransition } from './motion/PageTransition'
 
 const nav = [
   { to: '/', label: 'Início', icon: Home },
@@ -52,7 +54,8 @@ export function Layout() {
           <NavLink to="/perfil" className="avatar" aria-label="Abrir perfil">{user?.fullName.charAt(0)}</NavLink>
         </header>
         <OfflineMealNotice />
-        <main><Outlet /></main>
+        <CompetitiveFeedbackOverlay />
+        <main><PageTransition /></main>
         <CompetitiveRankingWidget />
         <CreatorCredit className="app-creator-credit" />
         <nav className="bottom-nav" aria-label="Navegação principal"><NavigationLinks /></nav>
