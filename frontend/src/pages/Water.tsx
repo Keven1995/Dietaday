@@ -1,7 +1,14 @@
 import { Check, Droplets, Save, Sparkles } from 'lucide-react'
-import { motion, useReducedMotion } from 'motion/react'
 import { useEffect, useState } from 'react'
+import { AnimatedCheck, type AnimatedCheckStatus } from '../components/motion/AnimatedCheck'
+import { AnimatedCounter } from '../components/motion/AnimatedCounter'
+import { AnimatedError } from '../components/motion/AnimatedError'
+import { AnimatedProgress } from '../components/motion/AnimatedProgress'
+import { WaterBottle } from '../components/motion/WaterBottle'
 import { Button, PageTitle } from '../components/Ui'
+import { useCompetitiveMode } from '../hooks/useCompetitiveMode'
+import { crossedThreshold } from '../lib/motionRules'
+import { useCelebration } from '../state/CelebrationContext'
 import { useWater } from '../state/WaterContext'
 
 const WATER_OPTIONS = [500, 1000, 1500, 2000, 2500, 3000, 3500, 4000]
@@ -10,58 +17,14 @@ function formatLiters(amountMl: number) {
   return `${amountMl / 1000}`.replace('.', ',') + ' L'
 }
 
-function WaterBottle({ percentage }: { percentage: number }) {
-  const reducedMotion = useReducedMotion()
-  const fillHeight = 312 * percentage / 100
-  const fillY = 375 - fillHeight
-
-  return (
-    <div className="water-bottle" aria-label={`Garrafa preenchida em ${percentage}%`} role="img">
-      <svg viewBox="0 0 220 430" aria-hidden="true">
-        <defs>
-          <clipPath id="water-bottle-clip">
-            <path d="M73 88h74l10 29v226c0 18-14 32-32 32H95c-18 0-32-14-32-32V117z" />
-          </clipPath>
-          <linearGradient id="water-gradient" x1="0" x2="1" y1="0" y2="1">
-            <stop offset="0" stopColor="#80d8dd" />
-            <stop offset="1" stopColor="#278ca2" />
-          </linearGradient>
-        </defs>
-        <path className="bottle-shadow" d="M73 88h74l10 29v226c0 18-14 32-32 32H95c-18 0-32-14-32-32V117z" />
-        <path className="bottle-body" d="M73 88h74l10 29v226c0 18-14 32-32 32H95c-18 0-32-14-32-32V117z" />
-        <g clipPath="url(#water-bottle-clip)">
-          <motion.rect
-            className="bottle-water"
-            x="55"
-            width="110"
-            initial={false}
-            animate={{ y: fillY, height: fillHeight + 20 }}
-            transition={reducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 75, damping: 16 }}
-          />
-          {percentage > 0 && <motion.path
-            className="bottle-wave"
-            d="M48 0 Q72 -10 96 0 T144 0 T192 0 V25 H48Z"
-            initial={false}
-            animate={{ y: fillY - 9 }}
-            transition={reducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 70, damping: 16 }}
-          />}
-        </g>
-        <path className="bottle-highlight" d="M80 133v171c0 10 4 18 10 22" />
-        <path className="bottle-neck" d="M87 87V58h46v29" />
-        <path className="bottle-cap" d="M84 56h52v-11c0-5-4-9-9-9H93c-5 0-9 4-9 9z" />
-        <path className="bottle-label" d="M64 220h92v65H64z" />
-        <text x="110" y="248" textAnchor="middle">ÁGUA</text>
-        <text x="110" y="267" textAnchor="middle">{percentage}%</text>
-      </svg>
-    </div>
-  )
-}
-
 export function Water() {
   const { water, loading, saving, error, saveGoal, addCheck } = useWater()
+  const { dietId: competitiveDietId } = useCompetitiveMode()
+  const { celebrate } = useCelebration()
   const [goal, setGoal] = useState(2000)
   const [checkAmount, setCheckAmount] = useState('')
   const [message, setMessage] = useState('')
+  const [feedbackStatus, setFeedbackStatus] = useState<AnimatedCheckStatus>('idle')
 
   useEffect(() => {
     if (water) {
@@ -73,11 +36,13 @@ export function Water() {
 
   async function handleGoalSave() {
     setMessage('')
+    setFeedbackStatus('loading')
     try {
       await saveGoal(goal)
       setMessage('Sua meta diária foi atualizada.')
+      setFeedbackStatus('success')
     } catch {
-      // The context exposes the translated API error.
+      setFeedbackStatus('error')
     }
   }
 
@@ -85,11 +50,19 @@ export function Water() {
     const amount = Number(checkAmount)
     if (!amount) return
     setMessage('')
+    setFeedbackStatus('loading')
     try {
-      await addCheck(amount)
-      setMessage('Check registrado. Continue cuidando da sua hidratação! 💧')
+      const previousConsumed = water?.consumedMl ?? 0
+      const next = await addCheck(amount)
+      const pointsMessage = next.pointsEarned ? ` +${next.pointsEarned} pontos confirmados.` : ''
+      const completedNow = crossedThreshold(previousConsumed, next.consumedMl, next.goalMl)
+      if (completedNow && competitiveDietId) {
+        celebrate({ type: 'HYDRATION_GOAL_COMPLETED', id: `${competitiveDietId}:${next.date}` })
+      }
+      setMessage(completedNow ? `Meta de hidratação concluída!${pointsMessage}` : `Check registrado. Continue cuidando da sua hidratação! 💧${pointsMessage}`)
+      setFeedbackStatus('success')
     } catch {
-      // The context exposes the translated API error.
+      setFeedbackStatus('error')
     }
   }
 
@@ -100,7 +73,7 @@ export function Water() {
     <div className="page water-page">
       <PageTitle eyebrow="SEU BEM-ESTAR" title="Hidratação" />
       <p className="page-lead">Acompanhe seus checks de água ao longo do dia e transforme pequenos goles em um hábito.</p>
-      {error && <div className="error-message" role="alert">{error}</div>}
+      {error && <AnimatedError>{error}</AnimatedError>}
       {loading && !water ? <p className="loading-text">Carregando sua hidratação...</p> : water && (
         <>
           <section className="water-hero card">
@@ -108,10 +81,10 @@ export function Water() {
               <span className="pill water-pill"><Droplets size={14} /> HOJE</span>
               <h2><span className="water-amount">{formatLiters(water.consumedMl)}</span><span className="water-amount-separator">de</span><span className="water-amount">{formatLiters(water.goalMl)}</span></h2>
               <p>{complete ? 'Meta concluída! Seu corpo agradece.' : `Faltam ${formatLiters(water.remainingMl)} para sua meta de hoje.`}</p>
-              <div className="water-progress" role="progressbar" aria-label="Progresso da hidratação" aria-valuenow={water.percentage} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${water.percentage}%` }} /></div>
-              <strong>{water.percentage}% da meta diária</strong>
+               <AnimatedProgress className="water-progress" value={water.percentage} label="Progresso da hidratação" />
+               <strong><AnimatedCounter value={water.percentage} suffix="% da meta diária" /></strong>
             </div>
-            <WaterBottle percentage={water.percentage} />
+            <WaterBottle current={water.consumedMl} goal={water.goalMl} />
           </section>
 
           <section className="water-grid">
@@ -129,7 +102,7 @@ export function Water() {
               <Button type="button" loading={saving} disabled={!checkAmount || complete} onClick={() => void handleCheck()}>
                 <Check size={18} /> {complete ? 'Meta concluída' : 'Já tomei isso de água'}
               </Button>
-              {message && <div className="success-message" role="status">{message}</div>}
+               {message && <AnimatedCheck status={feedbackStatus} label={message} />}
             </div>
 
             <div className="card water-goal-card">

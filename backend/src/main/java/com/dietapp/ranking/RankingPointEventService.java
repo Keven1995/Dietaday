@@ -28,9 +28,10 @@ public class RankingPointEventService {
     }
 
     @Transactional
-    public void recordMeal(Meal meal) {
-        if (!meal.getDiet().isCompetitiveMode()) return;
-        if (alreadyRecorded(RankingPointEvent.SourceType.MEAL, meal.getId())) return;
+    public int recordMeal(Meal meal) {
+        if (!meal.getDiet().isCompetitiveMode()) return 0;
+        RankingPointEvent existing = events.findBySourceTypeAndSourceId(RankingPointEvent.SourceType.MEAL, meal.getId()).orElse(null);
+        if (existing != null) return existing.getStatus() == RankingPointEvent.Status.REVOKED ? 0 : existing.getPoints();
         requireMember(meal.getDiet().getId(), meal.getAuthor().getId());
         LocalDate today = LocalDate.now(ZONE);
         boolean duplicate = events.existsByDietIdAndUserIdAndEventDateAndMealTypeAndSourceTypeAndStatusNot(
@@ -43,6 +44,7 @@ public class RankingPointEventService {
                     MealScoringPolicy.POINTS, meal.getMealDate()));
             audit.pointEventCreated(event.getUser().getId(), event.getDiet().getId(), event.getId(),
                     event.getSourceType().name());
+            return event.getPoints();
         } catch (DataIntegrityViolationException exception) {
             throw new ConflictException("Meal could not be scored twice", exception);
         }
@@ -72,9 +74,10 @@ public class RankingPointEventService {
     }
 
     @Transactional
-    public void recordWater(WaterCheck check, int remainingBeforeCheck) {
-        if (check.getDiet() == null || !check.getDiet().isCompetitiveMode()) return;
-        if (alreadyRecorded(RankingPointEvent.SourceType.WATER_CHECK, check.getId())) return;
+    public int recordWater(WaterCheck check, int remainingBeforeCheck) {
+        if (check.getDiet() == null || !check.getDiet().isCompetitiveMode()) return 0;
+        RankingPointEvent existing = events.findBySourceTypeAndSourceId(RankingPointEvent.SourceType.WATER_CHECK, check.getId()).orElse(null);
+        if (existing != null) return existing.getStatus() == RankingPointEvent.Status.REVOKED ? 0 : existing.getPoints();
         requireMember(check.getDiet().getId(), check.getUser().getId());
         LocalDate today = LocalDate.now(ZONE);
         WaterScoringPolicy.validate(check.getDiet(), check.getCheckDate(), today,
@@ -86,13 +89,10 @@ public class RankingPointEventService {
                     WaterScoringPolicy.POINTS, check.getCheckDate()));
             audit.pointEventCreated(event.getUser().getId(), event.getDiet().getId(), event.getId(),
                     event.getSourceType().name());
+            return event.getPoints();
         } catch (DataIntegrityViolationException exception) {
             throw new ConflictException("Water check could not be scored twice", exception);
         }
-    }
-
-    private boolean alreadyRecorded(RankingPointEvent.SourceType sourceType, java.util.UUID sourceId) {
-        return events.findBySourceTypeAndSourceId(sourceType, sourceId).isPresent();
     }
 
     private void requireMember(java.util.UUID dietId, java.util.UUID userId) {

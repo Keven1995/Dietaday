@@ -1,15 +1,25 @@
 import { useEffect, useState } from 'react'
 import { api, getErrorMessage, isDemoMode } from '../lib/api'
+import { COMPETITIVE_RANKING_INVALIDATED_EVENT } from '../lib/competitiveFeedback'
 import { useAuth } from '../state/AuthContext'
-import { useDiets } from '../state/DietContext'
+import { useCompetitiveMode } from './useCompetitiveMode'
 import type { RankingDetails, RankingResponse } from '../types'
 
 export function useCompetitiveRanking(page = 0, size = 20) {
   const { token, user } = useAuth()
-  const { activeDiet } = useDiets()
+  const { activeDiet, enabled: competitive } = useCompetitiveMode()
   const [data, setData] = useState<{ ranking: RankingResponse | null; details: RankingDetails | null; loading: boolean; error: string }>({ ranking: null, details: null, loading: false, error: '' })
   const [revision, setRevision] = useState(0)
-  const competitive = Boolean(activeDiet?.competitiveMode)
+
+  useEffect(() => {
+    const handleInvalidation = (event: Event) => {
+      const detail = (event as CustomEvent<{ dietId: string }>).detail
+      if (detail.dietId === activeDiet?.id) setRevision((current) => current + 1)
+    }
+
+    window.addEventListener(COMPETITIVE_RANKING_INVALIDATED_EVENT, handleInvalidation)
+    return () => window.removeEventListener(COMPETITIVE_RANKING_INVALIDATED_EVENT, handleInvalidation)
+  }, [activeDiet?.id])
 
   useEffect(() => {
     if (!activeDiet || !competitive || !user || (!token && !isDemoMode)) {

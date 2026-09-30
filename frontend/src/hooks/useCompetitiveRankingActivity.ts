@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, isDemoMode } from '../lib/api'
+import { useCompetitiveMode } from './useCompetitiveMode'
 import { useAuth } from '../state/AuthContext'
-import { useDiets } from '../state/DietContext'
 import type { RankingActivity } from '../types'
 
 const POLL_INTERVAL_MS = 5_000
@@ -12,12 +12,12 @@ function seenKey(userId: string, dietId: string) {
 
 export function useCompetitiveRankingActivity() {
   const { token, user } = useAuth()
-  const { activeDiet } = useDiets()
+  const { activeDiet, enabled } = useCompetitiveMode()
   const [activity, setActivity] = useState<RankingActivity | null>(null)
   const [seenEventId, setSeenEventId] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!activeDiet?.competitiveMode || !user || (!token && !isDemoMode)) {
+    if (!enabled || !activeDiet || !user || (!token && !isDemoMode)) {
       setActivity(null)
       setSeenEventId(null)
       return
@@ -48,7 +48,7 @@ export function useCompetitiveRankingActivity() {
       controller?.abort()
       window.clearInterval(timer)
     }
-  }, [activeDiet?.competitiveMode, activeDiet?.id, token, user?.id])
+  }, [activeDiet?.id, enabled, token, user?.id])
 
   function acknowledge() {
     if (!user || !activeDiet || !activity?.eventId) return

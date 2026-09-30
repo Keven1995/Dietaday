@@ -3,11 +3,12 @@ import { useEffect, useEffectEvent, useRef, useState, type FormEvent } from 'rea
 import { api, getErrorMessage, isDemoMode } from '../lib/api'
 import { chronologicalComments, commentPath, commentReactionPath, commentsPath, commentsResourceKey, removeComment, replaceComment } from '../lib/comments'
 import { mealTime } from '../lib/date'
-import { optimisticReactions } from '../lib/mealReactions'
+import { nextReactionEmoji, optimisticReactions } from '../lib/mealReactions'
 import { readCachedResource, writeCachedResource } from '../lib/resourceCache'
 import { createUuid } from '../lib/uuid'
 import { useAuth } from '../state/AuthContext'
 import type { Meal, MealComment, MealReaction } from '../types'
+import { FloatingEmoji } from './motion/FloatingEmoji'
 import { ReactionPicker } from './ReactionPicker'
 
 type CommentsModalProps = {
@@ -32,6 +33,7 @@ export function CommentsModal({ dietId, meal, highlightedCommentId, onClose, onC
   const [editDraft, setEditDraft] = useState('')
   const [processingIds, setProcessingIds] = useState<Set<string>>(() => new Set())
   const [pickerCommentId, setPickerCommentId] = useState<string | null>(null)
+  const [floatingReaction, setFloatingReaction] = useState<{ commentId: string; emoji: string; key: number } | null>(null)
   const [online, setOnline] = useState(() => navigator.onLine)
   const dialogRef = useRef<HTMLElement>(null)
   const titleRef = useRef<HTMLHeadingElement>(null)
@@ -222,7 +224,7 @@ export function CommentsModal({ dietId, meal, highlightedCommentId, onClose, onC
   async function react(comment: MealComment, emoji: string) {
     if (!token || !user || !canWrite || meal.authorId !== user.id || comment.authorId === user.id || processingIds.has(comment.id)) return
     const ownReaction = comment.reactions.find((reaction) => reaction.reactedByMe)?.emoji
-    const nextEmoji = ownReaction === emoji ? null : emoji
+    const nextEmoji = nextReactionEmoji(ownReaction, emoji)
     const optimistic = optimisticReactions(comment.reactions, nextEmoji)
     mutationRevisionRef.current += 1
     setPickerCommentId(null)
@@ -233,6 +235,7 @@ export function CommentsModal({ dietId, meal, highlightedCommentId, onClose, onC
         method: nextEmoji ? 'PUT' : 'DELETE', token, body: nextEmoji ? JSON.stringify({ emoji: nextEmoji }) : undefined,
       })
       updateComments((current) => replaceComment(current, { ...comment, reactions: result.reactions }))
+      if (nextEmoji) setFloatingReaction({ commentId: comment.id, emoji: nextEmoji, key: Date.now() })
     } catch (reactionError) {
       updateComments((current) => replaceComment(current, comment))
       setError(getErrorMessage(reactionError, 'Não foi possível salvar sua reação.'))
@@ -263,10 +266,11 @@ export function CommentsModal({ dietId, meal, highlightedCommentId, onClose, onC
                   <div className="comment-edit"><textarea aria-label="Editar comentário" maxLength={1000} rows={3} value={editDraft} onChange={(event) => setEditDraft(event.target.value)} disabled={!canWrite || processing} /><div><button type="button" className="button ghost" onClick={() => setEditingId(null)}>Cancelar</button><button type="button" className="button" disabled={!editDraft.trim() || processing} onClick={() => void saveEdit(comment)}>{processing && <LoaderCircle className="spin" />} Salvar</button></div></div>
                 ) : <p>{comment.content}</p>}
                 <div className="comment-footer">
-                  <div className="comment-reactions" aria-label="Reações do comentário">
-                    {comment.reactions.map((reaction) => <button type="button" className={`reaction-pill${reaction.reactedByMe ? ' selected' : ''}`} key={reaction.emoji} disabled={!canReact || processing} aria-label={`${reaction.emoji}, ${reaction.count} ${reaction.count === 1 ? 'reação' : 'reações'}${reaction.reactedByMe ? ', sua reação' : ''}`} onClick={() => void react(comment, reaction.emoji)}><span>{reaction.emoji}</span><b>{reaction.count}</b></button>)}
-                    {canReact && <button type="button" className="add-reaction" disabled={processing} aria-label="Adicionar reação ao comentário" aria-expanded={pickerCommentId === comment.id} onClick={() => setPickerCommentId(comment.id)}>{processing ? <LoaderCircle className="spin" /> : <SmilePlus />}</button>}
-                  </div>
+                   <div className="comment-reactions" aria-label="Reações do comentário">
+                     {comment.reactions.map((reaction) => <button type="button" className={`reaction-pill${reaction.reactedByMe ? ' selected' : ''}`} key={reaction.emoji} disabled={!canReact || processing} aria-label={`${reaction.emoji}, ${reaction.count} ${reaction.count === 1 ? 'reação' : 'reações'}${reaction.reactedByMe ? ', sua reação' : ''}`} onClick={() => void react(comment, reaction.emoji)}><span>{reaction.emoji}</span><b>{reaction.count}</b></button>)}
+                     {canReact && <button type="button" className="add-reaction" disabled={processing} aria-label="Adicionar reação ao comentário" aria-expanded={pickerCommentId === comment.id} onClick={() => setPickerCommentId(comment.id)}>{processing ? <LoaderCircle className="spin" /> : <SmilePlus />}</button>}
+                     {floatingReaction?.commentId === comment.id && <FloatingEmoji emoji={floatingReaction.emoji} onComplete={() => setFloatingReaction(null)} />}
+                   </div>
                   {isAuthor && editingId !== comment.id && <div className="comment-actions"><button type="button" disabled={!canWrite || processing} onClick={() => beginEdit(comment)} aria-label="Editar comentário"><Pencil /></button><button type="button" disabled={!canWrite || processing} onClick={() => void deleteComment(comment)} aria-label="Excluir comentário"><Trash2 /></button></div>}
                 </div>
                 {pickerCommentId === comment.id && <ReactionPicker onClose={() => setPickerCommentId(null)} onSelect={(emoji) => void react(comment, emoji)} />}

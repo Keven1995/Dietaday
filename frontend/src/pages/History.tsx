@@ -1,15 +1,22 @@
 import { CalendarDays, ChevronLeft, ChevronRight, Coffee, LoaderCircle, MessageCircle, Pencil, RotateCcw, SmilePlus, Trash2, Moon, Sun } from 'lucide-react'
+import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { CommentsModal } from '../components/CommentsModal'
+import { AnimatedCard } from '../components/motion/AnimatedCard'
+import { AnimatedError } from '../components/motion/AnimatedError'
+import { FloatingEmoji } from '../components/motion/FloatingEmoji'
+import { SkeletonList } from '../components/motion/SkeletonCard'
 import { ReactionPicker } from '../components/ReactionPicker'
 import { EmptyState, PageTitle } from '../components/Ui'
+import { MOTION_DURATION, MOTION_OFFSET } from '../constants/motion'
 import { initialMeals } from '../data'
 import { useDietResource } from '../hooks/useDietResource'
+import { useReducedMotionPreference } from '../hooks/useReducedMotionPreference'
 import { api, getErrorMessage, isDemoMode } from '../lib/api'
 import { mealCommentCount } from '../lib/comments'
 import { localDateKey, mealDateKey, mealTime, parseLocalDate } from '../lib/date'
-import { optimisticReactions } from '../lib/mealReactions'
+import { nextReactionEmoji, optimisticReactions } from '../lib/mealReactions'
 import { dietResourceKey, expireCachedResource, readCachedResource, writeCachedResource } from '../lib/resourceCache'
 import { useAuth } from '../state/AuthContext'
 import { useDiets } from '../state/DietContext'
@@ -18,6 +25,7 @@ import type { Meal, MealReaction } from '../types'
 
 const NO_MEALS: Meal[] = []
 const MEAL_ICONS = [Coffee, Sun, Moon]
+type HistoryDirection = -1 | 0 | 1
 
 function QueuedPhoto({ photo, description }: { photo: Blob; description: string }) {
   const [source, setSource] = useState('')
@@ -39,6 +47,9 @@ export function History() {
   const [reactionOverrides, setReactionOverrides] = useState<Record<string, MealReaction[]>>({})
   const [commentsMealId, setCommentsMealId] = useState<string | null>(null)
   const [reactionError, setReactionError] = useState('')
+  const [floatingReaction, setFloatingReaction] = useState<{ mealId: string; emoji: string; key: number } | null>(null)
+  const [dayDirection, setDayDirection] = useState<HistoryDirection>(0)
+  const reducedMotion = useReducedMotionPreference()
   const linkedMealRefreshRef = useRef('')
   const [searchParams, setSearchParams] = useSearchParams()
   const mealsResource = useDietResource('meals', initialMeals, NO_MEALS, 'Não foi possível carregar o histórico.')
@@ -61,6 +72,8 @@ export function History() {
   function changeDay(offset: number) {
     const next = parseLocalDate(date)
     next.setDate(next.getDate() + offset)
+    setFloatingReaction(null)
+    setDayDirection(offset < 0 ? -1 : 1)
     setDate(localDateKey(next))
   }
   const activeOfflineMeals = activeDiet
@@ -153,7 +166,7 @@ export function History() {
     if (!activeDiet || !token || !user || reactingMealIds.has(meal.id) || meal.authorId === user.id || meal.syncStatus || isDemoMode) return
     const previous = meal.reactions ?? []
     const ownReaction = previous.find((reaction) => reaction.reactedByMe)?.emoji
-    const nextEmoji = ownReaction === selectedEmoji ? null : selectedEmoji
+    const nextEmoji = nextReactionEmoji(ownReaction, selectedEmoji)
     setPickerMealId(null)
     setReactionError('')
     setReactingMealIds((current) => new Set(current).add(meal.id))
@@ -166,6 +179,7 @@ export function History() {
       })
       writeConfirmedReactions(meal.id, result.reactions)
       setReactionOverride(meal.id, null)
+      if (nextEmoji) setFloatingReaction({ mealId: meal.id, emoji: nextEmoji, key: Date.now() })
     } catch (reactionRequestError) {
       setReactionOverride(meal.id, null)
       setReactionError(getErrorMessage(reactionRequestError, 'Não foi possível salvar sua reação.'))
@@ -181,8 +195,8 @@ export function History() {
   return (
     <div className="page history-page">
       <PageTitle eyebrow="REGISTROS" title="Histórico por dia" />
-      {error && <div className="error-message" role="alert">{error}</div>}
-      {reactionError && <div className="error-message" role="alert">{reactionError}</div>}
+       {error && <AnimatedError>{error}</AnimatedError>}
+       {reactionError && <AnimatedError>{reactionError}</AnimatedError>}
       {failedOperations.length > 0 && (
         <section className="sync-failures" aria-labelledby="sync-failures-title">
           <div><span>SINCRONIZAÇÃO</span><h2 id="sync-failures-title">Registros que precisam de atenção</h2></div>
@@ -203,12 +217,17 @@ export function History() {
         <div><CalendarDays /><span>{parseLocalDate(date).toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</span></div>
         <button type="button" onClick={() => changeDay(1)} aria-label="Próximo dia"><ChevronRight /></button>
       </div>
-      {!activeDiet ? (
-        <EmptyState icon={<CalendarDays />} title="Nenhuma dieta selecionada" text="Selecione uma dieta para consultar o histórico." />
-      ) : loading && !meals.length ? (
-        <p className="loading-text">Carregando histórico...</p>
-      ) : meals.length ? (
-        <div className="timeline">
+       {!activeDiet ? (
+         <EmptyState icon={<CalendarDays />} title="Nenhuma dieta selecionada" text="Selecione uma dieta para consultar o histórico." />
+        ) : (
+          <AnimatePresence initial={false} mode="wait">
+            {loading && !meals.length ? (
+              <motion.div key={`${date}-loading`} className="history-day-content" initial={reducedMotion ? false : { opacity: 0, x: dayDirection * MOTION_OFFSET }} animate={{ opacity: 1, x: 0 }} exit={reducedMotion ? undefined : { opacity: 0, x: -dayDirection * MOTION_OFFSET }} transition={{ duration: reducedMotion ? 0 : MOTION_DURATION.normal / 1000 }}>
+                <SkeletonList count={3} />
+              </motion.div>
+            ) : meals.length ? (
+              <motion.div key={date} className="history-day-content" initial={reducedMotion ? false : { opacity: 0, x: dayDirection * MOTION_OFFSET }} animate={{ opacity: 1, x: 0 }} exit={reducedMotion ? undefined : { opacity: 0, x: -dayDirection * MOTION_OFFSET }} transition={{ duration: reducedMotion ? 0 : MOTION_DURATION.normal / 1000 }}>
+         <div className="timeline">
           {meals.map((meal, mealIndex) => {
             const Icon = MEAL_ICONS[mealIndex] ?? Sun
             const queuedOperation = operations.find((operation) => operation.id === meal.operationId)
@@ -216,7 +235,8 @@ export function History() {
               <article key={meal.id}>
                 <time className="timeline-time" dateTime={meal.createdAt}>{mealTime(meal.createdAt)}</time>
                 <div className="timeline-dot" />
-                <div className="timeline-card" tabIndex={-1}>
+                <AnimatedCard delay={mealIndex} className="timeline-card-motion">
+                 <div className="timeline-card" tabIndex={-1}>
                   {meal.photoUrl
                     ? <img className="meal-thumb" src={meal.photoUrl} alt={`Refeição: ${meal.description}`} />
                     : queuedOperation?.photo
@@ -228,16 +248,19 @@ export function History() {
                     <div className="meal-engagement">
                       {(meal.reactions?.length || (!meal.syncStatus && meal.authorId !== user?.id && !isDemoMode)) && <div className="meal-reactions" aria-label="Reações da refeição">
                         {meal.reactions?.map((reaction) => (
-                          <button
-                            type="button"
-                            className={`reaction-pill${reaction.reactedByMe ? ' selected' : ''}`}
-                            key={reaction.emoji}
-                            disabled={meal.authorId === user?.id || reactingMealIds.has(meal.id)}
+                           <motion.button
+                             type="button"
+                             className={`reaction-pill${reaction.reactedByMe ? ' selected' : ''}`}
+                             key={reaction.emoji}
+                             layout={!reducedMotion ? 'position' : false}
+                             whileTap={reducedMotion ? undefined : { scale: 0.9 }}
+                             transition={{ duration: reducedMotion ? 0 : MOTION_DURATION.fast / 1000 }}
+                             disabled={meal.authorId === user?.id || reactingMealIds.has(meal.id)}
                             aria-label={`${reaction.emoji}, ${reaction.count} ${reaction.count === 1 ? 'reação' : 'reações'}${reaction.reactedByMe ? ', sua reação' : ''}`}
                             onClick={() => void react(meal, reaction.emoji)}
                           >
                             <span>{reaction.emoji}</span><b>{reaction.count}</b>
-                          </button>
+                           </motion.button>
                         ))}
                         {!meal.syncStatus && meal.authorId !== user?.id && !isDemoMode && (
                           <button
@@ -251,17 +274,26 @@ export function History() {
                             {reactingMealIds.has(meal.id) ? <LoaderCircle className="spin" /> : <SmilePlus />}
                           </button>
                         )}
-                      </div>}
+                       </div>}
+                       {floatingReaction?.mealId === meal.id && <FloatingEmoji emoji={floatingReaction.emoji} onComplete={() => setFloatingReaction(null)} />}
                       <button type="button" className="meal-comments-button" disabled={Boolean(meal.syncStatus)} aria-label={`Abrir comentários, ${mealCommentCount(meal)} ${mealCommentCount(meal) === 1 ? 'comentário' : 'comentários'}`} onClick={() => setCommentsMealId(meal.id)}><MessageCircle /><b>{mealCommentCount(meal)}</b></button>
                     </div>
-                    {pickerMealId === meal.id && <ReactionPicker onClose={() => setPickerMealId(null)} onSelect={(emoji) => void react(meal, emoji)} />}
+                   {pickerMealId === meal.id && <ReactionPicker onClose={() => setPickerMealId(null)} onSelect={(emoji) => void react(meal, emoji)} />}
                   </div>
-                </div>
+                 </div>
+                </AnimatedCard>
               </article>
             )
           })}
-        </div>
-      ) : <EmptyState icon={<CalendarDays />} title="Nenhuma refeição neste dia" text="Seus novos registros aparecerão aqui em ordem de horário." />}
+         </div>
+              </motion.div>
+            ) : (
+              <motion.div key={`${date}-empty`} className="history-day-content" initial={reducedMotion ? false : { opacity: 0, x: dayDirection * MOTION_OFFSET }} animate={{ opacity: 1, x: 0 }} exit={reducedMotion ? undefined : { opacity: 0, x: -dayDirection * MOTION_OFFSET }} transition={{ duration: reducedMotion ? 0 : MOTION_DURATION.normal / 1000 }}>
+                <EmptyState icon={<CalendarDays />} title="Nenhuma refeição neste dia" text="Seus novos registros aparecerão aqui em ordem de horário." />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        )}
       {activeDiet && commentsMeal && <CommentsModal key={`${activeDiet.id}:${commentsMeal.id}`} dietId={activeDiet.id} meal={commentsMeal} highlightedCommentId={searchParams.get('commentId')} onClose={closeComments} onCommentCountChange={(delta) => changeCommentCount(commentsMeal, delta)} onCommentsSettled={settleCommentCount} />}
     </div>
   )

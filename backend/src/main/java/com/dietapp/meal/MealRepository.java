@@ -12,6 +12,7 @@ import jakarta.persistence.LockModeType;
 import java.time.LocalDate;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.List;
 
 public interface MealRepository extends JpaRepository<Meal, UUID> {
     @EntityGraph(attributePaths = "author")
@@ -24,8 +25,19 @@ public interface MealRepository extends JpaRepository<Meal, UUID> {
     @EntityGraph(attributePaths = "author")
     Optional<Meal> findByIdAndDietId(UUID id, UUID dietId);
 
+    @Query("select m.mealDate as mealDate, m.mealType as mealType from Meal m " +
+           "where m.diet.id = :dietId and m.author.id = :userId " +
+           "and m.mealDate between :fromDate and :toDate order by m.mealDate asc")
+    List<DailyMealEntry> findDailyMealEntries(@Param("dietId") UUID dietId, @Param("userId") UUID userId,
+                                               @Param("fromDate") LocalDate fromDate, @Param("toDate") LocalDate toDate);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @EntityGraph(attributePaths = "author")
     @Query("select m from Meal m where m.id = :id and m.diet.id = :dietId")
     Optional<Meal> findForUpdateByIdAndDietId(@Param("id") UUID id, @Param("dietId") UUID dietId);
+
+    interface DailyMealEntry {
+        LocalDate getMealDate();
+        String getMealType();
+    }
 }

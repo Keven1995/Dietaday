@@ -1,5 +1,9 @@
 import type { MealReaction } from '../types'
 
+export function nextReactionEmoji(currentEmoji: string | undefined, selectedEmoji: string) {
+  return currentEmoji === selectedEmoji ? null : selectedEmoji
+}
+
 export function optimisticReactions(current: MealReaction[], nextEmoji: string | null) {
   const reactions = current
     .map((reaction) => reaction.reactedByMe

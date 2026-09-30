@@ -46,8 +46,9 @@ public class MealController {
         long startedAt = System.currentTimeMillis();
         log.info("meal_create_started dietId={} operationId={} hasPhoto={}", dietId, operationId, request.photoUrl() != null);
         try {
-            MealResponse result = response(service.create(dietId, request.mealType(), request.description(),
-                    request.mealDate(), request.photoUrl(), operationId));
+            MealService.MealCreationResult created = service.create(dietId, request.mealType(), request.description(),
+                    request.mealDate(), request.photoUrl(), operationId);
+            MealResponse result = response(created.meal(), created.pointsEarned());
             log.info("meal_create_completed dietId={} operationId={} durationMs={}",
                     dietId, operationId, System.currentTimeMillis() - startedAt);
             return result;
@@ -108,6 +109,12 @@ public class MealController {
         return MealResponse.from(meal, reactions.summariesFor(List.of(meal))
                 .getOrDefault(meal.getId(), List.of()),
                 comments.countsFor(List.of(meal)).getOrDefault(meal.getId(), 0L));
+    }
+
+    private MealResponse response(Meal meal, int pointsEarned) {
+        return MealResponse.from(meal, reactions.summariesFor(List.of(meal))
+                .getOrDefault(meal.getId(), List.of()),
+                comments.countsFor(List.of(meal)).getOrDefault(meal.getId(), 0L), pointsEarned);
     }
 
 }
