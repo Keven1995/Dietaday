@@ -1,6 +1,6 @@
 import { motion } from 'motion/react'
 import { useEffect, useEffectEvent } from 'react'
-import { MOTION_DURATION } from '../../constants/motion'
+import { MOTION_DURATION, MOTION_TIMEOUT } from '../../constants/motion'
 import { useReducedMotionPreference } from '../../hooks/useReducedMotionPreference'
 
 type FloatingPointsProps = {
@@ -13,7 +13,7 @@ export function FloatingPoints({ points, onComplete }: FloatingPointsProps) {
   const complete = useEffectEvent(onComplete)
 
   useEffect(() => {
-    const timer = window.setTimeout(complete, MOTION_DURATION.celebration)
+    const timer = window.setTimeout(complete, MOTION_TIMEOUT.floatingFeedback)
     return () => window.clearTimeout(timer)
   }, [])
 

@@ -1,3 +1,5 @@
+import { MOTION_DELAY } from '../constants/motion'
+
 export type ConfettiVariant = 'daily-goal' | 'hydration-goal' | 'streak' | 'ranking-finalized'
 
 type ConfettiConfig = {
@@ -37,7 +39,7 @@ export function createConfettiPieces(variant: ConfettiVariant): ConfettiPiece[] 
       x: direction * (12 + (index * 17) % config.spread),
       y: config.fall + (index % 5) * 9,
       rotate: direction * (90 + (index * 47) % 270),
-      delay: (index % 8) * 0.035,
+      delay: (index % 8) * MOTION_DELAY.confetti,
       width: 5 + index % 5,
       height: 9 + (index * 3) % 8,
       ribbon: index % 4 === 0,

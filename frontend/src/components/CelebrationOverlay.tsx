@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useEffectEvent } from 'react'
 import { motion } from 'motion/react'
-import { MOTION_DURATION } from '../constants/motion'
+import { MOTION_DURATION, MOTION_TIMEOUT } from '../constants/motion'
 import { useReducedMotionPreference } from '../hooks/useReducedMotionPreference'
 import type { ConfettiVariant } from '../lib/confetti'
 import type { ActiveCelebration } from '../state/CelebrationContext'
@@ -39,7 +39,7 @@ export function CelebrationOverlay({ celebration, onDismiss }: CelebrationOverla
 
   useEffect(() => {
     if (!celebration) return
-    const timer = window.setTimeout(dismiss, MOTION_DURATION.celebration + 800)
+    const timer = window.setTimeout(dismiss, MOTION_TIMEOUT.celebrationDismiss)
     return () => window.clearTimeout(timer)
   }, [celebration?.key])
 
