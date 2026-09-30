@@ -4,6 +4,8 @@ import { MOTION_DURATION } from '../../constants/motion'
 import { useCelebration } from '../../state/CelebrationContext'
 import { AnimatedCounter } from './AnimatedCounter'
 import { useReducedMotionPreference } from '../../hooks/useReducedMotionPreference'
+import { useAuth } from '../../state/AuthContext'
+import { reportUxEvent } from '../../lib/uxTelemetry'
 
 type StreakAnimationProps = {
   days: number
@@ -14,6 +16,7 @@ type StreakAnimationProps = {
 export function StreakAnimation({ days, dietId, eventDate }: StreakAnimationProps) {
   const reducedMotion = useReducedMotionPreference()
   const { celebrate } = useCelebration()
+  const { token } = useAuth()
   const celebrateEvent = useEffectEvent(celebrate)
   const previousDays = useRef<{ dietId: string; days: number } | null>(null)
   const [bumping, setBumping] = useState(false)
@@ -24,9 +27,15 @@ export function StreakAnimation({ days, dietId, eventDate }: StreakAnimationProp
     if (previous === null || previous.dietId !== dietId || days <= previous.days) return
     setBumping(true)
     celebrateEvent({ type: 'STREAK_INCREMENTED', id: `${dietId}:${eventDate}:${days}` })
+    void reportUxEvent(token, {
+      eventName: 'streak_incremented',
+      eventId: `streak:${dietId}:${eventDate}:${days}`,
+      dietId,
+      details: { days },
+    })
     const timer = window.setTimeout(() => setBumping(false), MOTION_DURATION.celebration)
     return () => window.clearTimeout(timer)
-  }, [days, dietId, eventDate])
+  }, [days, dietId, eventDate, token])
 
   return <motion.div className="streak-card card" animate={reducedMotion || !bumping ? { scale: 1 } : { scale: [1, 1.08, 1] }} transition={{ duration: reducedMotion ? 0 : MOTION_DURATION.celebration / 1000 }}>
     <span className="streak-flame" aria-hidden="true">🔥</span>

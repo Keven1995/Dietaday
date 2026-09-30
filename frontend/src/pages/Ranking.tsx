@@ -13,7 +13,9 @@ import { useCompetitiveMode } from '../hooks/useCompetitiveMode'
 import { useReducedMotionPreference } from '../hooks/useReducedMotionPreference'
 import { parseLocalDate } from '../lib/date'
 import { getRankingMovement, type RankingMovementDirection } from '../lib/rankingMovement'
+import { createUxEventId, reportUxEvent } from '../lib/uxTelemetry'
 import { useCelebration } from '../state/CelebrationContext'
+import { useAuth } from '../state/AuthContext'
 import type { RankingParticipant } from '../types'
 
 function date(value: string | null) {
@@ -47,6 +49,7 @@ export function Ranking() {
   const reducedMotion = useReducedMotionPreference()
   const { ranking, details, loading, error, reload } = useCompetitiveRanking(page)
   const { celebrate } = useCelebration()
+  const { token } = useAuth()
   const celebrateFinal = useEffectEvent(celebrate)
 
   useEffect(() => {
@@ -56,8 +59,16 @@ export function Ranking() {
       ? getRankingMovement(previous.position, ranking.currentUser.position)
       : null
     setMovement(direction ? { direction, position: ranking.currentUser.position } : null)
+    if (direction) {
+      void reportUxEvent(token, {
+        eventName: 'ranking_position_changed',
+        eventId: createUxEventId(`ranking:${activeDiet.id}`),
+        dietId: activeDiet.id,
+        details: { direction, position: ranking.currentUser.position },
+      })
+    }
     previousPosition.current = { dietId: activeDiet.id, position: ranking.currentUser.position }
-  }, [activeDiet?.id, ranking?.currentUser.position, ranking?.dietId])
+  }, [activeDiet?.id, ranking?.currentUser.position, ranking?.dietId, token])
 
   useEffect(() => {
     if (!ranking || ranking.status !== 'FINALIZED' || !ranking.podium) return

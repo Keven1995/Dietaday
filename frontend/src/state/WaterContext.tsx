@@ -3,6 +3,7 @@ import { getErrorMessage, isDemoMode } from '../lib/api'
 import { addWaterCheck, getWaterToday, readCachedWater, updateWaterGoal, WATER_CACHE_RESOURCE } from '../lib/water'
 import { writeCachedResource } from '../lib/resourceCache'
 import { emitCompetitivePoints, emitCompetitiveRankingInvalidated } from '../lib/competitiveFeedback'
+import { reportUxEvent } from '../lib/uxTelemetry'
 import { useCompetitiveMode } from '../hooks/useCompetitiveMode'
 import { useAuth } from './AuthContext'
 import type { WaterToday } from '../types'
@@ -21,7 +22,7 @@ const WaterContext = createContext<WaterContextValue | null>(null)
 
 export function WaterProvider({ children }: { children: ReactNode }) {
   const { user, token } = useAuth()
-  const { dietId: competitiveDietId } = useCompetitiveMode()
+  const { activeDiet, dietId: competitiveDietId } = useCompetitiveMode()
   const cacheResource = competitiveDietId ? `${WATER_CACHE_RESOURCE}:${competitiveDietId}` : WATER_CACHE_RESOURCE
   const [water, setWater] = useState<WaterToday | null>(() => user ? readCachedWater(user.id, competitiveDietId) : null)
   const [loading, setLoading] = useState(false)
@@ -82,6 +83,14 @@ export function WaterProvider({ children }: { children: ReactNode }) {
           points: next.pointsEarned ?? 0,
           source: 'WATER_CHECK',
           eventId: next.checks[next.checks.length - 1]?.id,
+        })
+      }
+      if (activeDiet) {
+        void reportUxEvent(token, {
+          eventName: 'water_logged',
+          eventId: `water:${next.checks[next.checks.length - 1]?.id ?? `${next.date}:${next.consumedMl}`}`,
+          dietId: activeDiet.id,
+          details: { amountMl, consumedMl: next.consumedMl, pointsEarned: next.pointsEarned ?? 0 },
         })
       }
       return next
