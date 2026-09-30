@@ -7,7 +7,7 @@ import { AnimatedError } from '../components/motion/AnimatedError'
 import { RankingMovement } from '../components/motion/RankingMovement'
 import { SkeletonList } from '../components/motion/SkeletonCard'
 import { EmptyState, PageTitle } from '../components/Ui'
-import { MOTION_DURATION } from '../constants/motion'
+import { MOTION_DURATION, MOTION_STAGGER } from '../constants/motion'
 import { useCompetitiveRanking } from '../hooks/useCompetitiveRanking'
 import { useCompetitiveMode } from '../hooks/useCompetitiveMode'
 import { useReducedMotionPreference } from '../hooks/useReducedMotionPreference'
@@ -37,7 +37,7 @@ function Podium({ participants, podium, reducedMotion }: { participants: Ranking
     initial={reducedMotion ? false : { opacity: 0, y: 14 }}
     animate={{ opacity: 1, y: 0 }}
     whileHover={reducedMotion ? undefined : { y: -4 }}
-    transition={{ duration: reducedMotion ? 0 : MOTION_DURATION.normal / 1000, delay: reducedMotion ? 0 : index * 0.06, ease: 'easeOut' }}
+    transition={{ duration: reducedMotion ? 0 : MOTION_DURATION.normal / 1000, delay: reducedMotion ? 0 : index * MOTION_STAGGER.normal, ease: 'easeOut' }}
   ><i>{participant.position}</i><strong>{participant.displayName}</strong><span><AnimatedCounter value={participant.officialPoints} suffix=" pts" /></span></motion.div>)}</div>
 }
 

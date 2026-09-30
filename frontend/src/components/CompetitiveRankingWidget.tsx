@@ -5,18 +5,19 @@ import { useReducedMotionPreference } from '../hooks/useReducedMotionPreference'
 import { useCompetitiveRanking } from '../hooks/useCompetitiveRanking'
 import { useCompetitiveRankingActivity } from '../hooks/useCompetitiveRankingActivity'
 import { useCompetitiveMode } from '../hooks/useCompetitiveMode'
+import { MOTION_DURATION, MOTION_STAGGER } from '../constants/motion'
 
 function WaterDrops() {
   const reducedMotion = useReducedMotionPreference()
   const animate = reducedMotion ? { opacity: 0.85 } : { y: [-8, 7], opacity: [0, 1, 0] }
   const transition = reducedMotion
     ? { duration: 0 }
-    : { duration: 0.9, repeat: Infinity, ease: 'easeInOut' as const }
+    : { duration: MOTION_DURATION.waterDrop / 1000, repeat: Infinity, ease: 'easeInOut' as const }
 
   return <span className="competitive-water-drops" aria-hidden="true">
     <motion.span className="competitive-water-drop competitive-water-drop-one" animate={animate} transition={transition} />
-    <motion.span className="competitive-water-drop competitive-water-drop-two" animate={animate} transition={{ ...transition, delay: 0.3 }} />
-    <motion.span className="competitive-water-drop competitive-water-drop-three" animate={animate} transition={{ ...transition, delay: 0.6 }} />
+    <motion.span className="competitive-water-drop competitive-water-drop-two" animate={animate} transition={{ ...transition, delay: MOTION_STAGGER.waterDrop }} />
+    <motion.span className="competitive-water-drop competitive-water-drop-three" animate={animate} transition={{ ...transition, delay: MOTION_STAGGER.waterDrop * 2 }} />
   </span>
 }
 

@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowUp } from 'lucide-react'
 import { motion } from 'motion/react'
-import { MOTION_DURATION, MOTION_SPRING } from '../../constants/motion'
+import { MOTION_SPRING, MOTION_TIMEOUT } from '../../constants/motion'
 import { useReducedMotionPreference } from '../../hooks/useReducedMotionPreference'
 import type { RankingMovementDirection } from '../../lib/rankingMovement'
 import { useEffect, useEffectEvent } from 'react'
@@ -17,7 +17,7 @@ export function RankingMovement({ direction, position, onComplete }: RankingMove
 
   useEffect(() => {
     if (!direction) return
-    const timer = window.setTimeout(complete, MOTION_DURATION.celebration + 500)
+    const timer = window.setTimeout(complete, MOTION_TIMEOUT.rankingMovement)
     return () => window.clearTimeout(timer)
   }, [direction])
 
