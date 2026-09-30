@@ -91,7 +91,7 @@ public class RequestRateLimitFilter extends OncePerRequestFilter {
                 case "/api/auth/login" -> AUTH_LOGIN;
                 case "/api/uploads/signature" -> UPLOAD_SIGNATURE;
                 case "/api/push/subscriptions" -> PUSH_SUBSCRIPTION;
-                case "/api/telemetry/sync" -> TELEMETRY;
+                case "/api/telemetry/sync", "/api/telemetry/ux" -> TELEMETRY;
                 case "/api/push/test-water" -> PUSH_TEST;
                 default -> null;
             };
