@@ -39,6 +39,55 @@ class UxEventServiceTest {
     }
 
     @Test
+    void recordsAuthenticatedFeatureHintWithoutDietContext() {
+        when(currentUser.id()).thenReturn(userId);
+        when(events.existsByEventIdAndUserId("hint:exposure-1", userId)).thenReturn(false);
+
+        assertDoesNotThrow(() -> service.record(new UxEventRequest(
+                "feature_hint_viewed", "hint:exposure-1", null,
+                Map.of("campaign", "discover_hydration", "version", 1,
+                        "page", "/", "exposureId", "00000000-0000-0000-0000-000000000001"))));
+
+        verify(events).save(any(UxEvent.class));
+        verify(members, never()).existsByDietIdAndUserId(any(), any());
+    }
+
+    @Test
+    void requiresContextualDetailsAndRejectsUnapprovedFieldsForDiscoveryEvents() {
+        assertThrows(BadRequestException.class, () -> service.record(new UxEventRequest(
+                "feature_hint_viewed", "hint:missing", null, Map.of("campaign", "discover_hydration"))));
+        assertThrows(BadRequestException.class, () -> service.record(new UxEventRequest(
+                "feature_hint_viewed", "hint:pii", null,
+                Map.of("campaign", "discover_hydration", "version", 1, "page", "/",
+                        "exposureId", "exposure-2", "email", "person@example.com"))));
+    }
+
+    @Test
+    void recordsMealFormEventsWithoutDietWhenSessionIdIsPresent() {
+        when(currentUser.id()).thenReturn(userId);
+
+        service.record(new UxEventRequest("meal_form_started", "form:started", null,
+                Map.of("formSessionId", "00000000-0000-0000-0000-000000000001")));
+        service.record(new UxEventRequest("meal_saved_locally", "form:saved", null,
+                Map.of("formSessionId", "00000000-0000-0000-0000-000000000001")));
+
+        verify(events, org.mockito.Mockito.times(2)).save(any(UxEvent.class));
+        verify(members, never()).existsByDietIdAndUserId(any(), any());
+    }
+
+    @Test
+    void rejectsMealFormEventsWithoutSessionId() {
+        assertThrows(BadRequestException.class, () -> service.record(
+                new UxEventRequest("meal_form_started", "form:missing", null, Map.of())));
+    }
+
+    @Test
+    void requiresDietForDomainEvents() {
+        assertThrows(BadRequestException.class, () -> service.record(new UxEventRequest(
+                "meal_created", "meal:no-diet", null, Map.of())));
+    }
+
+    @Test
     void ignoresDuplicateEventForSameUser() {
         when(currentUser.id()).thenReturn(userId);
         when(members.existsByDietIdAndUserId(dietId, userId)).thenReturn(true);

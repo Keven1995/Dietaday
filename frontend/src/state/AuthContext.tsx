@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { api, isDemoMode, TOKEN_REFRESHED_EVENT, UNAUTHORIZED_EVENT } from '../lib/api'
+import { clearFeatureDiscoverySession } from '../lib/featureDiscoveryStorage'
 import { clearUserCache } from '../lib/resourceCache'
 import type { AuthResponse, RegisterRequest, UpdateProfileRequest, User, UserSex } from '../types'
 import { createUuid } from '../lib/uuid'
@@ -108,7 +109,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   function logout() {
     if (!isDemoMode) void api('/auth/logout', { method: 'POST', skipRefresh: true }).catch(() => undefined)
-    if (user) clearUserCache(user.id)
+    if (user) {
+      clearUserCache(user.id)
+      clearFeatureDiscoverySession(user.id)
+    }
     localStorage.removeItem('Dietaday_user')
     localStorage.removeItem('Dietaday_active_diet')
     setToken(null)

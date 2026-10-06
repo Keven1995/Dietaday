@@ -9,13 +9,19 @@ export type UxEventName =
   | 'reaction_created'
   | 'ranking_position_changed'
   | 'streak_incremented'
+  | 'feature_hint_viewed'
+  | 'feature_hint_clicked'
+  | 'feature_hint_dismissed'
+  | 'feature_adopted'
+  | 'meal_form_started'
+  | 'meal_saved_locally'
 
 export type UxEventDetails = Record<string, string | number | boolean | null>
 
 export type UxEvent = {
   eventName: UxEventName
   eventId?: string
-  dietId: string
+  dietId?: string | null
   details?: UxEventDetails
 }
 

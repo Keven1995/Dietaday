@@ -1,0 +1,2 @@
+ALTER TABLE ux_events
+    ALTER COLUMN diet_id DROP NOT NULL;
