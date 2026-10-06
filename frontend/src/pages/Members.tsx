@@ -1,10 +1,11 @@
 import { LogOut, Mail, UserPlus, Users, X } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Button, EmptyState, PageTitle } from '../components/Ui'
 import { initialMembers, leaveDemoDiet } from '../data'
 import { useDietResource } from '../hooks/useDietResource'
 import { api, getErrorMessage, isDemoMode } from '../lib/api'
+import { completeFeatureCampaign } from '../lib/featureDiscoveryTelemetry'
 import { clearDietCache } from '../lib/resourceCache'
 import { useAuth } from '../state/AuthContext'
 import { useDiets } from '../state/DietContext'
@@ -18,6 +19,7 @@ function getInitials(fullName: string) {
 
 export function Members() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { token, user } = useAuth()
   const { activeDiet, reload } = useDiets()
   const [email, setEmail] = useState('')
@@ -35,6 +37,9 @@ export function Members() {
   const leaveTitleRef = useRef<HTMLHeadingElement | null>(null)
   const leavingRef = useRef(false)
   const membersResource = useDietResource('members', initialMembers, NO_MEMBERS, 'Não foi possível carregar os membros.')
+  const discoveryNavigation = typeof location.state === 'object' && location.state !== null
+    ? location.state as { featureDiscoveryCampaignId?: unknown; featureDiscoveryDietId?: unknown }
+    : null
 
   useEffect(() => () => {
     inviteControllerRef.current?.abort()
@@ -92,6 +97,15 @@ export function Members() {
       if (controller.signal.aborted) return
       setMessage(`Convite enviado para ${request.email}.`)
       setEmail('')
+      if (user && discoveryNavigation?.featureDiscoveryCampaignId === 'share_diet'
+          && discoveryNavigation.featureDiscoveryDietId === activeDiet.id) {
+        completeFeatureCampaign(token, user.id, 'share_diet', 1, {
+          dietId: activeDiet.id,
+          eventDietId: activeDiet.id,
+          page: '/membros',
+        })
+        navigate(location.pathname, { replace: true, state: null })
+      }
     } catch (inviteError) {
       if (!controller.signal.aborted) setError(getErrorMessage(inviteError, 'Não foi possível enviar o convite.'))
     } finally {
@@ -156,6 +170,12 @@ export function Members() {
   const currentMember = members.find((member) => member.userId === user?.id)
   const possibleSuccessors = members.filter((member) => member.userId !== user?.id)
   const ownerCannotLeave = currentMember?.role === 'OWNER' && possibleSuccessors.length === 0
+  const selectedSuccessor = possibleSuccessors.find((member) => member.userId === successorId)
+  const leaveDescription = currentMember?.role === 'OWNER'
+    ? selectedSuccessor
+      ? `Ao confirmar, ${selectedSuccessor.fullName} assumirá a responsabilidade. Você perderá acesso à dieta.`
+      : 'Para sair, escolha um membro atual para assumir a responsabilidade. Você perderá acesso à dieta após a transferência.'
+    : 'Ao confirmar, você perderá acesso à dieta. Ela e os registros permanecerão disponíveis aos demais membros.'
 
   return (
     <div className="page">
@@ -192,11 +212,12 @@ export function Members() {
       ) : <EmptyState icon={<Users />} title="Nenhuma dieta selecionada" text="Crie ou selecione uma dieta para gerenciar membros." />}
       {leaveModalOpen && currentMember && (
         <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && closeLeaveModal()}>
-          <div ref={leaveDialogRef} className="modal leave-diet-modal" role="dialog" aria-modal="true" aria-labelledby="leave-diet-title" aria-describedby="leave-diet-description">
+          <div ref={leaveDialogRef} className="modal leave-diet-modal" role="dialog" aria-modal="true" aria-labelledby="leave-diet-title" aria-describedby={activeDiet?.competitiveMode ? 'leave-diet-description leave-diet-points-description' : 'leave-diet-description'}>
             <button type="button" className="close" onClick={closeLeaveModal} disabled={leaving} aria-label="Fechar"><X aria-hidden="true" /></button>
             <LogOut className="leave-diet-icon" aria-hidden="true" />
-            <h2 id="leave-diet-title" ref={leaveTitleRef} tabIndex={-1}>Sair da dieta</h2>
-            <p id="leave-diet-description">Tem certeza de que vai querer sair? Você já chegou tão longe.</p>
+            <h2 id="leave-diet-title" ref={leaveTitleRef} tabIndex={-1}>Confirmar saída da dieta</h2>
+            <p id="leave-diet-description">{leaveDescription}</p>
+            {activeDiet?.competitiveMode && <p id="leave-diet-points-description" className="leave-owner-warning">Os pontos pendentes de confirmação no ranking serão revogados.</p>}
             <form onSubmit={leaveDiet}>
               {currentMember.role === 'OWNER' && possibleSuccessors.length > 0 && (
                 <label>
@@ -207,7 +228,7 @@ export function Members() {
                   </select>
                 </label>
               )}
-              {ownerCannotLeave && <div className="leave-owner-warning">Você precisa convidar alguém antes de sair ou excluir a dieta.</div>}
+              {ownerCannotLeave && <div className="leave-owner-warning">Você é o único responsável. Convide outro membro para que ele assuma a responsabilidade antes de sair.</div>}
               {leaveError && <div className="error-message" role="alert">{leaveError}</div>}
               <div className="leave-diet-actions">
                 <Button type="submit" loading={leaving} disabled={ownerCannotLeave || (currentMember.role === 'OWNER' && !successorId)}>Confirmar saída</Button>

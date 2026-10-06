@@ -33,6 +33,7 @@ type QueueMealInput = {
 
 type OfflineMealContextValue = {
   operations: OfflineMealOperation[]
+  operationsLoaded: boolean
   offlineMeals: Meal[]
   syncing: boolean
   enqueue: (input: QueueMealInput) => Promise<string>
@@ -161,6 +162,7 @@ async function synchronize(userId: string, token: string) {
           created,
           ...cachedMeals.filter((meal) => meal.id !== created.id),
         ])
+        writeCachedResource(userId, dietResourceKey(operation.dietId, 'meals/mine/status'), true)
         window.dispatchEvent(new CustomEvent(MEAL_SYNCED_EVENT, {
           detail: { operationId: operation.id, mealId: created.id, pointsEarned: created.pointsEarned ?? 0 },
         }))
@@ -231,6 +233,7 @@ async function synchronize(userId: string, token: string) {
 export function OfflineMealProvider({ children }: { children: ReactNode }) {
   const { token, user } = useAuth()
   const [operations, setOperations] = useState<OfflineMealOperation[]>([])
+  const [operationsUserId, setOperationsUserId] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
 
   useEffect(() => {
@@ -238,13 +241,24 @@ export function OfflineMealProvider({ children }: { children: ReactNode }) {
     const refresh = async () => {
       if (!user) {
         setOperations([])
+        setOperationsUserId(null)
         return
       }
-      const queued = await listOfflineMeals(user.id).catch(() => [])
-      if (active) setOperations(queued)
+      try {
+        const queued = await listOfflineMeals(user.id)
+        if (active) {
+          setOperations(queued)
+          setOperationsUserId(user.id)
+        }
+      } catch {
+        if (active) setOperationsUserId(null)
+      }
     }
     void refresh()
-    const unsubscribe = subscribeOfflineMeals(() => void refresh())
+    const unsubscribe = subscribeOfflineMeals(() => {
+      setOperationsUserId(null)
+      void refresh()
+    })
     return () => {
       active = false
       unsubscribe()
@@ -336,10 +350,12 @@ export function OfflineMealProvider({ children }: { children: ReactNode }) {
     syncError: operation.error,
     operationId: operation.id,
   }))
+  const operationsLoaded = Boolean(user && operationsUserId === user.id)
 
   return (
     <OfflineMealContext.Provider value={{
       operations,
+      operationsLoaded,
       offlineMeals,
       syncing,
       enqueue,

@@ -1,4 +1,4 @@
-import { Camera, Check, ImagePlus, X } from 'lucide-react'
+import { ArrowRight, Camera, Check, ImagePlus, X } from 'lucide-react'
 import { useEffect, useEffectEvent, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { AnimatedCheck, type AnimatedCheckStatus } from '../components/motion/AnimatedCheck'
@@ -7,6 +7,8 @@ import { Button, EmptyState, PageTitle } from '../components/Ui'
 import { getErrorMessage, isDemoMode } from '../lib/api'
 import { compressPhoto, isPhotoUploadConfigured, validatePhoto } from '../lib/cloudinary'
 import { localDateKey } from '../lib/date'
+import { createUuid } from '../lib/uuid'
+import { reportUxEvent } from '../lib/uxTelemetry'
 import { useAuth } from '../state/AuthContext'
 import { useDiets } from '../state/DietContext'
 import { MEAL_SYNCED_EVENT, MEAL_SYNC_PROGRESS_EVENT, useOfflineMeals, type MealSyncProgressDetail } from '../state/OfflineMealContext'
@@ -44,6 +46,8 @@ export function MealForm() {
   const notify = useEffectEvent(showToast)
   const editId = (location.state as { offlineOperationId?: string } | null)?.offlineOperationId
   const editedOperation = operations.find((operation) => operation.id === editId)
+  const formDietId = editedOperation?.dietId ?? (!editId ? activeDiet?.id : undefined)
+  const [formSessionId] = useState(() => createUuid())
   const initializedEditRef = useRef<string | null>(null)
   const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const submittedAtRef = useRef(0)
@@ -67,6 +71,16 @@ export function MealForm() {
   useEffect(() => () => {
     if (preview) URL.revokeObjectURL(preview)
   }, [preview])
+
+  useEffect(() => {
+    if (!token || isDemoMode || !formDietId) return
+    void reportUxEvent(token, {
+      eventName: 'meal_form_started',
+      eventId: `meal_form_started:${formSessionId}`,
+      dietId: formDietId,
+      details: { formSessionId },
+    })
+  }, [formDietId, formSessionId, token])
 
   useEffect(() => {
     const handleProgress = (event: Event) => {
@@ -179,9 +193,10 @@ export function MealForm() {
         notify({ message: 'Refeição registrada com sucesso.', tone: 'success' })
         redirectTimerRef.current = setTimeout(() => navigate('/historico'), 500)
       } else {
+        const dietId = editedOperation?.dietId ?? activeDiet!.id
         const operationId = await enqueue({
           operationId: editedOperation?.id,
-          dietId: editedOperation?.dietId ?? activeDiet!.id,
+          dietId,
           dietName: editedOperation?.dietName ?? activeDiet!.name,
           request: {
             mealType: form.mealType,
@@ -195,6 +210,12 @@ export function MealForm() {
         setSaved(true)
         setSaveStatus('loading')
         setSaveMessage('Refeição salva neste dispositivo. Aguardando sincronização...')
+        void reportUxEvent(token, {
+          eventName: 'meal_saved_locally',
+          eventId: `meal_saved_locally:${formSessionId}`,
+          dietId,
+          details: { formSessionId },
+        })
       }
     } catch (submitError) {
       setSaveStatus('error')
@@ -233,9 +254,10 @@ export function MealForm() {
         <PhotoField preview={preview} onChoose={choosePhoto} onRemove={removePhoto} uploadProgress={uploadProgress} />
         {error && <AnimatedError>{error}</AnimatedError>}
         {saved && <AnimatedCheck status={saveStatus} label={saveMessage} />}
+        {saved && submittedOperationId && <Link className="meal-form-history-link" to="/historico">Ver histórico <ArrowRight size={16} aria-hidden="true" /></Link>}
         <div className="form-actions">
           <Button type="button" className="ghost" onClick={() => navigate(-1)}>Cancelar</Button>
-          <Button loading={loading || (submittedOperationId !== null && saveStatus === 'loading')} success={saveStatus === 'success'}>{saveStatus === 'success' ? <><Check /> Sincronizada</> : loading && photo ? 'Preparando foto...' : submittedOperationId && saveStatus === 'loading' ? 'Aguardando sincronização...' : editedOperation ? 'Salvar correção' : 'Salvar refeição'}</Button>
+          <Button disabled={submittedOperationId !== null} loading={loading || (submittedOperationId !== null && saveStatus === 'loading')} success={saveStatus === 'success'}>{saveStatus === 'success' ? <><Check /> Sincronizada</> : loading && photo ? 'Preparando foto...' : submittedOperationId && saveStatus === 'loading' ? 'Aguardando sincronização...' : editedOperation ? 'Salvar correção' : 'Salvar refeição'}</Button>
         </div>
       </form>
     </div>

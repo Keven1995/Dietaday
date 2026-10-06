@@ -1,8 +1,9 @@
 import { CalendarDays, ChevronLeft, ChevronRight, Coffee, ImageOff, LoaderCircle, MessageCircle, Pencil, RotateCcw, SmilePlus, Trash2, Moon, Sun } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
-import { useEffect, useEffectEvent, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { CommentsModal } from '../components/CommentsModal'
+import { FeatureHint } from '../components/FeatureHint'
 import { AnimatedCard } from '../components/motion/AnimatedCard'
 import { AnimatedError } from '../components/motion/AnimatedError'
 import { FloatingEmoji } from '../components/motion/FloatingEmoji'
@@ -12,14 +13,18 @@ import { EmptyState, PageTitle } from '../components/Ui'
 import { MOTION_DURATION, MOTION_OFFSET } from '../constants/motion'
 import { initialMeals } from '../data'
 import { useDietResource } from '../hooks/useDietResource'
+import { useFeatureDiscovery } from '../hooks/useFeatureDiscovery'
 import { useReducedMotionPreference } from '../hooks/useReducedMotionPreference'
 import { api, getErrorMessage, isDemoMode } from '../lib/api'
 import { mealCommentCount } from '../lib/comments'
 import { localDateKey, mealDateKey, mealTime, parseLocalDate } from '../lib/date'
 import { nextReactionEmoji, optimisticReactions } from '../lib/mealReactions'
 import { createUxEventId, reportUxEvent } from '../lib/uxTelemetry'
+import { completeFeatureCampaign } from '../lib/featureDiscoveryTelemetry'
+import type { FeatureDiscoveryContext, FeatureDiscoveryResource } from '../lib/featureDiscovery'
 import { dietResourceKey, expireCachedResource, readCachedResource, writeCachedResource } from '../lib/resourceCache'
 import { useAuth } from '../state/AuthContext'
+import { useCelebration } from '../state/CelebrationContext'
 import { useDiets } from '../state/DietContext'
 import { useOfflineMeals } from '../state/OfflineMealContext'
 import type { Meal, MealReaction } from '../types'
@@ -47,8 +52,9 @@ function MealPhoto({ source, description }: { source: string; description: strin
 
 export function History() {
   const { token, user } = useAuth()
-  const { activeDiet, diets, selectDiet } = useDiets()
+  const { activeDiet, diets, selectDiet, loading: dietsLoading, error: dietsError } = useDiets()
   const { offlineMeals, operations, retry, discard } = useOfflineMeals()
+  const { active: activeCelebration } = useCelebration()
   const [date, setDate] = useState(localDateKey())
   const [pickerMealId, setPickerMealId] = useState<string | null>(null)
   const [reactingMealIds, setReactingMealIds] = useState<Set<string>>(() => new Set())
@@ -56,12 +62,19 @@ export function History() {
   const [commentsMealId, setCommentsMealId] = useState<string | null>(null)
   const [reactionError, setReactionError] = useState('')
   const [floatingReaction, setFloatingReaction] = useState<{ mealId: string; emoji: string; key: number } | null>(null)
+  const [socialUsedDietId, setSocialUsedDietId] = useState<string | null>(null)
   const [dayDirection, setDayDirection] = useState<HistoryDirection>(0)
   const reducedMotion = useReducedMotionPreference()
   const linkedMealRefreshRef = useRef('')
   const [searchParams, setSearchParams] = useSearchParams()
   const mealsResource = useDietResource('meals', initialMeals, NO_MEALS, 'Não foi possível carregar o histórico.')
   const { data: remoteMeals, loading, error } = mealsResource
+  const socialHistoryResource = useDietResource<boolean>(
+    'meals/social/status',
+    isDemoMode,
+    true,
+    'Não foi possível verificar suas interações sociais.',
+  )
   const refreshHistory = useEffectEvent(() => mealsResource.reload())
 
   useEffect(() => {
@@ -95,6 +108,63 @@ export function History() {
   const meals = allMeals.filter((meal) => mealDateKey(meal.mealDate) === date).sort((a, b) => a.createdAt.localeCompare(b.createdAt))
   const failedOperations = operations.filter((operation) => operation.status === 'failed')
   const commentsMeal = allMeals.find((meal) => meal.id === commentsMealId) ?? null
+  const socialHintMeal = !isDemoMode && activeDiet && user
+    ? meals.find((meal) => !meal.syncStatus && meal.authorId !== user.id) ?? null
+    : null
+  const visibleSocialInteraction = allMeals.some((meal) =>
+    meal.authorId !== user?.id && !meal.syncStatus && meal.reactions?.some((reaction) => reaction.reactedByMe))
+  const hasInteractedWithSocial = Boolean(socialHistoryResource.data
+    || socialUsedDietId === activeDiet?.id
+    || visibleSocialInteraction)
+  const socialInteractionState: FeatureDiscoveryResource<{ hasSyncedMealFromOtherMember: boolean; hasInteracted: boolean }> = !activeDiet
+    ? { status: 'ready', data: { hasSyncedMealFromOtherMember: false, hasInteracted: false } }
+    : dietsLoading || loading || socialHistoryResource.loading
+      ? { status: 'loading' }
+      : dietsError || error || socialHistoryResource.error
+        ? { status: 'error' }
+        : { status: 'ready', data: {
+          hasSyncedMealFromOtherMember: Boolean(socialHintMeal),
+          hasInteracted: hasInteractedWithSocial,
+        } }
+  const featureDiscoveryContext: FeatureDiscoveryContext = {
+    diet: dietsLoading ? { status: 'loading' } : dietsError
+      ? { status: 'error' }
+      : { status: 'ready', data: activeDiet ? { competitiveMode: activeDiet.competitiveMode } : null },
+    ownMealHistory: { status: 'ready', data: false },
+    members: { status: 'ready', data: { count: 0, canInvite: false } },
+    hydrationDiscovery: { status: 'ready', data: 'known' },
+    waterCheck: { status: 'ready', data: false },
+    waterReminders: { status: 'ready', data: { supported: false, enabled: false, blocked: false } },
+    socialInteraction: socialInteractionState,
+    completedCampaigns: { status: 'ready', data: {} },
+  }
+  const campaignDietIds = useMemo(() => activeDiet ? { social_interactions: activeDiet.id } : {}, [activeDiet?.id])
+  const historyError = error || dietsError || socialHistoryResource.error || reactionError
+  const discoveryDataStatus = dietsLoading || loading || socialHistoryResource.loading
+    ? 'loading'
+    : historyError ? 'error' : 'ready'
+  const featureDiscovery = useFeatureDiscovery({
+    userId: user?.id ?? null,
+    context: featureDiscoveryContext,
+    conditions: {
+      authenticated: Boolean(user),
+      dataStatus: discoveryDataStatus,
+      formStatus: 'idle',
+      modalOpen: Boolean(commentsMealId || pickerMealId),
+      celebrationActive: Boolean(activeCelebration),
+      seasonalMessageActive: false,
+      operationalError: Boolean(historyError),
+    },
+    campaignIds: ['social_interactions'],
+    dietIdsByCampaign: campaignDietIds,
+  })
+  const shownSocialHintMeal = featureDiscovery.campaign?.id === 'social_interactions' ? socialHintMeal : null
+
+  function completeSocialDiscovery(dietId: string) {
+    if (!user) return
+    completeFeatureCampaign(token, user.id, 'social_interactions', 1, { dietId, eventDietId: dietId, page: '/historico' })
+    setSocialUsedDietId(dietId)
+  }
 
   useEffect(() => {
     const linkedDietId = searchParams.get('dietId')
@@ -188,6 +258,7 @@ export function History() {
       writeConfirmedReactions(meal.id, result.reactions)
       setReactionOverride(meal.id, null)
       if (nextEmoji) {
+        completeSocialDiscovery(activeDiet.id)
         setFloatingReaction({ mealId: meal.id, emoji: nextEmoji, key: Date.now() })
         void reportUxEvent(token, {
           eventName: 'reaction_created',
@@ -294,7 +365,15 @@ export function History() {
                        {floatingReaction?.mealId === meal.id && <FloatingEmoji emoji={floatingReaction.emoji} onComplete={() => setFloatingReaction(null)} />}
                       <button type="button" className="meal-comments-button" disabled={Boolean(meal.syncStatus)} aria-label={`Abrir comentários, ${mealCommentCount(meal)} ${mealCommentCount(meal) === 1 ? 'comentário' : 'comentários'}`} onClick={() => setCommentsMealId(meal.id)}><MessageCircle /><b>{mealCommentCount(meal)}</b></button>
                     </div>
-                   {pickerMealId === meal.id && <ReactionPicker onClose={() => setPickerMealId(null)} onSelect={(emoji) => void react(meal, emoji)} />}
+                    {shownSocialHintMeal?.id === meal.id && <FeatureHint
+                      title="Converse sobre esta refeição"
+                      description="Você pode reagir ou deixar um comentário nesta refeição."
+                      actionLabel="Entendi"
+                      onVisible={featureDiscovery.onVisible}
+                      onAction={featureDiscovery.onClicked}
+                      onDismiss={featureDiscovery.onDismissed}
+                    />}
+                    {pickerMealId === meal.id && <ReactionPicker onClose={() => setPickerMealId(null)} onSelect={(emoji) => void react(meal, emoji)} />}
                   </div>
                  </div>
                 </AnimatedCard>
@@ -310,7 +389,16 @@ export function History() {
             )}
           </AnimatePresence>
         )}
-      {activeDiet && commentsMeal && <CommentsModal key={`${activeDiet.id}:${commentsMeal.id}`} dietId={activeDiet.id} meal={commentsMeal} highlightedCommentId={searchParams.get('commentId')} onClose={closeComments} onCommentCountChange={(delta) => changeCommentCount(commentsMeal, delta)} onCommentsSettled={settleCommentCount} />}
+      {activeDiet && commentsMeal && <CommentsModal
+        key={`${activeDiet.id}:${commentsMeal.id}`}
+        dietId={activeDiet.id}
+        meal={commentsMeal}
+        highlightedCommentId={searchParams.get('commentId')}
+        onClose={closeComments}
+        onCommentCountChange={(delta) => changeCommentCount(commentsMeal, delta)}
+        onCommentCreated={() => { if (commentsMeal.authorId !== user?.id) completeSocialDiscovery(activeDiet.id) }}
+        onCommentsSettled={settleCommentCount}
+      />}
     </div>
   )
 }

@@ -58,7 +58,7 @@ export function Layout() {
         <OfflineMealNotice />
         <CompetitiveFeedbackOverlay />
         <main><PageTransition /></main>
-        <CompetitiveRankingWidget />
+        {location.pathname !== '/refeicoes/nova' && <CompetitiveRankingWidget />}
         <CreatorCredit className="app-creator-credit" />
         <nav className="bottom-nav" aria-label="Navegação principal"><NavigationLinks /></nav>
       </div>

@@ -25,13 +25,13 @@ export function DietProvider({ children }: { children: ReactNode }) {
   const [diets, setDiets] = useState<Diet[]>(() => user ? readCachedResource<Diet[]>(user.id, 'diets')?.data ?? [] : [])
   const [dietsUserId, setDietsUserId] = useState<string | null>(() => user?.id ?? null)
   const [activeDietId, setActiveDietId] = useState<string | null>(() => localStorage.getItem('Dietaday_active_diet'))
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(() => Boolean(user))
   const [error, setError] = useState('')
   const requestIdRef = useRef(0)
 
   function keepValidActiveDiet(data: Diet[]) {
     setActiveDietId((current) => {
-      const next = current && data.some((diet) => diet.id === current) ? current : data[0]?.id ?? null
+      const next = current && data.some((diet) => diet.id === current) ? current : null
       if (next) localStorage.setItem('Dietaday_active_diet', next)
       else localStorage.removeItem('Dietaday_active_diet')
       return next
@@ -121,8 +121,9 @@ export function DietProvider({ children }: { children: ReactNode }) {
 
   const visibleDiets = dietsUserId === user?.id ? diets : []
   const activeDiet = visibleDiets.find((diet) => diet.id === activeDietId) ?? null
+  const visibleLoading = loading || Boolean(user && dietsUserId !== user.id)
   return (
-    <DietContext.Provider value={{ diets: visibleDiets, activeDiet, activeDietId, loading, error, selectDiet, createDiet, deleteDiet, reload }}>
+    <DietContext.Provider value={{ diets: visibleDiets, activeDiet, activeDietId, loading: visibleLoading, error, selectDiet, createDiet, deleteDiet, reload }}>
       {children}
     </DietContext.Provider>
   )

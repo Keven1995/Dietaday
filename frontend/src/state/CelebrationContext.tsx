@@ -10,6 +10,7 @@ export type ActiveCelebration = CelebrationRequest & { key: string }
 
 type CelebrationContextValue = {
   celebrate: (request: CelebrationRequest) => void
+  active: ActiveCelebration | null
 }
 
 const CelebrationContext = createContext<CelebrationContextValue | null>(null)
@@ -36,7 +37,7 @@ export function CelebrationProvider({ children }: { children: ReactNode }) {
     setActive({ ...request, key })
   }, [celebrated])
 
-  return <CelebrationContext.Provider value={{ celebrate }}>
+  return <CelebrationContext.Provider value={{ celebrate, active }}>
     {children}
     {isHalloween && intensity === 'full' && <Suspense fallback={null}><HalloweenCelebration /></Suspense>}
     <CelebrationOverlay celebration={active} onDismiss={() => setActive(null)} />

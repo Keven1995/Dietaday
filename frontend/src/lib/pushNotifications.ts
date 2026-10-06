@@ -6,7 +6,7 @@ export type PushSubscriptionPayload = {
   auth: string
 }
 
-export type PushStatus = 'unsupported' | 'disabled' | 'enabled'
+export type PushStatus = 'unsupported' | 'install-required' | 'blocked' | 'disabled' | 'enabled'
 
 function isStandalonePwa() {
   return window.matchMedia('(display-mode: standalone)').matches ||
@@ -21,10 +21,32 @@ export function needsPwaInstall() {
   return /iPhone|iPad|iPod/i.test(navigator.userAgent) && !isStandalonePwa()
 }
 
+export function resolvePushStatus({
+  supported,
+  installRequired,
+  permission,
+  hasSubscription,
+}: {
+  supported: boolean
+  installRequired: boolean
+  permission: NotificationPermission
+  hasSubscription: boolean
+}): PushStatus {
+  if (!supported) return 'unsupported'
+  if (installRequired) return 'install-required'
+  if (permission === 'denied') return 'blocked'
+  return hasSubscription ? 'enabled' : 'disabled'
+}
+
 export async function currentPushStatus(): Promise<PushStatus> {
-  if (!isPushSupported()) return 'unsupported'
+  const supported = isPushSupported()
+  if (!supported) return resolvePushStatus({ supported, installRequired: false, permission: 'default', hasSubscription: false })
+  const installRequired = needsPwaInstall()
+  if (installRequired) return resolvePushStatus({ supported, installRequired, permission: Notification.permission, hasSubscription: false })
+  if (Notification.permission === 'denied') return 'blocked'
   const registration = await navigator.serviceWorker.ready
-  return await registration.pushManager.getSubscription() ? 'enabled' : 'disabled'
+  const hasSubscription = Boolean(await registration.pushManager.getSubscription())
+  return resolvePushStatus({ supported, installRequired, permission: Notification.permission, hasSubscription })
 }
 
 export async function enablePushNotifications(token: string) {

@@ -66,11 +66,22 @@ Uma resposta de dieta inclui `competitiveMode`:
 
 ```text
 GET    /diets/{dietId}/meals
+GET    /diets/{dietId}/meals/mine/status
+GET    /diets/{dietId}/meals/social/status
 POST   /diets/{dietId}/meals
 GET    /diets/{dietId}/meals/{mealId}
 PUT    /diets/{dietId}/meals/{mealId}
 DELETE /diets/{dietId}/meals/{mealId}
 ```
+
+`GET /diets/{dietId}/meals/mine/status` retorna `true` quando o usuário autenticado
+tem ao menos uma refeição própria na dieta e `false` quando não tem. A consulta
+abrange o histórico completo, sem depender da paginação da listagem, e exige que
+o usuário seja membro da dieta.
+
+`GET /diets/{dietId}/meals/social/status` retorna `true` quando o usuário já
+comentou ou reagiu a uma refeição de outro membro dessa dieta. O status considera
+todo o histórico de interações da dieta e exige que o usuário seja membro.
 
 Comentários e reações usam os recursos abaixo:
 
@@ -123,9 +134,14 @@ competitivo e permanece idempotente em novas tentativas com o mesmo
 
 ```text
 GET  /water/today
+GET  /water/has-checks
 PUT  /water/goal
 POST /water/checks
 ```
+
+`GET /water/has-checks` retorna `true` se o usuário autenticado já registrou
+algum check de hidratação, em qualquer data ou dieta; `false` significa que
+nenhum check histórico foi encontrado.
 
 Para uma dieta competitiva, os checks usam endpoints vinculados à dieta:
 
@@ -267,6 +283,10 @@ POST /telemetry/ux
 
 Falhas de sincronização informadas por esse endpoint são persistidas internamente em `sync_error_events` para diagnóstico operacional. Essa tabela não é exposta ao usuário final. O corpo inclui `operationId`, `dietId`, `phase`, `attempt`, `durationMs`, `httpStatus`, `errorType`, `fileType` e `fileSizeBytes`.
 
-Eventos de UX confirmados pelo frontend são enviados para `/telemetry/ux` e persistidos internamente em `ux_events`. O corpo inclui `eventName`, `eventId`, `dietId` e, opcionalmente, `details`. Os nomes aceitos são `meal_created`, `water_logged`, `daily_goal_completed`, `hydration_goal_completed`, `reaction_created`, `ranking_position_changed` e `streak_incremented`. O `eventId` é idempotente por usuário; a telemetria não participa do fluxo da ação principal.
+Eventos de UX confirmados pelo frontend são enviados autenticados para `/telemetry/ux` e persistidos internamente em `ux_events`; a identidade vem do token e nunca do payload. `dietId` é obrigatório para eventos de domínio existentes e pode ser nulo ou omitido nos eventos de descoberta e de formulário, quando não houver dieta ativa. O `eventId` é idempotente por usuário; a telemetria não participa do fluxo da ação principal.
+
+Nomes aceitos: `meal_created`, `water_logged`, `daily_goal_completed`, `hydration_goal_completed`, `reaction_created`, `ranking_position_changed`, `streak_incremented`, `feature_hint_viewed`, `feature_hint_clicked`, `feature_hint_dismissed`, `feature_adopted`, `meal_form_started` e `meal_saved_locally`.
+
+Eventos `feature_hint_*` e `feature_adopted` exigem em `details` `campaign`, `version`, `page` e `exposureId`. `meal_form_started` e `meal_saved_locally` exigem `formSessionId` efêmero compartilhado pelo par. Nesses eventos o backend aceita apenas as propriedades previstas pelo contrato; não envie e-mail, conteúdo/fotos de refeições ou dados corporais.
 
 Detalhes internos de credenciais, chaves privadas e infraestrutura não fazem parte do contrato da API e devem permanecer apenas na configuração operacional.

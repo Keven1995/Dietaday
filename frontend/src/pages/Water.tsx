@@ -1,5 +1,7 @@
 import { Check, Droplets, Save, Sparkles } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { FeatureHint } from '../components/FeatureHint'
 import { AnimatedCheck, type AnimatedCheckStatus } from '../components/motion/AnimatedCheck'
 import { AnimatedCounter } from '../components/motion/AnimatedCounter'
 import { AnimatedError } from '../components/motion/AnimatedError'
@@ -7,12 +9,15 @@ import { AnimatedProgress } from '../components/motion/AnimatedProgress'
 import { WaterBottle } from '../components/motion/WaterBottle'
 import { Button, PageTitle } from '../components/Ui'
 import { useCompetitiveMode } from '../hooks/useCompetitiveMode'
+import { useFeatureDiscovery } from '../hooks/useFeatureDiscovery'
+import { usePushStatus } from '../hooks/usePushStatus'
 import { crossedThreshold } from '../lib/motionRules'
 import { useCelebration } from '../state/CelebrationContext'
 import { useWater } from '../state/WaterContext'
 import { useToast } from '../state/ToastContext'
 import { useAuth } from '../state/AuthContext'
 import { reportUxEvent } from '../lib/uxTelemetry'
+import type { FeatureDiscoveryContext, FeatureDiscoveryResource } from '../lib/featureDiscovery'
 
 const WATER_OPTIONS = [500, 1000, 1500, 2000, 2500, 3000, 3500, 4000]
 
@@ -23,13 +28,56 @@ function formatLiters(amountMl: number) {
 export function Water() {
   const { water, loading, saving, error, saveGoal, addCheck } = useWater()
   const { activeDiet, dietId: competitiveDietId } = useCompetitiveMode()
-  const { token } = useAuth()
-  const { celebrate } = useCelebration()
+  const { token, user } = useAuth()
+  const { status: pushStatus } = usePushStatus()
+  const { active: activeCelebration, celebrate } = useCelebration()
+  const navigate = useNavigate()
   const { showToast } = useToast()
   const [goal, setGoal] = useState(2000)
   const [checkAmount, setCheckAmount] = useState('')
   const [message, setMessage] = useState('')
   const [feedbackStatus, setFeedbackStatus] = useState<AnimatedCheckStatus>('idle')
+  const [justRecordedWater, setJustRecordedWater] = useState(false)
+  const campaignEventDietIds = useMemo(() => activeDiet ? { water_reminders: activeDiet.id } : {}, [activeDiet?.id])
+
+  const remindersStatus: FeatureDiscoveryResource<{ supported: boolean; enabled: boolean; blocked: boolean }> =
+    pushStatus === 'loading'
+      ? { status: 'loading' }
+      : pushStatus === 'error'
+        ? { status: 'error' }
+        : { status: 'ready', data: {
+          supported: pushStatus !== 'unsupported' && pushStatus !== 'install-required',
+          enabled: pushStatus === 'enabled',
+          blocked: pushStatus === 'blocked',
+        } }
+  const featureDiscoveryContext: FeatureDiscoveryContext = {
+    diet: { status: 'ready', data: activeDiet ? { competitiveMode: activeDiet.competitiveMode } : null },
+    ownMealHistory: { status: 'ready', data: false },
+    members: { status: 'ready', data: { count: 0, canInvite: false } },
+    hydrationDiscovery: { status: 'ready', data: 'known' },
+    waterCheck: { status: 'ready', data: justRecordedWater },
+    waterReminders: remindersStatus,
+    socialInteraction: { status: 'ready', data: { hasSyncedMealFromOtherMember: false, hasInteracted: false } },
+    completedCampaigns: { status: 'ready', data: {} },
+  }
+  const discoveryDataStatus = loading || pushStatus === 'loading'
+    ? 'loading'
+    : error || pushStatus === 'error' ? 'error' : 'ready'
+  const featureDiscovery = useFeatureDiscovery({
+    userId: user?.id ?? null,
+    context: featureDiscoveryContext,
+    conditions: {
+      authenticated: Boolean(user),
+      dataStatus: discoveryDataStatus,
+      formStatus: saving ? 'saving' : 'idle',
+      modalOpen: false,
+      celebrationActive: Boolean(activeCelebration),
+      seasonalMessageActive: false,
+      operationalError: Boolean(error) || pushStatus === 'error',
+    },
+    campaignIds: ['water_reminders'],
+    eventDietIdsByCampaign: campaignEventDietIds,
+  })
 
   useEffect(() => {
     if (water) {
@@ -61,6 +109,7 @@ export function Water() {
     try {
       const previousConsumed = water?.consumedMl ?? 0
       const next = await addCheck(amount)
+      setJustRecordedWater(true)
       const pointsMessage = next.pointsEarned ? ` +${next.pointsEarned} pontos confirmados.` : ''
       const completedNow = crossedThreshold(previousConsumed, next.consumedMl, next.goalMl)
       if (completedNow && competitiveDietId) {
@@ -85,6 +134,7 @@ export function Water() {
 
   const remainingOptions = water ? WATER_OPTIONS.filter((amount) => amount <= water.remainingMl) : []
   const complete = water?.remainingMl === 0
+  const showReminderHint = featureDiscovery.campaign?.id === 'water_reminders'
 
   return (
     <div className="page water-page">
@@ -119,7 +169,18 @@ export function Water() {
               <Button type="button" loading={saving} disabled={!checkAmount || complete} onClick={() => void handleCheck()}>
                 <Check size={18} /> {complete ? 'Meta concluída' : 'Já tomei isso de água'}
               </Button>
-               {message && <AnimatedCheck status={feedbackStatus} label={message} />}
+                {message && <AnimatedCheck status={feedbackStatus} label={message} />}
+              {showReminderHint && <FeatureHint
+                title="Lembretes de água"
+                description="Quer receber lembretes de água ao longo do dia?"
+                actionLabel="Configurar lembretes"
+                onVisible={featureDiscovery.onVisible}
+                onAction={() => {
+                  featureDiscovery.onClicked()
+                  navigate('/perfil#lembretes-agua')
+                }}
+                onDismiss={featureDiscovery.onDismissed}
+              />}
             </div>
 
             <div className="card water-goal-card">

@@ -17,10 +17,11 @@ type CommentsModalProps = {
   highlightedCommentId?: string | null
   onClose: () => void
   onCommentCountChange: (delta: number) => void
+  onCommentCreated?: () => void
   onCommentsSettled: () => void
 }
 
-export function CommentsModal({ dietId, meal, highlightedCommentId, onClose, onCommentCountChange, onCommentsSettled }: CommentsModalProps) {
+export function CommentsModal({ dietId, meal, highlightedCommentId, onClose, onCommentCountChange, onCommentCreated, onCommentsSettled }: CommentsModalProps) {
   const { token, user } = useAuth()
   const cacheKey = commentsResourceKey(dietId, meal.id)
   const cached = user ? readCachedResource<MealComment[]>(user.id, cacheKey) : null
@@ -165,6 +166,7 @@ export function CommentsModal({ dietId, meal, highlightedCommentId, onClose, onC
       const created = await api<MealComment>(commentsPath(dietId, meal.id), { method: 'POST', token, body: JSON.stringify({ content }) })
       updateComments((current) => chronologicalComments(current.map((comment) => comment.id === temporaryId ? { ...created, reactions: created.reactions ?? [] } : comment)))
       setDraft('')
+      onCommentCreated?.()
       onCommentsSettled()
     } catch (submitError) {
       updateComments((current) => removeComment(current, temporaryId))

@@ -4,6 +4,7 @@ import { addWaterCheck, getWaterToday, readCachedWater, updateWaterGoal, WATER_C
 import { writeCachedResource } from '../lib/resourceCache'
 import { emitCompetitivePoints, emitCompetitiveRankingInvalidated } from '../lib/competitiveFeedback'
 import { reportUxEvent } from '../lib/uxTelemetry'
+import { completeFeatureCampaign } from '../lib/featureDiscoveryTelemetry'
 import { useCompetitiveMode } from '../hooks/useCompetitiveMode'
 import { useAuth } from './AuthContext'
 import type { WaterToday } from '../types'
@@ -76,6 +77,10 @@ export function WaterProvider({ children }: { children: ReactNode }) {
       const next = await addWaterCheck(token, user.id, amountMl, competitiveDietId)
       if (!isDemoMode) writeCachedResource(user.id, cacheResource, next)
       setWater(next)
+      completeFeatureCampaign(token, user.id, 'discover_hydration', 1, {
+        eventDietId: activeDiet?.id,
+        page: '/agua',
+      })
       if (competitiveDietId) {
         emitCompetitiveRankingInvalidated(competitiveDietId)
         emitCompetitivePoints({
