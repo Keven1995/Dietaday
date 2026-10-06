@@ -95,6 +95,12 @@ public class MealService {
     }
 
     @Transactional(readOnly = true)
+    public boolean hasOwnMeals(UUID dietId) {
+        diets.requireMember(dietId);
+        return meals.existsByDiet_IdAndAuthor_Id(dietId, currentUser.id());
+    }
+
+    @Transactional(readOnly = true)
     public Meal get(UUID dietId, UUID mealId) {
         diets.requireMember(dietId);
         return meals.findByIdAndDietId(mealId, dietId).orElseThrow(() -> new NotFoundException("Meal not found"));

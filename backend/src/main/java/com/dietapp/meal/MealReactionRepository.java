@@ -12,6 +12,10 @@ import java.util.UUID;
 public interface MealReactionRepository extends JpaRepository<MealReaction, UUID> {
     Optional<MealReaction> findByMealIdAndUserId(UUID mealId, UUID userId);
 
+    @Query("select case when count(r) > 0 then true else false end from MealReaction r " +
+            "where r.user.id = :userId and r.meal.diet.id = :dietId and r.meal.author.id <> :userId")
+    boolean existsByUserReactedToAnotherMemberMeal(@Param("dietId") UUID dietId, @Param("userId") UUID userId);
+
     @Query("select new com.dietapp.meal.MealReactionCount(r.meal.id, r.emoji, count(r), " +
             "sum(case when r.user.id = :userId then 1 else 0 end)) " +
             "from MealReaction r where r.meal.id in :mealIds group by r.meal.id, r.emoji")

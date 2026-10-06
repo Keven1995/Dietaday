@@ -19,7 +19,7 @@ public class UxEvent {
     private String eventName;
     @Column(name = "user_id", nullable = false)
     private UUID userId;
-    @Column(name = "diet_id", nullable = false)
+    @Column(name = "diet_id", nullable = true)
     private UUID dietId;
     @Column(nullable = false, length = 2000)
     private String details;
