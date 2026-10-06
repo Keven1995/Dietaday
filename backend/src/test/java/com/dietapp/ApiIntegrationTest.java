@@ -4,6 +4,9 @@ import com.dietapp.user.UserRepository;
 import com.dietapp.ranking.RankingPointEventRepository;
 import com.dietapp.ranking.RankingPointEvent;
 import com.dietapp.telemetry.SyncErrorEventRepository;
+import com.dietapp.telemetry.UxEventRepository;
+import com.dietapp.water.WaterCheck;
+import com.dietapp.water.WaterCheckRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -41,6 +44,8 @@ class ApiIntegrationTest {
     @Autowired PasswordEncoder passwordEncoder;
     @Autowired RankingPointEventRepository rankingEvents;
     @Autowired SyncErrorEventRepository syncErrors;
+    @Autowired WaterCheckRepository waterChecks;
+    @Autowired UxEventRepository uxEvents;
 
     @Test
     void healthEndpointIsPublic() throws Exception {
@@ -161,6 +166,103 @@ class ApiIntegrationTest {
     }
 
     @Test
+    void ownMealStatusUsesCompleteHistoryAndExcludesOtherMembersMeals() throws Exception {
+        JsonNode owner = register("Meal Status Owner", "meal-status-owner-" + UUID.randomUUID() + "@example.com");
+        JsonNode member = register("Meal Status Member", "meal-status-member-" + UUID.randomUUID() + "@example.com");
+        JsonNode outsider = register("Meal Status Outsider", "meal-status-outsider-" + UUID.randomUUID() + "@example.com");
+        String dietId = createDiet(owner, "Meal Status Diet");
+        joinDiet(owner, member, dietId, member.get("email").asText());
+
+        mvc.perform(get("/api/diets/{dietId}/meals/mine/status", dietId)
+                        .header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").value(false));
+
+        createMeal(member, dietId, "First member meal");
+        mvc.perform(get("/api/diets/{dietId}/meals/mine/status", dietId)
+                        .header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").value(false));
+
+        createMeal(owner, dietId, "Owner meal outside first page");
+        createMeal(member, dietId, "Latest member meal");
+        mvc.perform(get("/api/diets/{dietId}/meals", dietId)
+                        .header("Authorization", bearer(owner))
+                        .param("size", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].authorId").value(member.get("userId").asText()));
+        mvc.perform(get("/api/diets/{dietId}/meals/mine/status", dietId)
+                        .header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").value(true));
+        mvc.perform(get("/api/diets/{dietId}/meals/mine/status", dietId)
+                        .header("Authorization", bearer(member)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").value(true));
+        mvc.perform(get("/api/diets/{dietId}/meals/mine/status", dietId)
+                        .header("Authorization", bearer(outsider)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void socialDiscoveryStatusRecognizesCommentsAndReactionsFromAnotherMember() throws Exception {
+        JsonNode owner = register("Social Discovery Owner", "social-owner-" + UUID.randomUUID() + "@example.com");
+        JsonNode commenter = register("Social Discovery Commenter", "social-commenter-" + UUID.randomUUID() + "@example.com");
+        JsonNode reactor = register("Social Discovery Reactor", "social-reactor-" + UUID.randomUUID() + "@example.com");
+        JsonNode outsider = register("Social Discovery Outsider", "social-outsider-" + UUID.randomUUID() + "@example.com");
+        String dietId = createDiet(owner, "Social Discovery Diet");
+        joinDiet(owner, commenter, dietId, commenter.get("email").asText());
+        joinDiet(owner, reactor, dietId, reactor.get("email").asText());
+        String mealId = createMeal(owner, dietId, "A member meal");
+
+        for (JsonNode member : new JsonNode[]{commenter, reactor, owner}) {
+            mvc.perform(get("/api/diets/{dietId}/meals/social/status", dietId)
+                            .header("Authorization", bearer(member)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$").value(false));
+        }
+
+        createComment(commenter, dietId, mealId, "Gostei desta refeição.");
+        mvc.perform(get("/api/diets/{dietId}/meals/social/status", dietId)
+                        .header("Authorization", bearer(commenter)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").value(true));
+
+        mvc.perform(put("/api/diets/{dietId}/meals/{mealId}/reaction", dietId, mealId)
+                        .header("Authorization", bearer(reactor))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"emoji\":\"❤️\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/diets/{dietId}/meals/social/status", dietId)
+                        .header("Authorization", bearer(reactor)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").value(true));
+        mvc.perform(get("/api/diets/{dietId}/meals/social/status", dietId)
+                        .header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").value(false));
+        mvc.perform(get("/api/diets/{dietId}/meals/social/status", dietId)
+                        .header("Authorization", bearer(outsider)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void socialDiscoveryStatusOnlyCountsInteractionsOnOtherMembersMeals() throws Exception {
+        JsonNode owner = register("Social Own Meal Owner", "social-own-owner-" + UUID.randomUUID() + "@example.com");
+        JsonNode member = register("Social Own Meal Member", "social-own-member-" + UUID.randomUUID() + "@example.com");
+        String dietId = createDiet(owner, "Social Own Meal Diet");
+        joinDiet(owner, member, dietId, member.get("email").asText());
+        String ownMealId = createMeal(member, dietId, "Member authored meal");
+        createComment(member, dietId, ownMealId, "Meu próprio registro.");
+
+        mvc.perform(get("/api/diets/{dietId}/meals/social/status", dietId)
+                        .header("Authorization", bearer(member)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").value(false));
+    }
+
+    @Test
     void authenticatedUsersCanRequestCloudinaryUploadSignature() throws Exception {
         JsonNode user = register("Upload User", "upload-" + UUID.randomUUID() + "@example.com");
 
@@ -201,6 +303,48 @@ class ApiIntegrationTest {
                 """.formatted(dietId)))
                 .andExpect(status().isNoContent());
         assertThat(syncErrors.count()).isGreaterThanOrEqualTo(1);
+    }
+
+    @Test
+    void authenticatedDiscoveryTelemetrySupportsNoDietAndValidatesItsContract() throws Exception {
+        JsonNode user = register("Feature Telemetry User", "feature-telemetry-" + UUID.randomUUID() + "@example.com");
+        String eventId = "hint:" + UUID.randomUUID();
+        String exposureId = UUID.randomUUID().toString();
+        String request = objectMapper.writeValueAsString(Map.of(
+                "eventName", "feature_hint_viewed",
+                "eventId", eventId,
+                "details", Map.of(
+                        "campaign", "discover_hydration",
+                        "version", 1,
+                        "page", "/",
+                        "exposureId", exposureId)));
+        long eventsBefore = uxEvents.count();
+
+        mvc.perform(post("/api/telemetry/ux")
+                        .header("Authorization", bearer(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request))
+                .andExpect(status().isNoContent());
+        assertThat(uxEvents.count()).isEqualTo(eventsBefore + 1);
+
+        mvc.perform(post("/api/telemetry/ux")
+                        .header("Authorization", bearer(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"eventName":"meal_created","eventId":"meal:no-diet"}
+                                """))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/telemetry/ux")
+                        .header("Authorization", bearer(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"eventName":"feature_hint_viewed","eventId":"hint:missing","details":{"campaign":"discover_hydration"}}
+                                """))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/telemetry/ux")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -252,6 +396,26 @@ class ApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.percentage").value(100))
                 .andExpect(jsonPath("$.remainingMl").value(0));
+    }
+
+    @Test
+    void hydrationHistoryStatusIncludesChecksFromPreviousDays() throws Exception {
+        JsonNode user = register("Water History User", "water-history-" + UUID.randomUUID() + "@example.com");
+        String authorization = bearer(user);
+
+        mvc.perform(get("/api/water/has-checks").header("Authorization", authorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").value(false));
+
+        var savedUser = users.findById(UUID.fromString(user.get("userId").asText())).orElseThrow();
+        waterChecks.save(new WaterCheck(savedUser, 500,
+                LocalDate.now(ZoneId.of("America/Sao_Paulo")).minusDays(1)));
+
+        mvc.perform(get("/api/water/has-checks").header("Authorization", authorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").value(true));
+        mvc.perform(get("/api/water/has-checks"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
