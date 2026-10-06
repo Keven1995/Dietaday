@@ -17,6 +17,7 @@ import { useAuth } from '../state/AuthContext'
 import { useDiets } from '../state/DietContext'
 import { useOfflineMeals } from '../state/OfflineMealContext'
 import { useWater } from '../state/WaterContext'
+import { HalloweenMessage } from '../seasonal/halloween'
 import type { Meal, Member } from '../types'
 
 const NO_MEALS: Meal[] = []
@@ -160,6 +161,7 @@ export function Dashboard() {
   return (
     <div className="page dashboard">
       <PageTitle eyebrow={today.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })} title={`Olá, ${firstName}.`} action={activeDiet && <Link className="button desktop-action" to="/refeicoes/nova"><Plus size={18} /> Registrar refeição</Link>} />
+      <HalloweenMessage />
       {error && <AnimatedError>{error}</AnimatedError>}
       {activeDiet ? (
         <>
