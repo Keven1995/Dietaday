@@ -15,6 +15,8 @@ import java.util.UUID;
 import java.util.List;
 
 public interface MealRepository extends JpaRepository<Meal, UUID> {
+    boolean existsByDiet_IdAndAuthor_Id(UUID dietId, UUID authorId);
+
     @EntityGraph(attributePaths = "author")
     @Query("select m from Meal m where m.diet.id = :dietId " +
            "and (:fromDate is null or m.mealDate >= :fromDate) " +

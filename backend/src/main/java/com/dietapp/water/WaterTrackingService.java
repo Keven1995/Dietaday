@@ -39,6 +39,11 @@ public class WaterTrackingService {
         return snapshot(user, LocalDate.now(BRASILIA));
     }
 
+    @Transactional(readOnly = true)
+    public boolean hasEverChecked() {
+        return checks.existsByUserId(currentUser.id());
+    }
+
     @Transactional
     public WaterTodayResponse updateGoal(int goalMl) {
         validateAmount(goalMl, "A meta deve estar entre 500 ml e 4 L, em intervalos de 500 ml.");

@@ -31,11 +31,14 @@ public class MealController {
     private final MealService service;
     private final MealReactionService reactions;
     private final MealCommentService comments;
+    private final MealSocialDiscoveryService socialDiscovery;
 
-    public MealController(MealService service, MealReactionService reactions, MealCommentService comments) {
+    public MealController(MealService service, MealReactionService reactions, MealCommentService comments,
+                          MealSocialDiscoveryService socialDiscovery) {
         this.service = service;
         this.reactions = reactions;
         this.comments = comments;
+        this.socialDiscovery = socialDiscovery;
     }
 
     @PostMapping
@@ -74,6 +77,16 @@ public class MealController {
                 meal, summaries.getOrDefault(meal.getId(), List.of()),
                 commentCounts.getOrDefault(meal.getId(), 0L))).toList();
         return Pagination.headers(ResponseEntity.ok(), result).body(response);
+    }
+
+    @GetMapping("/mine/status")
+    public boolean ownMealStatus(@PathVariable UUID dietId) {
+        return service.hasOwnMeals(dietId);
+    }
+
+    @GetMapping("/social/status")
+    public boolean socialInteractionStatus(@PathVariable UUID dietId) {
+        return socialDiscovery.hasInteractedWithAnotherMemberMeal(dietId);
     }
 
     @GetMapping("/{mealId}")

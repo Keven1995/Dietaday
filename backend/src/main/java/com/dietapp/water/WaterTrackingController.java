@@ -22,6 +22,11 @@ public class WaterTrackingController {
         return service.today();
     }
 
+    @GetMapping("/has-checks")
+    public boolean hasEverChecked() {
+        return service.hasEverChecked();
+    }
+
     @PutMapping("/goal")
     public WaterTodayResponse updateGoal(@Valid @RequestBody WaterGoalRequest request) {
         return service.updateGoal(request.goalMl());

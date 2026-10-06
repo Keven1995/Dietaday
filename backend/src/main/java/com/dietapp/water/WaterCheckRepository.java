@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.UUID;
 
 public interface WaterCheckRepository extends JpaRepository<WaterCheck, UUID> {
+    boolean existsByUserId(UUID userId);
+
     List<WaterCheck> findByUserIdAndCheckDateOrderByCreatedAtAsc(UUID userId, LocalDate checkDate);
 
     List<WaterCheck> findByDietIdAndUserIdAndCheckDateOrderByCreatedAtAsc(UUID dietId, UUID userId, LocalDate checkDate);
