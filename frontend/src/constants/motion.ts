@@ -9,7 +9,6 @@ export const MOTION_DURATION = {
   waterDrop: 900,
   celebration: 1000,
   shimmer: 1200,
-  pulse: 1400,
 } as const
 
 export const MOTION_SCALE = {

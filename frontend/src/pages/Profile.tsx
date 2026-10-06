@@ -1,11 +1,13 @@
 import { Bell, BellOff, LogOut, Save, UserRound, Shield } from 'lucide-react'
-import { useEffect, useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Button, PageTitle } from '../components/Ui'
 import { api, getErrorMessage } from '../lib/api'
+import { usePushStatus } from '../hooks/usePushStatus'
+import { completeFeatureCampaign } from '../lib/featureDiscoveryTelemetry'
 import { useAuth } from '../state/AuthContext'
 import type { User, UserSex } from '../types'
-import { currentPushStatus, disablePushNotifications, enablePushNotifications, type PushStatus } from '../lib/pushNotifications'
+import { disablePushNotifications, enablePushNotifications } from '../lib/pushNotifications'
 
 type ProfileForm = { fullName: string; weight: string; height: string; sex: UserSex | '' }
 
@@ -21,11 +23,13 @@ function userToForm(user: User | null): ProfileForm {
 export function Profile() {
   const { user, token, updateUser, logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  const reminderHeadingRef = useRef<HTMLHeadingElement>(null)
+  const { status: pushStatus, refresh: refreshPushStatus } = usePushStatus()
   const [form, setForm] = useState(() => userToForm(user))
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState('')
-  const [pushStatus, setPushStatus] = useState<PushStatus>('disabled')
   const [pushLoading, setPushLoading] = useState(false)
   const [pushMessage, setPushMessage] = useState('')
   const [pushError, setPushError] = useState('')
@@ -36,8 +40,10 @@ export function Profile() {
   }, [user])
 
   useEffect(() => {
-    void currentPushStatus().then(setPushStatus).catch(() => setPushStatus('unsupported'))
-  }, [])
+    if (location.hash !== '#lembretes-agua') return
+    reminderHeadingRef.current?.scrollIntoView({ block: 'center' })
+    reminderHeadingRef.current?.focus({ preventScroll: true })
+  }, [location.hash])
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -91,16 +97,20 @@ export function Profile() {
       if (pushStatus === 'enabled') {
         if (!token) return
         await disablePushNotifications(token)
-        setPushStatus('disabled')
+        await refreshPushStatus()
         setPushMessage('Lembretes de água desativados.')
-      } else {
+      } else if (pushStatus === 'disabled') {
         if (!token) return
         await enablePushNotifications(token)
-        setPushStatus('enabled')
+        if (user) completeFeatureCampaign(token, user.id, 'water_reminders', 1, { page: '/perfil' })
+        await refreshPushStatus()
         setPushMessage('Lembretes de água ativados! 💧')
+      } else {
+        return
       }
     } catch (pushError) {
       setPushError(pushError instanceof Error ? pushError.message : 'Não foi possível configurar os lembretes.')
+      await refreshPushStatus()
     } finally {
       setPushLoading(false)
     }
@@ -149,9 +159,16 @@ export function Profile() {
         <Button loading={loading}><Save /> Salvar alterações</Button>
       </form>
       <section className="card profile-form">
-        <h2>Lembretes de água</h2>
+        <h2 id="lembretes-agua" ref={reminderHeadingRef} tabIndex={-1}>Lembretes de água</h2>
         <p>Receba lembretes para não esquecer de se hidratar durante o dia.</p>
-        {pushStatus === 'unsupported' ? <p>As notificações não estão disponíveis neste dispositivo.</p> : (
+        {pushStatus === 'loading' ? <p>Verificando a disponibilidade dos lembretes...</p>
+          : pushStatus === 'unsupported' ? <p>As notificações não estão disponíveis neste dispositivo.</p>
+            : pushStatus === 'install-required' ? <p>No iPhone, instale o Dietaday na tela inicial para configurar os lembretes.</p>
+              : pushStatus === 'blocked' ? <p>As notificações estão bloqueadas nas configurações do navegador. Libere a permissão para ativar os lembretes.</p>
+                : pushStatus === 'error' ? <div>
+                  <p>Não foi possível verificar o status das notificações.</p>
+                  <Button type="button" className="outline" onClick={() => void refreshPushStatus()}>Tentar novamente</Button>
+                </div> : (
           <Button type="button" loading={pushLoading} className={pushStatus === 'enabled' ? 'outline' : ''} onClick={() => void togglePush()}>
             {pushStatus === 'enabled' ? <BellOff /> : <Bell />} {pushStatus === 'enabled' ? 'Desativar lembretes' : 'Ativar lembretes'}
           </Button>

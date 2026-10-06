@@ -1,5 +1,6 @@
-import { Check, Info, Plus, Salad, Trash2, X } from 'lucide-react'
+import { ArrowRight, Check, Info, Plus, Salad, Trash2, X } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Button, EmptyState, PageTitle } from '../components/Ui'
 import { initialMembers } from '../data'
 import { useDietResource } from '../hooks/useDietResource'
@@ -84,7 +85,7 @@ function DeleteDietModal({ diet, onClose, onDelete }: { diet: Diet; onClose: () 
   )
 }
 
-function CreateDietModal({ onClose, onCreate }: { onClose: () => void; onCreate: (data: CreateDietRequest) => Promise<Diet> }) {
+function CreateDietModal({ onClose, onCreate, onCreated }: { onClose: () => void; onCreate: (data: CreateDietRequest) => Promise<Diet>; onCreated: (diet: Diet) => void }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [form, setForm] = useState<CreateDietRequest>(EMPTY_FORM)
@@ -113,7 +114,8 @@ function CreateDietModal({ onClose, onCreate }: { onClose: () => void; onCreate:
     }
     setSaving(true)
     try {
-      await onCreate(request)
+      const createdDiet = await onCreate(request)
+      onCreated(createdDiet)
       setSaving(false)
       onClose()
     } catch (createError) {
@@ -170,23 +172,39 @@ function CreateDietModal({ onClose, onCreate }: { onClose: () => void; onCreate:
 export function Diets() {
   const { user } = useAuth()
   const { diets, activeDiet, activeDietId, loading, error, selectDiet, createDiet, deleteDiet } = useDiets()
+  const navigate = useNavigate()
   const membersResource = useDietResource('members', initialMembers, NO_MEMBERS, 'Não foi possível verificar sua permissão.')
   const [modalOpen, setModalOpen] = useState(false)
   const [dietToDelete, setDietToDelete] = useState<Diet | null>(null)
+  const [createdDiet, setCreatedDiet] = useState<Diet | null>(null)
   const activeMembership = membersResource.data.find((member) => member.userId === user?.id)
   const canDeleteActiveDiet = activeMembership?.role === 'OWNER'
 
+  function continueWithFirstMeal() {
+    if (!createdDiet) return
+    selectDiet(createdDiet.id)
+    navigate('/refeicoes/nova')
+  }
+
   return (
     <div className="page">
-      <PageTitle eyebrow="PLANEJAMENTO" title="Suas dietas" action={<Button onClick={() => setModalOpen(true)}><Plus /> Nova dieta</Button>} />
+      <PageTitle eyebrow="PLANEJAMENTO" title="Suas dietas" action={<Button onClick={() => { setCreatedDiet(null); setModalOpen(true) }}><Plus /> Nova dieta</Button>} />
       <p className="page-lead">Escolha uma rotina ativa ou crie um novo período alimentar.</p>
+      {createdDiet && <section className="diet-created-next-step" aria-labelledby="diet-created-title">
+        <div role="status">
+          <span className="overline">DIETA CRIADA</span>
+          <h2 id="diet-created-title">Tudo pronto para começar.</h2>
+          <p>Registre sua primeira refeição em {createdDiet.name}.</p>
+        </div>
+        <Button type="button" onClick={continueWithFirstMeal}>Registrar primeira refeição <ArrowRight size={18} /></Button>
+      </section>}
       {(error || membersResource.error) && <div className="error-message" role="alert">{error || membersResource.error}</div>}
       {loading ? <p className="loading-text">Carregando dietas...</p> : diets.length ? (
         <div className="diet-grid">
-          {diets.map((diet, index) => <DietCard key={diet.id} diet={diet} index={index} selected={activeDietId === diet.id} canDelete={activeDiet?.id === diet.id && canDeleteActiveDiet} onSelect={() => selectDiet(diet.id)} onDelete={() => setDietToDelete(diet)} />)}
+          {diets.map((diet, index) => <DietCard key={diet.id} diet={diet} index={index} selected={activeDietId === diet.id} canDelete={activeDiet?.id === diet.id && canDeleteActiveDiet} onSelect={() => { selectDiet(diet.id); setCreatedDiet(null) }} onDelete={() => setDietToDelete(diet)} />)}
         </div>
       ) : <EmptyState icon={<Salad />} title="Nenhuma dieta criada" text="Crie uma dieta para definir seu período alimentar." />}
-      {modalOpen && <CreateDietModal onClose={() => setModalOpen(false)} onCreate={createDiet} />}
+      {modalOpen && <CreateDietModal onClose={() => setModalOpen(false)} onCreate={createDiet} onCreated={setCreatedDiet} />}
       {dietToDelete && <DeleteDietModal diet={dietToDelete} onClose={() => setDietToDelete(null)} onDelete={deleteDiet} />}
     </div>
   )

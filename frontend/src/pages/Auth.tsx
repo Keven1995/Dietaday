@@ -134,7 +134,10 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
           <div className="brand auth-mobile-brand"><span className="brand-mark">N</span><span>Dietaday</span></div>
           <span className="overline">{isLogin ? 'Bem-vindo de volta' : 'Comece agora'}</span>
           <h2>{isLogin ? 'Entre na sua conta' : 'Crie sua conta'}</h2>
-          <p>{isLogin ? 'Continue cuidando da sua rotina alimentar.' : 'Leva menos de um minuto.'}</p>
+          <p className="auth-desktop-subtitle">{isLogin ? 'Continue cuidando da sua rotina alimentar.' : 'Leva menos de um minuto.'}</p>
+          <p className="auth-mobile-benefit">
+            {isLogin ? 'Refeições, hidratação e sua rotina em um só lugar.' : 'Comece com um registro simples e acompanhe sua rotina.'}
+          </p>
           <form onSubmit={submit}>
             {!isLogin && (
               <>
