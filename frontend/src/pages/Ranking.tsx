@@ -17,6 +17,8 @@ import { createUxEventId, reportUxEvent } from '../lib/uxTelemetry'
 import { useCelebration } from '../state/CelebrationContext'
 import { useAuth } from '../state/AuthContext'
 import type { RankingParticipant } from '../types'
+import { useHalloween } from '../seasonal/halloween'
+import { halloweenConfig } from '../seasonal/halloween/HalloweenConfig'
 
 function date(value: string | null) {
   return value ? parseLocalDate(value).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '') : 'Ainda não fechado'
@@ -24,7 +26,7 @@ function date(value: string | null) {
 
 function initials(name: string) { return name.split(' ').filter(Boolean).map((part) => part[0]).slice(0, 2).join('') }
 
-function Podium({ participants, podium, reducedMotion }: { participants: RankingParticipant[]; podium: { first: string | null; second: string | null; third: string | null }; reducedMotion: boolean }) {
+function Podium({ participants, podium, reducedMotion, halloween }: { participants: RankingParticipant[]; podium: { first: string | null; second: string | null; third: string | null }; reducedMotion: boolean; halloween: boolean }) {
   const participantsById = new Map(participants.map((participant) => [participant.userId, participant]))
   const podiumParticipants = [podium.second, podium.first, podium.third]
     .map((userId) => userId ? participantsById.get(userId) : undefined)
@@ -38,7 +40,7 @@ function Podium({ participants, podium, reducedMotion }: { participants: Ranking
     animate={{ opacity: 1, y: 0 }}
     whileHover={reducedMotion ? undefined : { y: -4 }}
     transition={{ duration: reducedMotion ? 0 : MOTION_DURATION.normal / 1000, delay: reducedMotion ? 0 : index * MOTION_STAGGER.normal, ease: 'easeOut' }}
-  ><i>{participant.position}</i><strong>{participant.displayName}</strong><span><AnimatedCounter value={participant.officialPoints} suffix=" pts" /></span></motion.div>)}</div>
+  ><i>{participant.position}</i>{halloween && <span className="halloween-rank-mark" aria-hidden="true">{participant.position === 1 ? '🎃' : participant.position === 2 ? '👻' : '🦇'}</span>}<strong>{participant.displayName}</strong><span><AnimatedCounter value={participant.officialPoints} suffix=" pts" /></span></motion.div>)}</div>
 }
 
 export function Ranking() {
@@ -47,6 +49,7 @@ export function Ranking() {
   const [movement, setMovement] = useState<{ direction: RankingMovementDirection; position: number } | null>(null)
   const previousPosition = useRef<{ dietId: string; position: number } | null>(null)
   const reducedMotion = useReducedMotionPreference()
+  const { isHalloween, intensity } = useHalloween()
   const { ranking, details, loading, error, reload } = useCompetitiveRanking(page)
   const { celebrate } = useCelebration()
   const { token } = useAuth()
@@ -87,8 +90,8 @@ export function Ranking() {
        <RankingMovement direction={movement?.direction ?? null} position={movement?.position ?? ranking.currentUser.position} onComplete={() => setMovement(null)} />
       <div className="ranking-meta-row"><span><b>{ranking.status === 'FINALIZED' ? 'FINALIZADO' : 'ATIVO'}</b> · {date(ranking.startDate)} a {date(ranking.endDate)}</span><span>Último fechamento: {date(ranking.lastClosedDate)}</span></div>
       {ranking.status === 'FINALIZED' && <div className="ranking-final-note">Este ranking está congelado e representa o resultado final.</div>}
-        {ranking.status === 'FINALIZED' && ranking.podium && <Podium participants={ranking.participants} podium={ranking.podium} reducedMotion={reducedMotion} />}
-       <section className="ranking-table-card card"><div className="section-heading"><div><span>CLASSIFICAÇÃO</span><h2>Participantes</h2></div><small>{ranking.page.totalElements} pessoas</small></div><div className="ranking-list">{ranking.participants.map((participant) => <motion.div layout={!reducedMotion ? 'position' : false} transition={{ duration: reducedMotion ? 0 : MOTION_DURATION.normal / 1000 }} className={participant.userId === ranking.currentUser.userId ? 'ranking-row is-current' : 'ranking-row'} key={participant.userId}><b className="ranking-position">{participant.position}</b><i className="ranking-avatar">{initials(participant.displayName)}</i><div><strong>{participant.displayName}</strong>{participant.userId === ranking.currentUser.userId && <small>Você</small>}</div><span><strong><AnimatedCounter value={participant.officialPoints} /></strong><small>{participant.activeDays} dias ativos</small></span></motion.div>)}{!ranking.participants.length && <p className="muted-text">Nenhum participante encontrado.</p>}</div>{ranking.page.totalPages > 1 && <div className="ranking-pagination"><button onClick={() => setPage((current) => current - 1)} disabled={page === 0} aria-label="Página anterior">‹</button><span>Página {page + 1} de {ranking.page.totalPages}</span><button onClick={() => setPage((current) => current + 1)} disabled={page + 1 >= ranking.page.totalPages} aria-label="Próxima página">›</button></div>}</section>
+         {ranking.status === 'FINALIZED' && ranking.podium && <Podium participants={ranking.participants} podium={ranking.podium} reducedMotion={reducedMotion} halloween={isHalloween && intensity === 'full' && halloweenConfig.effects.ranking} />}
+        <section className={`ranking-table-card card${isHalloween && intensity === 'full' && halloweenConfig.effects.ranking ? ' ranking-halloween' : ''}`}><div className="section-heading"><div><span>CLASSIFICAÇÃO</span><h2>Participantes</h2></div><small>{ranking.page.totalElements} pessoas</small></div><div className="ranking-list">{ranking.participants.map((participant) => <motion.div layout={!reducedMotion ? 'position' : false} transition={{ duration: reducedMotion ? 0 : MOTION_DURATION.normal / 1000 }} className={participant.userId === ranking.currentUser.userId ? 'ranking-row is-current' : 'ranking-row'} key={participant.userId}><b className="ranking-position">{participant.position}</b>{isHalloween && intensity === 'full' && halloweenConfig.effects.ranking && <span className="halloween-rank-mark" aria-hidden="true">{participant.position === 1 ? '🎃' : participant.position === 2 ? '👻' : participant.position === 3 ? '🦇' : ''}</span>}<i className="ranking-avatar">{initials(participant.displayName)}</i><div><strong>{participant.displayName}</strong>{participant.userId === ranking.currentUser.userId && <small>Você</small>}</div><span><strong><AnimatedCounter value={participant.officialPoints} /></strong><small>{participant.activeDays} dias ativos</small></span></motion.div>)}{!ranking.participants.length && <p className="muted-text">Nenhum participante encontrado.</p>}</div>{ranking.page.totalPages > 1 && <div className="ranking-pagination"><button onClick={() => setPage((current) => current - 1)} disabled={page === 0} aria-label="Página anterior">‹</button><span>Página {page + 1} de {ranking.page.totalPages}</span><button onClick={() => setPage((current) => current + 1)} disabled={page + 1 >= ranking.page.totalPages} aria-label="Próxima página">›</button></div>}</section>
       {details && <section className="ranking-detail-card card"><div className="section-heading"><div><span>SEUS PONTOS</span><h2>O que está pendente</h2></div></div><p>{details.pendingPoints ? `Você tem ${details.pendingPoints} pontos aguardando o próximo fechamento.` : 'Nenhum ponto pendente por enquanto.'}</p></section>}
     </>}
   </div>

@@ -1,8 +1,11 @@
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import { lazy, Suspense, createContext, useCallback, useContext, useState, type ReactNode } from 'react'
 import { CelebrationOverlay } from '../components/CelebrationOverlay'
+import { useHalloween } from '../seasonal/halloween'
 
-export type CelebrationType = 'DAILY_GOAL_COMPLETED' | 'HYDRATION_GOAL_COMPLETED' | 'STREAK_INCREMENTED' | 'RANKING_FINALIZED'
-export type CelebrationRequest = { type: CelebrationType; id: string }
+const HalloweenCelebration = lazy(() => import('../seasonal/halloween/HalloweenCelebration').then(({ HalloweenCelebration: component }) => ({ default: component })))
+
+export type CelebrationType = 'DAILY_GOAL_COMPLETED' | 'HYDRATION_GOAL_COMPLETED' | 'STREAK_INCREMENTED' | 'RANKING_FINALIZED' | 'MEAL_REGISTERED'
+export type CelebrationRequest = { type: CelebrationType; id: string; pointsEarned?: number }
 export type ActiveCelebration = CelebrationRequest & { key: string }
 
 type CelebrationContextValue = {
@@ -23,17 +26,19 @@ function readCelebrated() {
 export function CelebrationProvider({ children }: { children: ReactNode }) {
   const [active, setActive] = useState<ActiveCelebration | null>(null)
   const [celebrated] = useState(readCelebrated)
+  const { isHalloween, intensity } = useHalloween()
 
-  function celebrate(request: CelebrationRequest) {
+  const celebrate = useCallback((request: CelebrationRequest) => {
     const key = `${request.type}:${request.id}`
     if (celebrated.has(key)) return
     celebrated.add(key)
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify([...celebrated].slice(-100)))
     setActive({ ...request, key })
-  }
+  }, [celebrated])
 
   return <CelebrationContext.Provider value={{ celebrate }}>
     {children}
+    {isHalloween && intensity === 'full' && <Suspense fallback={null}><HalloweenCelebration /></Suspense>}
     <CelebrationOverlay celebration={active} onDismiss={() => setActive(null)} />
   </CelebrationContext.Provider>
 }

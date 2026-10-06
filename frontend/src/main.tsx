@@ -7,6 +7,7 @@ import { OfflineMealProvider } from './state/OfflineMealContext'
 import { WaterProvider } from './state/WaterContext'
 import { CelebrationProvider } from './state/CelebrationContext'
 import { ToastProvider } from './state/ToastContext'
+import { SeasonalTheme } from './seasonal/SeasonalTheme'
 import App from './App'
 import { prepareApi } from './lib/serverWakeup'
 import './styles.css'
@@ -18,18 +19,20 @@ if (!localStorage.getItem('Dietaday_token')) void prepareApi().catch(() => undef
 
 createRoot(root).render(
   <StrictMode>
-    <BrowserRouter>
-      <AuthProvider>
-        <DietProvider>
-          <CelebrationProvider>
-            <ToastProvider>
-              <OfflineMealProvider>
-                <WaterProvider><App /></WaterProvider>
-              </OfflineMealProvider>
-            </ToastProvider>
-          </CelebrationProvider>
-        </DietProvider>
-      </AuthProvider>
-    </BrowserRouter>
+    <SeasonalTheme>
+      <BrowserRouter>
+        <AuthProvider>
+          <DietProvider>
+            <CelebrationProvider>
+              <ToastProvider>
+                <OfflineMealProvider>
+                  <WaterProvider><App /></WaterProvider>
+                </OfflineMealProvider>
+              </ToastProvider>
+            </CelebrationProvider>
+          </DietProvider>
+        </AuthProvider>
+      </BrowserRouter>
+    </SeasonalTheme>
   </StrictMode>,
 )
