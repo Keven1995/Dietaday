@@ -1,6 +1,8 @@
 package com.dietapp;
 
+import com.dietapp.user.User;
 import com.dietapp.user.UserRepository;
+import com.dietapp.user.UserSex;
 import com.dietapp.ranking.RankingPointEventRepository;
 import com.dietapp.ranking.RankingPointEvent;
 import com.dietapp.telemetry.SyncErrorEventRepository;
@@ -515,16 +517,19 @@ class ApiIntegrationTest {
     void registrationHashesPasswordAndTokenAccessesProfile() throws Exception {
         String email = "user-" + UUID.randomUUID() + "@example.com";
         JsonNode auth = register("Test User", email);
+        assertThat(auth.path("birthDate").asText()).isEqualTo("1990-01-01");
 
         var saved = users.findByEmailIgnoreCase(email).orElseThrow();
         assertThat(saved.getPasswordHash()).isNotEqualTo("password123");
         assertThat(passwordEncoder.matches("password123", saved.getPasswordHash())).isTrue();
+        assertThat(saved.getBirthDate()).isEqualTo(LocalDate.of(1990, 1, 1));
 
         mvc.perform(get("/api/profile").header("Authorization", bearer(auth)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email").value(email))
                 .andExpect(jsonPath("$.fullName").value("Test User"))
                 .andExpect(jsonPath("$.sex").value("MALE"))
+                .andExpect(jsonPath("$.birthDate").value("1990-01-01"))
                 .andExpect(jsonPath("$.weightKg").doesNotExist())
                 .andExpect(jsonPath("$.heightCm").doesNotExist());
 
@@ -532,12 +537,35 @@ class ApiIntegrationTest {
                         .header("Authorization", bearer(auth))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"fullName":"Updated User","weightKg":72.50,"heightCm":178}
+                                {"fullName":"Updated User","weightKg":72.50,"heightCm":178,"birthDate":"1988-04-12"}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.fullName").value("Updated User"))
                 .andExpect(jsonPath("$.weightKg").value(72.5))
-                .andExpect(jsonPath("$.heightCm").value(178));
+                .andExpect(jsonPath("$.heightCm").value(178))
+                .andExpect(jsonPath("$.birthDate").value("1988-04-12"));
+
+        // Older clients omit birthDate; such an update must preserve a date saved by a newer client.
+        mvc.perform(put("/api/profile")
+                        .header("Authorization", bearer(auth))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"fullName":"Updated User","weightKg":72.50,"heightCm":178}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.birthDate").value("1988-04-12"));
+
+        mvc.perform(put("/api/profile")
+                        .header("Authorization", bearer(auth))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"fullName":"Must Not Apply","weightKg":75.0,"heightCm":180,"birthDate":"2099-01-01"}
+                                """))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/profile").header("Authorization", bearer(auth)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.fullName").value("Updated User"))
+                .andExpect(jsonPath("$.birthDate").value("1988-04-12"));
 
         mvc.perform(put("/api/profile")
                         .header("Authorization", bearer(auth))
@@ -551,12 +579,61 @@ class ApiIntegrationTest {
     }
 
     @Test
+    void registrationRequiresBirthDateAndRejectsFutureDates() throws Exception {
+        mvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "fullName", "Missing Birth Date",
+                                "email", "missing-birth-date-" + UUID.randomUUID() + "@example.com",
+                                "password", "password123",
+                                "sex", "MALE"))))
+                .andExpect(status().isBadRequest());
+
+        LocalDate tomorrow = LocalDate.now(ZoneId.of("America/Sao_Paulo")).plusDays(1);
+        mvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new RegisterRequest(
+                                "Future Birth Date",
+                                "future-birth-date-" + UUID.randomUUID() + "@example.com",
+                                "password123", "MALE", tomorrow))))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void legacyUserWithoutBirthDateCanStillLoginAndUpdateProfile() throws Exception {
+        String email = "legacy-profile-" + UUID.randomUUID() + "@example.com";
+        users.saveAndFlush(new User(email, passwordEncoder.encode("password123"), "Legacy User", UserSex.MALE));
+
+        String loginResponse = mvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new LoginRequest(email, "password123"))))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        JsonNode auth = objectMapper.readTree(loginResponse);
+
+        mvc.perform(get("/api/profile").header("Authorization", bearer(auth)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.birthDate").doesNotExist());
+
+        mvc.perform(put("/api/profile")
+                        .header("Authorization", bearer(auth))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"fullName":"Legacy User Updated","weightKg":72.5,"heightCm":178}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.fullName").value("Legacy User Updated"))
+                .andExpect(jsonPath("$.birthDate").doesNotExist());
+    }
+
+    @Test
     void refreshTokenIsHttpOnlyAndRotates() throws Exception {
         String email = "refresh-" + UUID.randomUUID() + "@example.com";
         MvcResult registration = mvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new RegisterRequest("Refresh User", email, "password123", "MALE"))))
+                                new RegisterRequest("Refresh User", email, "password123", "MALE",
+                                        LocalDate.of(1990, 1, 1)))))
                 .andExpect(status().isOk())
                 .andReturn();
         var originalCookie = registration.getResponse().getCookie("dietaday_refresh");
@@ -1575,7 +1652,8 @@ class ApiIntegrationTest {
     private JsonNode register(String name, String email) throws Exception {
         String response = mvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
-                         .content(objectMapper.writeValueAsString(new RegisterRequest(name, email, "password123", "MALE"))))
+                         .content(objectMapper.writeValueAsString(new RegisterRequest(name, email, "password123", "MALE",
+                                 LocalDate.of(1990, 1, 1)))))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(response);
@@ -1593,7 +1671,8 @@ class ApiIntegrationTest {
     }
 
     private String createCompetitiveDiet(JsonNode auth, String name) throws Exception {
-        return createCompetitiveDiet(auth, name, "2026-09-01", "2026-10-01");
+        String endDate = LocalDate.now(ZoneId.of("America/Sao_Paulo")).plusDays(30).toString();
+        return createCompetitiveDiet(auth, name, "2026-09-01", endDate);
     }
 
     private String createCompetitiveDiet(JsonNode auth, String name, String startDate, String endDate) throws Exception {
@@ -1658,7 +1737,7 @@ class ApiIntegrationTest {
         return "Bearer " + auth.get("token").asText();
     }
 
-    private record RegisterRequest(String fullName, String email, String password, String sex) {}
+    private record RegisterRequest(String fullName, String email, String password, String sex, LocalDate birthDate) {}
     private record LoginRequest(String email, String password) {}
     private record DietRequest(String name, String startDate, String endDate) {}
     private record EmailRequest(String email) {}
