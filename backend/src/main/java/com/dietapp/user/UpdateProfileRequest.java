@@ -8,10 +8,12 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 public record UpdateProfileRequest(
         @NotBlank @Size(max = 120) String fullName,
         @DecimalMin("20.0") @DecimalMax("500.0") BigDecimal weightKg,
         @Min(50) @Max(300) Integer heightCm,
-        UserSex sex) {
+        UserSex sex,
+        LocalDate birthDate) {
 }
