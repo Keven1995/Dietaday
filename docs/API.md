@@ -23,16 +23,27 @@ PUT  /profile
 
 O access token tem validade padrão de 30 minutos. O refresh token fica armazenado somente como hash no backend e é invalidado após cada rotação.
 
-O cadastro exige `sex` com um dos valores `MALE` ou `FEMALE`:
+O cadastro exige `sex` com um dos valores `MALE` ou `FEMALE` e `birthDate` no formato ISO `YYYY-MM-DD`. A data não pode estar no futuro:
 
 ```json
 {
   "fullName": "Nome do usuário",
   "email": "usuario@exemplo.com",
   "password": "senha-com-no-minimo-8-caracteres",
-  "sex": "FEMALE"
+  "sex": "FEMALE",
+  "birthDate": "1990-04-15"
 }
 ```
+
+As respostas de cadastro, login e renovação de sessão incluem `birthDate` (`YYYY-MM-DD`)
+quando disponível. O perfil também informa esse campo. Em contas criadas antes da
+inclusão do nascimento, ele permanece sem valor (`null`; a propriedade pode ser omitida
+na serialização JSON) até que seja informado.
+
+`PUT /profile` aceita `birthDate` no mesmo formato e rejeita datas futuras. O campo pode
+ser omitido ou enviado como `null` sem apagar uma data já salva, permitindo que clientes
+anteriores continuem atualizando os demais dados do perfil. Envie uma data válida para
+preencher ou atualizar o nascimento.
 
 ## Dietas
 

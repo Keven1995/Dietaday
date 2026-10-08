@@ -5,13 +5,14 @@ import { MemoryGame } from '../components/MemoryGame'
 import { CreatorCredit } from '../components/CreatorCredit'
 import { Button } from '../components/Ui'
 import { isDemoMode } from '../lib/api'
+import { brazilDateKey } from '../lib/date'
 import { prepareApi } from '../lib/serverWakeup'
 import { useAuth } from '../state/AuthContext'
-import type { LoginRequest, UserSex } from '../types'
+import type { LoginRequest, RegisterRequest, UserSex } from '../types'
 
 type AuthMode = 'login' | 'register'
 type PreparationState = 'idle' | 'waiting' | 'ready'
-type AuthForm = LoginRequest & { fullName: string; sex: UserSex | '' }
+type AuthForm = LoginRequest & { fullName: string; sex: UserSex | ''; birthDate: string }
 
 function getRedirectPath(state: unknown) {
   if (typeof state !== 'object' || state === null || !('from' in state)) return '/'
@@ -33,6 +34,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
     email: isDemoMode ? 'marina@exemplo.com' : '',
     password: isDemoMode ? '12345678' : '',
     sex: isDemoMode ? 'FEMALE' : '',
+    birthDate: '',
   })
 
   useEffect(() => {
@@ -58,6 +60,14 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
       setError('Selecione seu sexo.')
       return
     }
+    if (mode === 'register' && !request.birthDate) {
+      setError('Informe sua data de nascimento.')
+      return
+    }
+    if (mode === 'register' && request.birthDate > brazilDateKey()) {
+      setError('A data de nascimento não pode ser no futuro.')
+      return
+    }
     setLoading(true)
     let preparationShown = false
     try {
@@ -78,7 +88,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
         }
       }
       if (mode === 'login') await login(request.email, request.password)
-      else await register({ ...request, sex: request.sex as UserSex })
+       else await register({ ...request, sex: request.sex as UserSex } as RegisterRequest)
       if (!mountedRef.current) return
       navigate(getRedirectPath(location.state), { replace: true })
     } catch (err) {
@@ -152,6 +162,17 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
                     <option value="FEMALE">Feminino</option>
                     <option value="MALE">Masculino</option>
                   </select>
+                </label>
+                <label>
+                  Data de nascimento
+                  <input
+                    required
+                    type="date"
+                    autoComplete="bday"
+                    max={brazilDateKey()}
+                    value={form.birthDate}
+                    onChange={(event) => setForm({ ...form, birthDate: event.target.value })}
+                  />
                 </label>
               </>
             )}
