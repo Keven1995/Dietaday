@@ -7,6 +7,7 @@ import { AnimatedCounter } from '../components/motion/AnimatedCounter'
 import { AnimatedError } from '../components/motion/AnimatedError'
 import { AnimatedProgress } from '../components/motion/AnimatedProgress'
 import { WaterBottle } from '../components/motion/WaterBottle'
+import { WaterMonthlyHistory } from '../components/WaterMonthlyHistory'
 import { Button, PageTitle } from '../components/Ui'
 import { useCompetitiveMode } from '../hooks/useCompetitiveMode'
 import { useFeatureDiscovery } from '../hooks/useFeatureDiscovery'
@@ -18,7 +19,7 @@ import { useToast } from '../state/ToastContext'
 import { useAuth } from '../state/AuthContext'
 import { reportUxEvent } from '../lib/uxTelemetry'
 import type { FeatureDiscoveryContext, FeatureDiscoveryResource } from '../lib/featureDiscovery'
-import { WATER_CHECK_OPTIONS, WATER_GOAL_OPTIONS } from '../lib/water'
+import { getAvailableWaterCheckOptions, WATER_GOAL_OPTIONS } from '../lib/water'
 
 function formatLiters(amountMl: number) {
   return `${amountMl / 1000}`.replace('.', ',') + ' L'
@@ -81,8 +82,11 @@ export function Water() {
   useEffect(() => {
     if (water) {
       setGoal(water.goalMl)
-      const firstAvailable = WATER_CHECK_OPTIONS.find((amount) => amount <= water.remainingMl)
-      setCheckAmount(firstAvailable ? String(firstAvailable) : '')
+      const options = getAvailableWaterCheckOptions(water.remainingMl)
+      const firstAvailable = options.regular[0]
+      setCheckAmount(options.exactRemainderMl !== null
+        ? `remainder:${options.exactRemainderMl}`
+        : firstAvailable ? String(firstAvailable) : '')
     }
   }, [water?.goalMl, water?.remainingMl])
 
@@ -101,8 +105,12 @@ export function Water() {
   }
 
   async function handleCheck() {
-    const amount = Number(checkAmount)
-    if (!amount) return
+    const exactRemainderMl = water && water.remainingMl > 0 && water.remainingMl < 500
+      && checkAmount === `remainder:${water.remainingMl}`
+      ? water.remainingMl
+      : null
+    const amount = exactRemainderMl ?? Number(checkAmount)
+    if (!Number.isFinite(amount) || amount <= 0) return
     setMessage('')
     setFeedbackStatus('loading')
     try {
@@ -131,7 +139,9 @@ export function Water() {
     }
   }
 
-  const remainingOptions = water ? WATER_CHECK_OPTIONS.filter((amount) => amount <= water.remainingMl) : []
+  const availableCheckOptions = water ? getAvailableWaterCheckOptions(water.remainingMl) : { regular: [], exactRemainderMl: null }
+  const selectedExactRemainder = availableCheckOptions.exactRemainderMl !== null
+    && checkAmount === `remainder:${availableCheckOptions.exactRemainderMl}`
   const complete = water?.remainingMl === 0
   const showReminderHint = featureDiscovery.campaign?.id === 'water_reminders'
 
@@ -163,10 +173,15 @@ export function Water() {
               <label htmlFor="water-check-amount">Quantidade bebida</label>
               <select id="water-check-amount" value={checkAmount} onChange={(event) => setCheckAmount(event.target.value)} disabled={saving || complete}>
                 <option value="">Selecione uma quantidade</option>
-                {remainingOptions.map((amount) => <option value={amount} key={amount}>{formatLiters(amount)}</option>)}
-              </select>
-              <Button type="button" loading={saving} disabled={!checkAmount || complete} onClick={() => void handleCheck()}>
-                <Check size={18} /> {complete ? 'Meta concluída' : 'Já tomei isso de água'}
+                 {availableCheckOptions.regular.map((amount) => <option value={amount} key={amount}>{formatLiters(amount)}</option>)}
+                 {availableCheckOptions.exactRemainderMl !== null && (
+                   <option value={`remainder:${availableCheckOptions.exactRemainderMl}`}>
+                     Registrar restante ({availableCheckOptions.exactRemainderMl} ml)
+                   </option>
+                 )}
+               </select>
+               <Button type="button" loading={saving} disabled={!checkAmount || complete} onClick={() => void handleCheck()}>
+                 <Check size={18} /> {complete ? 'Meta concluída' : selectedExactRemainder ? `Registrar restante (${water.remainingMl} ml)` : 'Já tomei isso de água'}
               </Button>
                 {message && <AnimatedCheck status={feedbackStatus} label={message} />}
               {showReminderHint && <FeatureHint
@@ -203,6 +218,8 @@ export function Water() {
             <div className="section-heading"><div><span>HOJE</span><h2>Checks realizados</h2></div><strong>{water.checks.length}</strong></div>
             {water.checks.length ? <div className="water-check-list">{water.checks.map((check) => <div key={check.id}><span><Check size={15} /> {formatLiters(check.amountMl)}</span><time>{new Date(check.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</time></div>)}</div> : <p className="muted-text">Nenhum check registrado ainda. Comece pelo próximo copo.</p>}
           </section>
+
+          <WaterMonthlyHistory userId={user?.id ?? null} token={token} dietId={competitiveDietId} />
         </>
       )}
     </div>

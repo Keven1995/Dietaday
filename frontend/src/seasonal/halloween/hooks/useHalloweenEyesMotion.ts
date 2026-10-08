@@ -25,6 +25,9 @@ type DeviceOrientationEventConstructor = typeof DeviceOrientationEvent & {
 }
 
 type OrientationWindow = Window & { orientation?: number }
+type StoredOrientationPermission = 'granted' | 'denied'
+
+const ORIENTATION_PERMISSION_KEY = 'Dietaday_halloween_eyes_orientation_permission_v1'
 
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value))
@@ -59,14 +62,40 @@ function readDeviceOrientationConstructor() {
   return window.DeviceOrientationEvent as DeviceOrientationEventConstructor | undefined
 }
 
+function readStoredOrientationPermission(): StoredOrientationPermission | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const value = window.localStorage.getItem(ORIENTATION_PERMISSION_KEY)
+    return value === 'granted' || value === 'denied' ? value : null
+  } catch {
+    return null
+  }
+}
+
+function storeOrientationPermission(permission: StoredOrientationPermission) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(ORIENTATION_PERMISSION_KEY, permission)
+  } catch {
+    // The pointer/touch fallback remains interactive if storage is unavailable.
+  }
+}
+
+function initialStatus(): EyesMotionStatus {
+  const permission = readStoredOrientationPermission()
+  if (permission === 'granted') return 'active'
+  if (permission === 'denied') return 'denied'
+  return 'inactive'
+}
+
 export function useHalloweenEyesMotion({
   enabled,
   reducedMotion,
   eyesRef,
   cardRef,
 }: UseHalloweenEyesMotionOptions): UseHalloweenEyesMotionResult {
-  const [status, setStatus] = useState<EyesMotionStatus>('inactive')
-  const statusRef = useRef<EyesMotionStatus>('inactive')
+  const [status, setStatus] = useState<EyesMotionStatus>(initialStatus)
+  const statusRef = useRef<EyesMotionStatus>(status)
   const permissionPendingRef = useRef(false)
 
   const updateStatus = useCallback((nextStatus: EyesMotionStatus) => {
@@ -89,8 +118,10 @@ export function useHalloweenEyesMotion({
       // Invoke synchronously before the first await so the browser sees the user gesture.
       const permissionPromise = request.call(orientationConstructor)
       const permission = await permissionPromise
+      storeOrientationPermission(permission)
       updateStatus(permission === 'granted' ? 'active' : 'denied')
     } catch {
+      storeOrientationPermission('denied')
       updateStatus('denied')
     } finally {
       permissionPendingRef.current = false
@@ -216,6 +247,7 @@ export function useHalloweenEyesMotion({
     const screenOrientation = window.screen.orientation
     const canUseOrientation = !hasFinePointer && window.isSecureContext !== false && Boolean(orientationConstructor)
     const needsPermission = Boolean(orientationConstructor?.requestPermission)
+    const storedPermission = readStoredOrientationPermission()
 
     eyes.style.setProperty('--pupil-x', '0px')
     eyes.style.setProperty('--pupil-y', '0px')
@@ -224,7 +256,9 @@ export function useHalloweenEyesMotion({
     } else if (!canUseOrientation) {
       updateStatus('unsupported')
     } else if (needsPermission) {
-      if (status !== 'active' && status !== 'denied') updateStatus('permission-required')
+      if (storedPermission === 'granted') updateStatus('active')
+      else if (storedPermission === 'denied') updateStatus('denied')
+      else updateStatus('permission-required')
     } else {
       updateStatus('active')
     }

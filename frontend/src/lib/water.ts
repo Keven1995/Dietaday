@@ -1,12 +1,55 @@
 import { api, isDemoMode } from './api'
-import type { WaterToday } from '../types'
+import type { WaterHistory, WaterToday } from '../types'
 import { createUuid } from './uuid'
-import { readCachedResource } from './resourceCache'
+import { readCachedResource, writeCachedResource } from './resourceCache'
 
 const DEFAULT_GOAL_ML = 2000
 export const WATER_CACHE_RESOURCE = 'water:today'
 export const WATER_CHECK_OPTIONS = [500, 1000, 1500, 2000, 2500, 3000, 3500, 4000]
 export const WATER_GOAL_OPTIONS = Array.from({ length: 41 }, (_, index) => 2000 + index * 50)
+const inFlightWaterHistory = new Map<string, Promise<WaterHistory>>()
+
+export function getAvailableWaterCheckOptions(remainingMl: number) {
+  return {
+    regular: WATER_CHECK_OPTIONS.filter((amount) => amount <= remainingMl),
+    exactRemainderMl: remainingMl > 0 && remainingMl < 500 ? remainingMl : null,
+  }
+}
+
+export function waterHistoryCacheResource(month: string, dietId?: string | null) {
+  return `${WATER_CACHE_RESOURCE}:history:${dietId ? `diet:${dietId}` : 'general'}:${month}`
+}
+
+export function readCachedWaterHistory(userId: string, month: string, dietId?: string | null) {
+  return readCachedResource<WaterHistory>(userId, waterHistoryCacheResource(month, dietId))
+}
+
+export async function getWaterHistory(
+  token: string | null,
+  userId: string,
+  month: string,
+  dietId?: string | null,
+): Promise<WaterHistory> {
+  if (isDemoMode) return { month, days: [] }
+  const resource = waterHistoryCacheResource(month, dietId)
+  const requestKey = `${userId}:${resource}`
+  const existingRequest = inFlightWaterHistory.get(requestKey)
+  if (existingRequest) return existingRequest
+
+  const path = dietId
+    ? `/diets/${dietId}/water/history?month=${encodeURIComponent(month)}`
+    : `/water/history?month=${encodeURIComponent(month)}`
+  const request = api<WaterHistory>(path, { token })
+    .then((history) => {
+      writeCachedResource(userId, resource, history)
+      return history
+    })
+    .finally(() => {
+      if (inFlightWaterHistory.get(requestKey) === request) inFlightWaterHistory.delete(requestKey)
+    })
+  inFlightWaterHistory.set(requestKey, request)
+  return request
+}
 
 function waterResource(dietId?: string | null) {
   return dietId ? `${WATER_CACHE_RESOURCE}:${dietId}` : WATER_CACHE_RESOURCE
@@ -69,6 +112,11 @@ export async function addWaterCheck(token: string | null, userId: string, amount
   if (isDemoMode) {
     const state = createDemoState(userId)
     if (amountMl > state.remainingMl) throw new Error('Esse check ultrapassa o volume restante da sua meta.')
+    const isRegularCheck = amountMl >= 500 && amountMl <= 4000 && amountMl % 500 === 0
+    const isExactRemainder = amountMl > 0 && amountMl < 500 && amountMl === state.remainingMl
+    if (!isRegularCheck && !isExactRemainder) {
+      throw new Error('Checks abaixo de 500 ml só podem registrar exatamente o restante da meta.')
+    }
     const consumedMl = state.consumedMl + amountMl
     const next: WaterToday = {
       ...state,

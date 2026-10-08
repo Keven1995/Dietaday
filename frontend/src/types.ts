@@ -121,6 +121,19 @@ export type WaterToday = {
   pointsEarned?: number
 }
 
+export type WaterHistoryDay = {
+  date: string
+  consumedMl: number
+  goalMl: number | null
+  percentage: number | null
+  hasRecords: boolean
+}
+
+export type WaterHistory = {
+  month: string
+  days: WaterHistoryDay[]
+}
+
 export type DailyProgress = {
   dietId: string
   date: string
