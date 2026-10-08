@@ -6,9 +6,12 @@ import jakarta.validation.constraints.Size;
 import jakarta.validation.constraints.NotNull;
 import com.dietapp.user.UserSex;
 
+import java.time.LocalDate;
+
 public record RegisterRequest(
         @NotBlank @Size(max = 120) String fullName,
         @NotBlank @Email @Size(max = 255) String email,
         @NotBlank @Size(min = 8, max = 72) String password,
-        @NotNull UserSex sex) {
+        @NotNull UserSex sex,
+        @NotNull LocalDate birthDate) {
 }

@@ -1,6 +1,7 @@
 package com.dietapp.auth;
 
 import com.dietapp.common.ConflictException;
+import com.dietapp.common.BadRequestException;
 import com.dietapp.security.JwtService;
 import com.dietapp.security.LoginAttemptService;
 import com.dietapp.security.SecurityAuditService;
@@ -15,6 +16,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.LocalDate;
 import java.util.Locale;
 
 @Service
@@ -28,11 +31,12 @@ public class AuthService {
     private final LoginAttemptService loginAttempts;
     private final SecurityAuditService audit;
     private final AccountSecurityService accountSecurity;
+    private final Clock clock;
 
     public AuthService(UserRepository users, PasswordEncoder passwordEncoder,
                        AuthenticationManager authenticationManager, JwtService jwtService,
                        LoginAttemptService loginAttempts, SecurityAuditService audit,
-                       AccountSecurityService accountSecurity) {
+                       AccountSecurityService accountSecurity, Clock clock) {
         this.users = users;
         this.passwordEncoder = passwordEncoder;
         this.authenticationManager = authenticationManager;
@@ -40,10 +44,12 @@ public class AuthService {
         this.loginAttempts = loginAttempts;
         this.audit = audit;
         this.accountSecurity = accountSecurity;
+        this.clock = clock;
     }
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
+        validateBirthDate(request.birthDate());
         String email = normalizeEmail(request.email());
         if (users.existsByEmailIgnoreCase(email)) {
             throw new ConflictException("Email already registered");
@@ -55,7 +61,8 @@ public class AuthService {
                     email,
                     passwordEncoder.encode(request.password()),
                     request.fullName().trim(),
-                    request.sex()));
+                    request.sex(),
+                    request.birthDate()));
         } catch (DataIntegrityViolationException exception) {
             throw new ConflictException("Email already registered", exception);
         }
@@ -88,7 +95,15 @@ public class AuthService {
     }
 
     AuthResponse responseFor(User user) {
-        return new AuthResponse(jwtService.generate(user.getId()), user.getId(), user.getEmail(), user.getFullName(), user.getSex());
+        return new AuthResponse(jwtService.generate(user.getId()), user.getId(), user.getEmail(), user.getFullName(),
+                user.getSex(), user.getBirthDate());
+    }
+
+    private void validateBirthDate(LocalDate birthDate) {
+        if (birthDate == null) throw new BadRequestException("Informe sua data de nascimento.");
+        if (birthDate.isAfter(LocalDate.now(clock))) {
+            throw new BadRequestException("A data de nascimento não pode ser no futuro.");
+        }
     }
 
     private String normalizeEmail(String email) {
