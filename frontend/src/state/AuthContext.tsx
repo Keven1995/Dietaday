@@ -22,6 +22,7 @@ function isStoredUser(value: unknown): value is User {
   return 'id' in value && typeof value.id === 'string' &&
     'email' in value && typeof value.email === 'string' &&
     'fullName' in value && typeof value.fullName === 'string' &&
+    (!('birthDate' in value) || value.birthDate === null || typeof value.birthDate === 'string') &&
     (!('sex' in value) || value.sex === 'MALE' || value.sex === 'FEMALE' || value.sex === 'NEUTRAL')
 }
 
@@ -43,7 +44,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(isDemoMode)
 
   function persist(data: AuthResponse) {
-    const authenticatedUser: User = { id: data.userId, email: data.email, fullName: data.fullName, sex: data.sex }
+    const authenticatedUser: User = {
+      id: data.userId,
+      email: data.email,
+      fullName: data.fullName,
+      sex: data.sex,
+      birthDate: data.birthDate ?? null,
+    }
     localStorage.setItem('Dietaday_user', JSON.stringify(authenticatedUser))
     setToken(data.token)
     setUser(authenticatedUser)
@@ -86,14 +93,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function login(email: string, password: string) {
     const data = isDemoMode
-      ? { token: 'demo-jwt-token', userId: '1', fullName: 'Marina Alves', email, sex: 'FEMALE' as UserSex }
+      ? { token: 'demo-jwt-token', userId: '1', fullName: 'Marina Alves', email, sex: 'FEMALE' as UserSex, birthDate: null }
       : await api<AuthResponse>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })
     persist(data)
   }
 
   async function register(data: RegisterRequest) {
     const response = isDemoMode
-      ? { token: 'demo-jwt-token', userId: createUuid(), fullName: data.fullName, email: data.email, sex: data.sex }
+      ? {
+        token: 'demo-jwt-token',
+        userId: createUuid(),
+        fullName: data.fullName,
+        email: data.email,
+        sex: data.sex,
+        birthDate: data.birthDate,
+      }
       : await api<AuthResponse>('/auth/register', { method: 'POST', body: JSON.stringify(data) })
     persist(response)
   }

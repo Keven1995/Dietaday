@@ -5,6 +5,10 @@ export function localDateKey(date = new Date()) {
   return `${year}-${month}-${day}`
 }
 
+export function brazilDateKey(date = new Date()) {
+  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Sao_Paulo' }).format(date)
+}
+
 export function mealDateKey(value: string) {
   return value.slice(0, 10)
 }

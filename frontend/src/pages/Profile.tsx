@@ -1,15 +1,17 @@
-import { Bell, BellOff, LogOut, Save, UserRound, Shield } from 'lucide-react'
+import { Bell, BellOff, Info, LogOut, Save, UserRound, Shield } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Button, PageTitle } from '../components/Ui'
 import { api, getErrorMessage } from '../lib/api'
+import { ageOnDate, calculateBmi, classifyAdultBmi } from '../lib/bmi'
+import { brazilDateKey } from '../lib/date'
 import { usePushStatus } from '../hooks/usePushStatus'
 import { completeFeatureCampaign } from '../lib/featureDiscoveryTelemetry'
 import { useAuth } from '../state/AuthContext'
 import type { User, UserSex } from '../types'
 import { disablePushNotifications, enablePushNotifications } from '../lib/pushNotifications'
 
-type ProfileForm = { fullName: string; weight: string; height: string; sex: UserSex | '' }
+type ProfileForm = { fullName: string; weight: string; height: string; sex: UserSex | ''; birthDate: string }
 
 function userToForm(user: User | null): ProfileForm {
   return {
@@ -17,7 +19,12 @@ function userToForm(user: User | null): ProfileForm {
     weight: user?.weightKg?.toString() ?? '',
     height: user?.heightCm?.toString() ?? '',
     sex: user?.sex === 'MALE' || user?.sex === 'FEMALE' ? user.sex : '',
+    birthDate: user?.birthDate ?? '',
   }
+}
+
+function formatBmi(value: number) {
+  return value.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 }
 
 export function Profile() {
@@ -34,6 +41,7 @@ export function Profile() {
   const [pushMessage, setPushMessage] = useState('')
   const [pushError, setPushError] = useState('')
   const [verificationMessage, setVerificationMessage] = useState('')
+  const [bmiInfoOpen, setBmiInfoOpen] = useState(false)
 
   useEffect(() => {
     setForm(userToForm(user))
@@ -58,6 +66,10 @@ export function Profile() {
       setError('Selecione seu sexo.')
       return
     }
+    if (form.birthDate && form.birthDate > brazilDateKey()) {
+      setError('A data de nascimento não pode ser no futuro.')
+      return
+    }
     setLoading(true)
     try {
       await updateUser({
@@ -65,6 +77,7 @@ export function Profile() {
         weightKg: Number(form.weight),
         heightCm: Number(form.height),
         sex: form.sex,
+        birthDate: form.birthDate || null,
       })
       setSuccess(true)
     } catch (updateError) {
@@ -116,6 +129,10 @@ export function Profile() {
     }
   }
 
+  const bmi = calculateBmi(form.weight === '' ? null : Number(form.weight), form.height === '' ? null : Number(form.height))
+  const age = ageOnDate(form.birthDate || null, brazilDateKey())
+  const bmiClassification = age !== null && age >= 18 ? classifyAdultBmi(bmi) : null
+
   return (
     <div className="page narrow-page">
       <PageTitle eyebrow="SUA CONTA" title="Perfil" />
@@ -144,6 +161,16 @@ export function Profile() {
             <option value="MALE">Masculino</option>
           </select>
         </label>
+        <label>
+          Data de nascimento
+          <input
+            type="date"
+            autoComplete="bday"
+            max={brazilDateKey()}
+            value={form.birthDate}
+            onChange={(event) => setForm({ ...form, birthDate: event.target.value })}
+          />
+        </label>
         <div className="form-row">
           <label>
             Peso atual <span>(kg)</span>
@@ -154,6 +181,46 @@ export function Profile() {
             <input required min="80" max="250" step="0.1" type="number" inputMode="decimal" value={form.height} onChange={(event) => setForm({ ...form, height: event.target.value })} />
           </label>
         </div>
+        <section className="profile-bmi" aria-labelledby="profile-bmi-title" aria-live="polite">
+          <div className="profile-bmi-heading">
+            <h3 id="profile-bmi-title">Índice de Massa Corporal (IMC)</h3>
+            <button
+              type="button"
+              className="profile-bmi-info-trigger"
+              aria-label="Como o IMC é calculado?"
+              aria-expanded={bmiInfoOpen}
+              aria-controls="profile-bmi-info-panel"
+              onClick={() => setBmiInfoOpen((open) => !open)}
+            >
+              <Info size={18} aria-hidden="true" />
+            </button>
+          </div>
+          {bmi === null ? (
+            <p className="profile-bmi-result-message">Informe peso e altura válidos para calcular o IMC.</p>
+          ) : (
+            <p className="profile-bmi-result">
+              <strong>{formatBmi(bmi)}</strong>
+              {bmiClassification && <span> — {bmiClassification}</span>}
+            </p>
+          )}
+          {bmi !== null && !bmiClassification && (
+            <p className="profile-bmi-result-message">
+              {age !== null && age < 18
+                ? 'Para menores de 18 anos, a interpretação depende da idade e do sexo; a classificação adulta não se aplica.'
+                : 'Informe sua data de nascimento para mostrar a classificação de referência para adultos.'}
+            </p>
+          )}
+          {bmiInfoOpen && (
+            <div className="profile-bmi-info-panel" id="profile-bmi-info-panel">
+              <p>O IMC é calculado dividindo o peso em quilos pela altura em metros ao quadrado. Exemplo: 70 kg ÷ (1,70 × 1,70) = 24,2.</p>
+              <p>É uma medida de referência, não um diagnóstico, e não diferencia músculo de gordura. Para menores de 18 anos, a interpretação considera idade e sexo; esta classificação adulta não se aplica.</p>
+              <div className="profile-bmi-sources">
+                <a href="https://www.who.int/news-room/fact-sheets/detail/obesity-and-overweight" target="_blank" rel="noopener noreferrer">OMS: sobrepeso e obesidade</a>
+                <a href="https://www.nhs.uk/health-assessment-tools/calculate-your-body-mass-index/calculate-bmi-for-adults/" target="_blank" rel="noopener noreferrer">NHS: cálculo do IMC em adultos</a>
+              </div>
+            </div>
+          )}
+        </section>
         {error && <div className="error-message" role="alert">{error}</div>}
         {success && <div className="success-message" role="status">Perfil atualizado com sucesso.</div>}
         <Button loading={loading}><Save /> Salvar alterações</Button>
