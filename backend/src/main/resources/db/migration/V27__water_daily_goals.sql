@@ -4,7 +4,7 @@ CREATE TABLE water_daily_goals (
     diet_id UUID REFERENCES diets(id) ON DELETE CASCADE,
     scope_key UUID NOT NULL,
     goal_date DATE NOT NULL,
-    goal_ml INTEGER,
+    goal_ml INTEGER NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
     CONSTRAINT ck_water_daily_goal_scope CHECK (
@@ -12,7 +12,7 @@ CREATE TABLE water_daily_goals (
         OR (diet_id IS NOT NULL AND diet_id <> CAST('00000000-0000-0000-0000-000000000000' AS UUID) AND scope_key = diet_id)
     ),
     CONSTRAINT ck_water_daily_goal_amount
-        CHECK (goal_ml IS NULL OR (goal_ml BETWEEN 2000 AND 4000 AND MOD(goal_ml, 50) = 0)),
+        CHECK (goal_ml BETWEEN 2000 AND 4000 AND MOD(goal_ml, 50) = 0),
     CONSTRAINT uq_water_daily_goal_user_scope_date UNIQUE (user_id, scope_key, goal_date)
 );
 
