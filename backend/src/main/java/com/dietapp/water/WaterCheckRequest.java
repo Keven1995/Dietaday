@@ -5,4 +5,4 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 
 public record WaterCheckRequest(
-        @NotNull @Min(500) @Max(4000) Integer amountMl) {}
+        @NotNull @Min(1) @Max(4000) Integer amountMl) {}
