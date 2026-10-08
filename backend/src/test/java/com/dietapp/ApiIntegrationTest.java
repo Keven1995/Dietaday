@@ -3,6 +3,7 @@ package com.dietapp;
 import com.dietapp.user.User;
 import com.dietapp.user.UserRepository;
 import com.dietapp.user.UserSex;
+import com.dietapp.diet.DietRepository;
 import com.dietapp.ranking.RankingPointEventRepository;
 import com.dietapp.ranking.RankingPointEvent;
 import com.dietapp.telemetry.SyncErrorEventRepository;
@@ -27,6 +28,7 @@ import java.util.UUID;
 import java.util.Map;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.YearMonth;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -51,6 +53,7 @@ class ApiIntegrationTest {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper objectMapper;
     @Autowired UserRepository users;
+    @Autowired DietRepository diets;
     @Autowired PasswordEncoder passwordEncoder;
     @Autowired RankingPointEventRepository rankingEvents;
     @Autowired SyncErrorEventRepository syncErrors;
@@ -432,6 +435,135 @@ class ApiIntegrationTest {
     }
 
     @Test
+    void waterCheckCanRegisterTheExactRemainderBelowFiveHundredMl() throws Exception {
+        JsonNode user = register("Water Remainder User", "water-remainder-" + UUID.randomUUID() + "@example.com");
+        String authorization = bearer(user);
+        mvc.perform(put("/api/water/goal").header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"goalMl\":2450}"))
+                .andExpect(status().isOk());
+
+        for (int index = 0; index < 4; index++) {
+            mvc.perform(post("/api/water/checks").header("Authorization", authorization)
+                            .contentType(MediaType.APPLICATION_JSON).content("{\"amountMl\":500}"))
+                    .andExpect(status().isOk());
+        }
+
+        mvc.perform(post("/api/water/checks").header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"amountMl\":450}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.consumedMl").value(2450))
+                .andExpect(jsonPath("$.remainingMl").value(0))
+                .andExpect(jsonPath("$.percentage").value(100))
+                .andExpect(jsonPath("$.checks.length()").value(5));
+
+        mvc.perform(post("/api/water/checks").header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"amountMl\":450}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void reducingGoalBelowConsumedWaterPreservesChecksAndBlocksMoreEntries() throws Exception {
+        JsonNode user = register("Reduced Water Goal User", "reduced-water-goal-" + UUID.randomUUID() + "@example.com");
+        String authorization = bearer(user);
+        UUID userId = UUID.fromString(user.get("userId").asText());
+        mvc.perform(put("/api/water/goal").header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"goalMl\":2500}"))
+                .andExpect(status().isOk());
+        for (int index = 0; index < 5; index++) {
+            mvc.perform(post("/api/water/checks").header("Authorization", authorization)
+                            .contentType(MediaType.APPLICATION_JSON).content("{\"amountMl\":500}"))
+                    .andExpect(status().isOk());
+        }
+
+        mvc.perform(put("/api/water/goal").header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"goalMl\":2000}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.goalMl").value(2000))
+                .andExpect(jsonPath("$.consumedMl").value(2500))
+                .andExpect(jsonPath("$.remainingMl").value(0))
+                .andExpect(jsonPath("$.percentage").value(100))
+                .andExpect(jsonPath("$.checks.length()").value(5));
+
+        mvc.perform(post("/api/water/checks").header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"amountMl\":500}"))
+                .andExpect(status().isBadRequest());
+        assertThat(waterChecks.findByUserIdAndCheckDateOrderByCreatedAtAsc(
+                userId, LocalDate.now(ZoneId.of("America/Sao_Paulo")))).hasSize(5);
+    }
+
+    @Test
+    void waterCheckRejectsArbitraryAmountsBelowFiveHundredMl() throws Exception {
+        JsonNode user = register("Water Invalid Remainder User",
+                "water-invalid-remainder-" + UUID.randomUUID() + "@example.com");
+        String authorization = bearer(user);
+
+        mvc.perform(post("/api/water/checks").header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"amountMl\":450}"))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(put("/api/water/goal").header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"goalMl\":2350}"))
+                .andExpect(status().isOk());
+        for (int index = 0; index < 4; index++) {
+            mvc.perform(post("/api/water/checks").header("Authorization", authorization)
+                            .contentType(MediaType.APPLICATION_JSON).content("{\"amountMl\":500}"))
+                    .andExpect(status().isOk());
+        }
+
+        mvc.perform(post("/api/water/checks").header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"amountMl\":349}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/water/checks").header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"amountMl\":500}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/water/checks").header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"amountMl\":350}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.consumedMl").value(2350))
+                .andExpect(jsonPath("$.remainingMl").value(0));
+    }
+
+    @Test
+    void competitiveWaterRemainderGetsOneRankingEventAndBlocksFollowingChecks() throws Exception {
+        JsonNode owner = register("Competitive Remainder Owner",
+                "competitive-remainder-" + UUID.randomUUID() + "@example.com");
+        String dietId = createCompetitiveDiet(owner, "Competitive Remainder Diet");
+        String authorization = bearer(owner);
+
+        mvc.perform(put("/api/diets/{dietId}/water/goal", dietId)
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"goalMl\":2450}"))
+                .andExpect(status().isOk());
+        for (int index = 0; index < 4; index++) {
+            mvc.perform(post("/api/diets/{dietId}/water/checks", dietId)
+                            .header("Authorization", authorization)
+                            .contentType(MediaType.APPLICATION_JSON).content("{\"amountMl\":500}"))
+                    .andExpect(status().isOk());
+        }
+
+        String response = mvc.perform(post("/api/diets/{dietId}/water/checks", dietId)
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"amountMl\":450}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.consumedMl").value(2450))
+                .andExpect(jsonPath("$.remainingMl").value(0))
+                .andExpect(jsonPath("$.pointsEarned").value(2))
+                .andReturn().getResponse().getContentAsString();
+        String remainderCheckId = objectMapper.readTree(response).get("checks").get(4).get("id").asText();
+
+        assertThat(rankingEvents.countByDietIdAndUserId(UUID.fromString(dietId),
+                UUID.fromString(owner.get("userId").asText()))).isEqualTo(5);
+        assertThat(rankingEvents.findBySourceTypeAndSourceId(RankingPointEvent.SourceType.WATER_CHECK,
+                UUID.fromString(remainderCheckId)).orElseThrow().getPoints()).isEqualTo(2);
+        mvc.perform(post("/api/diets/{dietId}/water/checks", dietId)
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"amountMl\":450}"))
+                .andExpect(status().isBadRequest());
+        assertThat(rankingEvents.countByDietIdAndUserId(UUID.fromString(dietId),
+                UUID.fromString(owner.get("userId").asText()))).isEqualTo(5);
+    }
+
+    @Test
     void dailyGoalSnapshotIsCreatedOnFirstCheckAndOnlyTodaysSnapshotChanges() throws Exception {
         JsonNode user = register("Daily Goal Snapshot User", "daily-goal-snapshot-" + UUID.randomUUID() + "@example.com");
         String authorization = bearer(user);
@@ -469,6 +601,30 @@ class ApiIntegrationTest {
         assertThat(waterDailyGoals.findByUserIdAndGoalDateAndDietIsNull(goalOnlyUserId, today).orElseThrow().getGoalMl())
                 .isEqualTo(2450);
         assertThat(waterChecks.findByUserIdAndCheckDateOrderByCreatedAtAsc(goalOnlyUserId, today)).isEmpty();
+    }
+
+    @Test
+    void legacyChecksOnTheSnapshotStartDayKeepTheirGoalUnavailable() throws Exception {
+        JsonNode user = register("Legacy Same-Day Check User",
+                "legacy-same-day-check-" + UUID.randomUUID() + "@example.com");
+        String authorization = bearer(user);
+        UUID userId = UUID.fromString(user.get("userId").asText());
+        LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+        var savedUser = users.findById(userId).orElseThrow();
+        waterChecks.saveAndFlush(new WaterCheck(savedUser, 500, today));
+
+        mvc.perform(post("/api/water/checks").header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"amountMl\":500}"))
+                .andExpect(status().isOk());
+
+        assertThat(waterDailyGoals.findByUserIdAndGoalDateAndDietIsNull(userId, today)
+                .orElseThrow().getGoalMl()).isNull();
+
+        mvc.perform(put("/api/water/goal").header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"goalMl\":2450}"))
+                .andExpect(status().isOk());
+        assertThat(waterDailyGoals.findByUserIdAndGoalDateAndDietIsNull(userId, today)
+                .orElseThrow().getGoalMl()).isNull();
     }
 
     @Test
@@ -538,6 +694,102 @@ class ApiIntegrationTest {
                 .isEqualTo(3000);
         assertThat(waterDailyGoals.findByUserIdAndGoalDateAndDietIsNull(userId, today)).isPresent();
         assertThat(waterDailyGoals.findByUserIdAndDietIdAndGoalDate(userId, dietUuid, today)).isPresent();
+    }
+
+    @Test
+    void monthlyWaterHistoryCombinesSnapshotsChecksAndLegacyDays() throws Exception {
+        JsonNode user = register("Monthly Water History User", "monthly-water-history-" + UUID.randomUUID() + "@example.com");
+        String authorization = bearer(user);
+        UUID userId = UUID.fromString(user.get("userId").asText());
+        var savedUser = users.findById(userId).orElseThrow();
+        LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+        LocalDate yesterday = today.minusDays(1);
+        LocalDate twoDaysAgo = today.minusDays(2);
+
+        waterDailyGoals.saveAndFlush(new WaterDailyGoal(savedUser, null, twoDaysAgo, 2300));
+        waterChecks.saveAndFlush(new WaterCheck(savedUser, 500, yesterday));
+        mvc.perform(put("/api/water/goal").header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"goalMl\":2450}"))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/water/checks").header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"amountMl\":500}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/api/water/history").header("Authorization", authorization)
+                        .param("month", YearMonth.from(today).toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.days.length()").value(3))
+                .andExpect(jsonPath("$.days[0].date").value(twoDaysAgo.toString()))
+                .andExpect(jsonPath("$.days[0].consumedMl").value(0))
+                .andExpect(jsonPath("$.days[0].goalMl").value(2300))
+                .andExpect(jsonPath("$.days[0].percentage").value(nullValue()))
+                .andExpect(jsonPath("$.days[0].hasRecords").value(false))
+                .andExpect(jsonPath("$.days[1].date").value(yesterday.toString()))
+                .andExpect(jsonPath("$.days[1].consumedMl").value(500))
+                .andExpect(jsonPath("$.days[1].goalMl").value(nullValue()))
+                .andExpect(jsonPath("$.days[1].percentage").value(nullValue()))
+                .andExpect(jsonPath("$.days[1].hasRecords").value(true))
+                .andExpect(jsonPath("$.days[2].date").value(today.toString()))
+                .andExpect(jsonPath("$.days[2].goalMl").value(2450))
+                .andExpect(jsonPath("$.days[2].percentage").value(20))
+                .andExpect(jsonPath("$.days[2].hasRecords").value(true));
+    }
+
+    @Test
+    void monthlyWaterHistoryValidatesMonthAndAuthentication() throws Exception {
+        JsonNode user = register("Invalid Water Month User", "invalid-water-month-" + UUID.randomUUID() + "@example.com");
+        String authorization = bearer(user);
+
+        mvc.perform(get("/api/water/history").param("month", "2026-10"))
+                .andExpect(status().isUnauthorized());
+        for (String month : new String[]{"2026-13", "2026-2", "invalid"}) {
+            mvc.perform(get("/api/water/history").header("Authorization", authorization).param("month", month))
+                    .andExpect(status().isBadRequest());
+        }
+        mvc.perform(get("/api/water/history").header("Authorization", authorization).param("month", "2026-11"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.month").value("2026-11"))
+                .andExpect(jsonPath("$.days").isEmpty());
+    }
+
+    @Test
+    void competitiveMonthlyWaterHistoryIsScopedAndReadableAfterDietEnds() throws Exception {
+        JsonNode owner = register("Monthly Competitive History Owner", "monthly-comp-history-" + UUID.randomUUID() + "@example.com");
+        JsonNode outsider = register("Monthly Competitive History Outsider", "monthly-comp-outsider-" + UUID.randomUUID() + "@example.com");
+        String dietId = createCompetitiveDiet(owner, "Ended History Diet", "2026-09-01", "2026-09-30");
+        String authorization = bearer(owner);
+        UUID userId = UUID.fromString(owner.get("userId").asText());
+        var savedUser = users.findById(userId).orElseThrow();
+        var savedDiet = diets.findById(UUID.fromString(dietId)).orElseThrow();
+        LocalDate historyDate = LocalDate.of(2026, 9, 20);
+        waterChecks.saveAndFlush(new WaterCheck(savedUser, 1000, historyDate));
+        waterChecks.saveAndFlush(new WaterCheck(savedUser, savedDiet, 500, historyDate));
+        waterDailyGoals.save(new WaterDailyGoal(savedUser, null, historyDate, 2200));
+        waterDailyGoals.save(new WaterDailyGoal(savedUser, savedDiet, historyDate, 2000));
+
+        mvc.perform(get("/api/water/history").header("Authorization", authorization).param("month", "2026-09"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.days[0].consumedMl").value(1000))
+                .andExpect(jsonPath("$.days[0].goalMl").value(2200))
+                .andExpect(jsonPath("$.days[0].percentage").value(45));
+
+        mvc.perform(get("/api/diets/{dietId}/water/history", dietId)
+                        .header("Authorization", authorization).param("month", "2026-09"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.days.length()").value(1))
+                .andExpect(jsonPath("$.days[0].date").value("2026-09-20"))
+                .andExpect(jsonPath("$.days[0].consumedMl").value(500))
+                .andExpect(jsonPath("$.days[0].goalMl").value(2000))
+                .andExpect(jsonPath("$.days[0].percentage").value(25));
+
+        mvc.perform(get("/api/diets/{dietId}/water/history", dietId)
+                        .header("Authorization", bearer(outsider)).param("month", "2026-09"))
+                .andExpect(status().isNotFound());
+
+        String regularDietId = createDiet(owner, "Non-Competitive History Diet");
+        mvc.perform(get("/api/diets/{dietId}/water/history", regularDietId)
+                        .header("Authorization", authorization).param("month", "2026-09"))
+                .andExpect(status().isConflict());
     }
 
     @Test

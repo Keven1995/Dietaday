@@ -166,6 +166,7 @@ competitivo e permanece idempotente em novas tentativas com o mesmo
 ```text
 GET  /water/today
 GET  /water/has-checks
+GET  /water/history?month=YYYY-MM
 PUT  /water/goal
 POST /water/checks
 ```
@@ -178,16 +179,20 @@ Para uma dieta competitiva, os checks usam endpoints vinculados à dieta:
 
 ```text
 GET  /diets/{dietId}/water/today
+GET  /diets/{dietId}/water/history?month=YYYY-MM
 PUT  /diets/{dietId}/water/goal
 POST /diets/{dietId}/water/checks
 ```
 
-Esses endpoints exigem que o usuário seja membro da dieta. A meta continua sendo do usuário, mas os checks competitivos são associados à dieta. Dietas não competitivas continuam usando os endpoints gerais acima.
+Esses endpoints exigem que o usuário seja membro da dieta. A meta continua sendo do usuário, mas os checks competitivos são associados à dieta. Dietas não competitivas continuam usando os endpoints gerais acima. O histórico competitivo também valida que a dieta seja competitiva e permite consulta após o encerramento, enquanto o usuário mantiver membership.
 
 Metas e checks são enviados em mililitros e têm validações distintas. Metas válidas vão de
 `2000` a `4000`, em intervalos de `50` (por exemplo, `2450`). Checks válidos vão de
-`500` a `4000`, em intervalos de `500`. Na migração, metas já salvas abaixo de `2000` são
-ajustadas para `2000`; checks existentes não são alterados.
+`500` a `4000`, em intervalos de `500`. Como exceção, um check final entre `1` e `499` é
+aceito somente quando seu valor é exatamente o restante positivo da meta e esse restante
+é inferior a `500`; o backend rejeita valores arbitrários abaixo de `500`. Na migração,
+metas já salvas abaixo de `2000` são ajustadas para `2000`; checks existentes não são
+alterados.
 
 As respostas de `/water/today` e `/diets/{dietId}/water/today` incluem
 `suggestedGoalMl`, nullable. A sugestão é calculada como `35 mL × peso em kg`, arredondada
@@ -199,7 +204,28 @@ menores de idade, dados ausentes ou resultados fora desse intervalo recebem `nul
 A meta efetiva de cada dia é salva por usuário e escopo (geral ou dieta) no primeiro check
 ou quando a meta é alterada. Uma alteração atualiza apenas o snapshot da data e do escopo
 atuais; snapshots anteriores permanecem imutáveis. Checks legados sem snapshot não recebem
-uma meta histórica inferida.
+uma meta histórica inferida. Se checks do dia atual já existirem antes de seu primeiro
+snapshot, a meta desse dia permanece indisponível em vez de ser atribuída retroativamente.
+
+Os endpoints de histórico usam o usuário autenticado e agregam checks junto aos snapshots do
+escopo solicitado, sem misturar registros gerais e competitivos. `month` deve estar no
+formato `YYYY-MM`; formatos ou meses inválidos retornam `400`. A resposta inclui apenas dias
+com checks ou snapshot (o cliente completa os dias vazios do calendário):
+
+```json
+{
+  "month": "2026-10",
+  "days": [
+    {"date": "2026-10-01", "consumedMl": 1500, "goalMl": 2000, "percentage": 75, "hasRecords": true},
+    {"date": "2026-10-02", "consumedMl": 500, "goalMl": null, "percentage": null, "hasRecords": true},
+    {"date": "2026-10-03", "consumedMl": 0, "goalMl": 2450, "percentage": null, "hasRecords": false}
+  ]
+}
+```
+
+`percentage` é `null` quando não há checks ou uma meta histórica comprovada; com ambos,
+é arredondado para inteiro e limitado a `100`. Um dia sem checks não é apresentado como
+`0%` confirmado. Datas sem checks e sem snapshot não aparecem na resposta.
 
 As respostas de registro de check incluem `pointsEarned`, calculado pelo
 backend. O campo vale `0` para hidratação não competitiva e contém o delta
@@ -220,6 +246,10 @@ Exemplo de check:
   "amountMl": 500
 }
 ```
+
+Para completar uma meta de `2450` mL após consumir `2000` mL, o check final pode ser
+`{"amountMl":450}`. Esse valor abaixo de `500` só é aceito quando é exatamente o saldo
+positivo restante; outras quantidades menores são rejeitadas.
 
 ## Ranking competitivo
 

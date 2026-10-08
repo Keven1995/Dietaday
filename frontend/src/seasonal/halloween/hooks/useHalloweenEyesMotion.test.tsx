@@ -95,6 +95,7 @@ function flushFrames() {
 }
 
 beforeEach(() => {
+  localStorage.clear()
   frames = new Map()
   frameId = 0
   cancelFrame = vi.fn((id: number) => { frames.delete(id) })
@@ -112,6 +113,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks()
+  localStorage.clear()
   document.body.innerHTML = ''
 })
 
@@ -188,6 +190,44 @@ describe('useHalloweenEyesMotion', () => {
     expect(eyes.style.getPropertyValue('--pupil-x')).toBe('4.00px')
   })
 
+  it('remembers a granted sensor permission across hook remounts', async () => {
+    const firstPermissionRequest = vi.fn().mockResolvedValue('granted' as const)
+    configureEnvironment({ permission: firstPermissionRequest })
+    const firstMount = render(<MotionHarness />)
+    expect(screen.getByTestId('card').getAttribute('data-status')).toBe('permission-required')
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'request' })) })
+    expect(screen.getByTestId('card').getAttribute('data-status')).toBe('active')
+    expect(localStorage.getItem('Dietaday_halloween_eyes_orientation_permission_v1')).toBe('granted')
+    firstMount.unmount()
+
+    const nextPermissionRequest = vi.fn().mockResolvedValue('granted' as const)
+    configureEnvironment({ permission: nextPermissionRequest })
+    render(<MotionHarness />)
+    expect(screen.getByTestId('card').getAttribute('data-status')).toBe('active')
+    expect(nextPermissionRequest).not.toHaveBeenCalled()
+  })
+
+  it('remembers denial without repeating the request and keeps touch movement active', async () => {
+    const firstPermissionRequest = vi.fn().mockResolvedValue('denied' as const)
+    configureEnvironment({ permission: firstPermissionRequest })
+    const firstMount = render(<MotionHarness />)
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'request' })) })
+    expect(localStorage.getItem('Dietaday_halloween_eyes_orientation_permission_v1')).toBe('denied')
+    firstMount.unmount()
+
+    const nextPermissionRequest = vi.fn().mockResolvedValue('granted' as const)
+    configureEnvironment({ permission: nextPermissionRequest })
+    render(<MotionHarness />)
+    const eyes = mockEyesBounds()
+    expect(screen.getByTestId('card').getAttribute('data-status')).toBe('denied')
+    expect(nextPermissionRequest).not.toHaveBeenCalled()
+
+    dispatchPointer(screen.getByTestId('card'), 'pointermove', 'touch', 600, 500)
+    flushFrames()
+    expect(eyes.style.getPropertyValue('--pupil-x')).toBe('4.00px')
+    expect(eyes.style.getPropertyValue('--pupil-y')).toBe('3.00px')
+  })
+
   it('shows the permission control only when the browser explicitly requires it', () => {
     configureEnvironment({ permission: vi.fn().mockResolvedValue('granted' as const) })
     const permissionRequiredView = render(<HalloweenMessage />)
@@ -203,8 +243,10 @@ describe('useHalloweenEyesMotion', () => {
   })
 
   it('does not register movement listeners when disabled or reduced motion is enabled', () => {
+    localStorage.setItem('Dietaday_halloween_eyes_orientation_permission_v1', 'granted')
     const addEventListener = vi.spyOn(window, 'addEventListener')
     const { rerender } = render(<MotionHarness enabled={false} />)
+    expect(screen.getByTestId('card').getAttribute('data-status')).toBe('inactive')
     rerender(<MotionHarness reducedMotion />)
 
     expect(addEventListener).not.toHaveBeenCalledWith('deviceorientation', expect.any(Function), expect.anything())

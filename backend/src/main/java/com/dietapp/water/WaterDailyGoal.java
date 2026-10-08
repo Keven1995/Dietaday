@@ -36,8 +36,8 @@ public class WaterDailyGoal {
     @Column(name = "goal_date", nullable = false)
     private LocalDate goalDate;
 
-    @Column(name = "goal_ml", nullable = false)
-    private int goalMl;
+    @Column(name = "goal_ml")
+    private Integer goalMl;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -47,7 +47,7 @@ public class WaterDailyGoal {
 
     protected WaterDailyGoal() {}
 
-    public WaterDailyGoal(User user, Diet diet, LocalDate goalDate, int goalMl) {
+    public WaterDailyGoal(User user, Diet diet, LocalDate goalDate, Integer goalMl) {
         this.id = UUID.randomUUID();
         this.user = user;
         this.diet = diet;
@@ -63,7 +63,7 @@ public class WaterDailyGoal {
     public Diet getDiet() { return diet; }
     public UUID getScopeKey() { return scopeKey; }
     public LocalDate getGoalDate() { return goalDate; }
-    public int getGoalMl() { return goalMl; }
+    public Integer getGoalMl() { return goalMl; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
 
