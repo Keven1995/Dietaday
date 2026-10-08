@@ -1,44 +1,32 @@
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
 import type { CSSProperties } from 'react'
 import { useHalloween } from './hooks/useHalloween'
+import { useHalloweenEyesMotion } from './hooks/useHalloweenEyesMotion'
 import { halloweenConfig } from './HalloweenConfig'
 
 export function HalloweenMessage() {
   const { enabled, intensity, reducedMotion } = useHalloween()
   const eyesRef = useRef<HTMLSpanElement>(null)
-
-  useEffect(() => {
-    const eyes = eyesRef.current
-    if (!enabled || reducedMotion || !eyes || !window.matchMedia('(pointer: fine)').matches) return
-
-    let frame = 0
-    const followPointer = (event: PointerEvent) => {
-      if (event.pointerType !== 'mouse') return
-      window.cancelAnimationFrame(frame)
-      frame = window.requestAnimationFrame(() => {
-        const bounds = eyes.getBoundingClientRect()
-        const centerX = bounds.left + bounds.width / 2
-        const centerY = bounds.top + bounds.height / 2
-        const offsetX = Math.max(-4, Math.min(4, (event.clientX - centerX) / 30))
-        const offsetY = Math.max(-3, Math.min(3, (event.clientY - centerY) / 30))
-        eyes.style.setProperty('--pupil-x', `${offsetX}px`)
-        eyes.style.setProperty('--pupil-y', `${offsetY}px`)
-      })
-    }
-
-    window.addEventListener('pointermove', followPointer, { passive: true })
-    return () => {
-      window.removeEventListener('pointermove', followPointer)
-      window.cancelAnimationFrame(frame)
-    }
-  }, [enabled, reducedMotion])
+  const cardRef = useRef<HTMLElement>(null)
+  const eyesEnabled = enabled && halloweenConfig.effects.eyes
+  const { status, requestPermission } = useHalloweenEyesMotion({
+    enabled: eyesEnabled,
+    reducedMotion,
+    eyesRef,
+    cardRef,
+  })
 
   if (!enabled) return null
 
-  return <aside className={`halloween-message halloween-message-${intensity}`} role="note">
+  return <aside ref={cardRef} className={`halloween-message halloween-message-${intensity}`} role="note">
     <div><strong>🎃 Outubro Assustador</strong><span>Continue firme — um dia de cada vez.</span></div>
-    {halloweenConfig.effects.eyes && <span className="halloween-eyes" ref={eyesRef} aria-hidden="true" style={{ '--pupil-x': '0px', '--pupil-y': '0px' } as CSSProperties}>
+    {eyesEnabled && <span className="halloween-eyes" ref={eyesRef} aria-hidden="true" style={{ '--pupil-x': '0px', '--pupil-y': '0px' } as CSSProperties}>
       <i><b /></i><i><b /></i>
     </span>}
+    {eyesEnabled && status === 'permission-required' && <button
+      className="halloween-eyes-permission"
+      type="button"
+      onClick={() => void requestPermission()}
+    >Ativar olhos interativos</button>}
   </aside>
 }
