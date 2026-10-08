@@ -701,6 +701,8 @@ label, .field-label { display: grid; gap: 7px; color: #34433f; font-size: .86rem
 .halloween-eyes { display: flex; flex: 0 0 auto; align-items: center; gap: 4px; }
 .halloween-eyes i { display: grid; place-items: center; width: 18px; height: 23px; overflow: hidden; border-radius: 50%; background: #fff; box-shadow: inset 0 0 0 1px #856950; }
 .halloween-eyes b { width: 7px; height: 7px; border-radius: 50%; background: #34271f; transform: translate(var(--pupil-x, 0), var(--pupil-y, 0)); }
+.halloween-eyes-permission { flex: 0 0 auto; min-height: 44px; padding: 0 11px; border: 1px solid #c98b60; border-radius: 11px; background: #fff; color: #75401f; font: inherit; font-size: .7rem; font-weight: 700; cursor: pointer; }
+.halloween-eyes-permission:focus-visible { outline: 3px solid #a55625; outline-offset: 2px; }
 .halloween-bats { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .halloween-bat { position: absolute; left: -38px; display: block; color: #322a39; font-size: 1.2rem; opacity: .5; animation: halloween-bat-flight var(--bat-duration, 8s) linear forwards; }
 @keyframes halloween-bat-flight { to { transform: translateX(calc(100vw + 80px)) translateY(-18px); } }
