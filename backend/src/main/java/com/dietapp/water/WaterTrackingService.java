@@ -23,14 +23,19 @@ public class WaterTrackingService {
     private final CurrentUser currentUser;
     private final DietService diets;
     private final RankingPointEventService rankingEvents;
+    private final WaterGoalSuggestionService goalSuggestions;
+    private final WaterDailyGoalRepository dailyGoals;
 
     public WaterTrackingService(UserRepository users, WaterCheckRepository checks, CurrentUser currentUser,
-                                DietService diets, RankingPointEventService rankingEvents) {
+                                DietService diets, RankingPointEventService rankingEvents,
+                                WaterGoalSuggestionService goalSuggestions, WaterDailyGoalRepository dailyGoals) {
         this.users = users;
         this.checks = checks;
         this.currentUser = currentUser;
         this.diets = diets;
         this.rankingEvents = rankingEvents;
+        this.goalSuggestions = goalSuggestions;
+        this.dailyGoals = dailyGoals;
     }
 
     @Transactional(readOnly = true)
@@ -46,15 +51,17 @@ public class WaterTrackingService {
 
     @Transactional
     public WaterTodayResponse updateGoal(int goalMl) {
-        validateAmount(goalMl, "A meta deve estar entre 500 ml e 4 L, em intervalos de 500 ml.");
+        validateGoal(goalMl);
         User user = users.findForUpdateById(currentUser.id()).orElseThrow();
         user.updateDailyWaterGoal(goalMl);
-        return snapshot(user, LocalDate.now(BRASILIA));
+        LocalDate date = LocalDate.now(BRASILIA);
+        upsertDailyGoal(user, null, date);
+        return snapshot(user, date);
     }
 
     @Transactional
     public WaterTodayResponse addCheck(int amountMl) {
-        validateAmount(amountMl, "O check deve estar entre 500 ml e 4 L, em intervalos de 500 ml.");
+        validateCheck(amountMl);
         User user = users.findForUpdateById(currentUser.id()).orElseThrow();
         LocalDate date = LocalDate.now(BRASILIA);
         List<WaterCheck> today = checks.findByUserIdAndCheckDateOrderByCreatedAtAsc(user.getId(), date);
@@ -63,6 +70,7 @@ public class WaterTrackingService {
         if (remaining <= 0) throw new BadRequestException("Sua meta de água de hoje já foi concluída.");
         if (amountMl > remaining) throw new BadRequestException("Esse check ultrapassa o volume restante da sua meta.");
         checks.save(new WaterCheck(user, amountMl, date));
+        upsertDailyGoal(user, null, date);
         return snapshot(user, date);
     }
 
@@ -74,16 +82,18 @@ public class WaterTrackingService {
 
     @Transactional
     public WaterTodayResponse updateCompetitiveGoal(java.util.UUID dietId, int goalMl) {
-        validateAmount(goalMl, "A meta deve estar entre 500 ml e 4 L, em intervalos de 500 ml.");
+        validateGoal(goalMl);
         Diet diet = requireCompetitiveDietForUpdate(dietId);
         User user = users.findForUpdateById(currentUser.id()).orElseThrow();
         user.updateDailyWaterGoal(goalMl);
-        return competitiveSnapshot(diet, user, LocalDate.now(BRASILIA));
+        LocalDate date = LocalDate.now(BRASILIA);
+        upsertDailyGoal(user, diet, date);
+        return competitiveSnapshot(diet, user, date);
     }
 
     @Transactional
     public WaterTodayResponse addCompetitiveCheck(java.util.UUID dietId, int amountMl) {
-        validateAmount(amountMl, "O check deve estar entre 500 ml e 4 L, em intervalos de 500 ml.");
+        validateCheck(amountMl);
         Diet diet = requireCompetitiveDietForUpdate(dietId);
         User user = users.findForUpdateById(currentUser.id()).orElseThrow();
         LocalDate date = LocalDate.now(BRASILIA);
@@ -95,10 +105,11 @@ public class WaterTrackingService {
             throw new BadRequestException("Esse check ultrapassa o volume restante da sua meta.");
         }
         WaterCheck check = checks.save(new WaterCheck(user, diet, amountMl, date));
+        upsertDailyGoal(user, diet, date);
         int pointsEarned = rankingEvents.recordWater(check, remaining);
         WaterTodayResponse snapshot = competitiveSnapshot(diet, user, date);
         return new WaterTodayResponse(snapshot.date(), snapshot.goalMl(), snapshot.consumedMl(), snapshot.remainingMl(),
-                snapshot.percentage(), snapshot.checks(), pointsEarned);
+                snapshot.percentage(), snapshot.checks(), pointsEarned, snapshot.suggestedGoalMl());
     }
 
     private Diet requireCompetitiveDiet(java.util.UUID dietId) {
@@ -124,7 +135,8 @@ public class WaterTrackingService {
         int goal = user.getDailyWaterGoalMl();
         return new WaterTodayResponse(date, goal, consumed, Math.max(0, goal - consumed),
                 Math.min(100, Math.round(consumed * 100f / goal)),
-                today.stream().map(WaterCheckResponse::from).toList());
+                today.stream().map(WaterCheckResponse::from).toList(), 0,
+                goalSuggestions.suggestedGoalMl(user));
     }
 
     private WaterTodayResponse snapshot(User user, LocalDate date) {
@@ -133,12 +145,30 @@ public class WaterTrackingService {
         int goal = user.getDailyWaterGoalMl();
         int percentage = Math.min(100, Math.round(consumed * 100f / goal));
         return new WaterTodayResponse(date, goal, consumed, Math.max(0, goal - consumed), percentage,
-                today.stream().map(WaterCheckResponse::from).toList());
+                today.stream().map(WaterCheckResponse::from).toList(), 0,
+                goalSuggestions.suggestedGoalMl(user));
     }
 
-    private void validateAmount(int amountMl, String message) {
+    private void validateGoal(int goalMl) {
+        if (goalMl < 2000 || goalMl > 4000 || goalMl % 50 != 0) {
+            throw new BadRequestException("A meta deve estar entre 2 L e 4 L, em intervalos de 50 ml.");
+        }
+    }
+
+    private void validateCheck(int amountMl) {
         if (amountMl < 500 || amountMl > 4000 || amountMl % 500 != 0) {
-            throw new BadRequestException(message);
+            throw new BadRequestException("O check deve estar entre 500 ml e 4 L, em intervalos de 500 ml.");
+        }
+    }
+
+    private void upsertDailyGoal(User user, Diet diet, LocalDate date) {
+        WaterDailyGoal dailyGoal = diet == null
+                ? dailyGoals.findByUserIdAndGoalDateAndDietIsNull(user.getId(), date).orElse(null)
+                : dailyGoals.findByUserIdAndDietIdAndGoalDate(user.getId(), diet.getId(), date).orElse(null);
+        if (dailyGoal == null) {
+            dailyGoals.save(new WaterDailyGoal(user, diet, date, user.getDailyWaterGoalMl()));
+        } else {
+            dailyGoal.updateGoalMl(user.getDailyWaterGoalMl());
         }
     }
 }

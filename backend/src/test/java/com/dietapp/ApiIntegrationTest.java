@@ -9,6 +9,8 @@ import com.dietapp.telemetry.SyncErrorEventRepository;
 import com.dietapp.telemetry.UxEventRepository;
 import com.dietapp.water.WaterCheck;
 import com.dietapp.water.WaterCheckRepository;
+import com.dietapp.water.WaterDailyGoal;
+import com.dietapp.water.WaterDailyGoalRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -25,8 +27,14 @@ import java.util.UUID;
 import java.util.Map;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
@@ -47,6 +55,7 @@ class ApiIntegrationTest {
     @Autowired RankingPointEventRepository rankingEvents;
     @Autowired SyncErrorEventRepository syncErrors;
     @Autowired WaterCheckRepository waterChecks;
+    @Autowired WaterDailyGoalRepository waterDailyGoals;
     @Autowired UxEventRepository uxEvents;
 
     @Test
@@ -380,24 +389,180 @@ class ApiIntegrationTest {
         mvc.perform(get("/api/water/today").header("Authorization", authorization))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.goalMl").value(2000))
+                .andExpect(jsonPath("$.suggestedGoalMl").value(nullValue()))
                 .andExpect(jsonPath("$.consumedMl").value(0));
         mvc.perform(put("/api/water/goal").header("Authorization", authorization)
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"goalMl\":1500}"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"goalMl\":2500}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.goalMl").value(1500));
+                .andExpect(jsonPath("$.goalMl").value(2500));
         mvc.perform(post("/api/water/checks").header("Authorization", authorization)
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"amountMl\":1000}"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"amountMl\":1500}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.consumedMl").value(1000))
-                .andExpect(jsonPath("$.percentage").value(67));
+                .andExpect(jsonPath("$.consumedMl").value(1500))
+                .andExpect(jsonPath("$.percentage").value(60));
         mvc.perform(post("/api/water/checks").header("Authorization", authorization)
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"amountMl\":1000}"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"amountMl\":1500}"))
                 .andExpect(status().isBadRequest());
         mvc.perform(post("/api/water/checks").header("Authorization", authorization)
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"amountMl\":500}"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"amountMl\":1000}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.percentage").value(100))
                 .andExpect(jsonPath("$.remainingMl").value(0));
+    }
+
+    @Test
+    void waterGoalsAreLimitedToTwoThroughFourLitersInFiftyMlSteps() throws Exception {
+        JsonNode user = register("Water Goal Range User", "water-goal-range-" + UUID.randomUUID() + "@example.com");
+        String authorization = bearer(user);
+
+        for (int goalMl : new int[]{1950, 4050, 2451}) {
+            mvc.perform(put("/api/water/goal").header("Authorization", authorization)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"goalMl\":" + goalMl + "}"))
+                    .andExpect(status().isBadRequest());
+        }
+
+        for (int goalMl : new int[]{2000, 2450, 4000}) {
+            mvc.perform(put("/api/water/goal").header("Authorization", authorization)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"goalMl\":" + goalMl + "}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.goalMl").value(goalMl));
+        }
+    }
+
+    @Test
+    void dailyGoalSnapshotIsCreatedOnFirstCheckAndOnlyTodaysSnapshotChanges() throws Exception {
+        JsonNode user = register("Daily Goal Snapshot User", "daily-goal-snapshot-" + UUID.randomUUID() + "@example.com");
+        String authorization = bearer(user);
+        UUID userId = UUID.fromString(user.get("userId").asText());
+        LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+
+        mvc.perform(post("/api/water/checks").header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"amountMl\":500}"))
+                .andExpect(status().isOk());
+        WaterDailyGoal todaySnapshot = waterDailyGoals.findByUserIdAndGoalDateAndDietIsNull(userId, today)
+                .orElseThrow();
+        assertThat(todaySnapshot.getGoalMl()).isEqualTo(2000);
+
+        var savedUser = users.findById(userId).orElseThrow();
+        LocalDate yesterday = today.minusDays(1);
+        waterDailyGoals.saveAndFlush(new WaterDailyGoal(savedUser, null, yesterday, 2200));
+
+        mvc.perform(put("/api/water/goal").header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"goalMl\":2450}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.goalMl").value(2450));
+
+        assertThat(waterDailyGoals.findByUserIdAndGoalDateAndDietIsNull(userId, today).orElseThrow().getGoalMl())
+                .isEqualTo(2450);
+        assertThat(waterDailyGoals.findByUserIdAndGoalDateAndDietIsNull(userId, yesterday).orElseThrow().getGoalMl())
+                .isEqualTo(2200);
+        assertThat(waterChecks.findByUserIdAndCheckDateOrderByCreatedAtAsc(userId, today)).hasSize(1);
+
+        JsonNode goalOnlyUser = register("Goal Change Without Check User",
+                "goal-only-snapshot-" + UUID.randomUUID() + "@example.com");
+        UUID goalOnlyUserId = UUID.fromString(goalOnlyUser.get("userId").asText());
+        mvc.perform(put("/api/water/goal").header("Authorization", bearer(goalOnlyUser))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"goalMl\":2450}"))
+                .andExpect(status().isOk());
+        assertThat(waterDailyGoals.findByUserIdAndGoalDateAndDietIsNull(goalOnlyUserId, today).orElseThrow().getGoalMl())
+                .isEqualTo(2450);
+        assertThat(waterChecks.findByUserIdAndCheckDateOrderByCreatedAtAsc(goalOnlyUserId, today)).isEmpty();
+    }
+
+    @Test
+    void concurrentChecksForOneUserCreateOnlyOneDailyGoalSnapshot() throws Exception {
+        JsonNode user = register("Concurrent Snapshot User", "concurrent-snapshot-" + UUID.randomUUID() + "@example.com");
+        String authorization = bearer(user);
+        UUID userId = UUID.fromString(user.get("userId").asText());
+        LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+        var ready = new CountDownLatch(2);
+        var start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        try {
+            var registerCheck = (java.util.concurrent.Callable<Integer>) () -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Concurrent test did not start");
+                return mvc.perform(post("/api/water/checks").header("Authorization", authorization)
+                                .contentType(MediaType.APPLICATION_JSON).content("{\"amountMl\":500}"))
+                        .andReturn().getResponse().getStatus();
+            };
+            Future<Integer> first = executor.submit(registerCheck);
+            Future<Integer> second = executor.submit(registerCheck);
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+
+            assertThat(first.get(10, TimeUnit.SECONDS)).isEqualTo(200);
+            assertThat(second.get(10, TimeUnit.SECONDS)).isEqualTo(200);
+            assertThat(waterChecks.findByUserIdAndCheckDateOrderByCreatedAtAsc(userId, today)).hasSize(2);
+            assertThat(waterDailyGoals.findByUserIdAndGoalDateAndDietIsNull(userId, today)
+                    .orElseThrow().getGoalMl()).isEqualTo(2000);
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void generalAndCompetitiveDailyGoalSnapshotsRemainIsolated() throws Exception {
+        JsonNode user = register("Scoped Goal Snapshot User", "scoped-goal-snapshot-" + UUID.randomUUID() + "@example.com");
+        String authorization = bearer(user);
+        UUID userId = UUID.fromString(user.get("userId").asText());
+        String dietId = createCompetitiveDiet(user, "Scoped Goal Snapshot Diet");
+        UUID dietUuid = UUID.fromString(dietId);
+        LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+
+        mvc.perform(post("/api/water/checks").header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"amountMl\":500}"))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/diets/{dietId}/water/checks", dietId).header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"amountMl\":500}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(put("/api/water/goal").header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"goalMl\":2450}"))
+                .andExpect(status().isOk());
+        assertThat(waterDailyGoals.findByUserIdAndGoalDateAndDietIsNull(userId, today).orElseThrow().getGoalMl())
+                .isEqualTo(2450);
+        assertThat(waterDailyGoals.findByUserIdAndDietIdAndGoalDate(userId, dietUuid, today).orElseThrow().getGoalMl())
+                .isEqualTo(2000);
+
+        mvc.perform(put("/api/diets/{dietId}/water/goal", dietId).header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"goalMl\":3000}"))
+                .andExpect(status().isOk());
+        assertThat(waterDailyGoals.findByUserIdAndGoalDateAndDietIsNull(userId, today).orElseThrow().getGoalMl())
+                .isEqualTo(2450);
+        assertThat(waterDailyGoals.findByUserIdAndDietIdAndGoalDate(userId, dietUuid, today).orElseThrow().getGoalMl())
+                .isEqualTo(3000);
+        assertThat(waterDailyGoals.findByUserIdAndGoalDateAndDietIsNull(userId, today)).isPresent();
+        assertThat(waterDailyGoals.findByUserIdAndDietIdAndGoalDate(userId, dietUuid, today)).isPresent();
+    }
+
+    @Test
+    void waterTodayReturnsProfileSuggestionWithoutReplacingTheCurrentGoal() throws Exception {
+        JsonNode user = register("Water Suggestion User", "water-suggestion-" + UUID.randomUUID() + "@example.com");
+        String authorization = bearer(user);
+
+        mvc.perform(put("/api/profile")
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"fullName":"Water Suggestion User","weightKg":70.00,"heightCm":170}
+                                """))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/api/water/today").header("Authorization", authorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.goalMl").value(2000))
+                .andExpect(jsonPath("$.suggestedGoalMl").value(2450));
+
+        mvc.perform(put("/api/water/goal").header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"goalMl\":2500}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.goalMl").value(2500))
+                .andExpect(jsonPath("$.suggestedGoalMl").value(2450));
     }
 
     @Test
@@ -424,6 +589,13 @@ class ApiIntegrationTest {
     void competitiveWaterIsDietScopedAndSnapshotsTheGoal() throws Exception {
         JsonNode owner = register("Competitive Water Owner", "competitive-water-" + UUID.randomUUID() + "@example.com");
         JsonNode outsider = register("Competitive Water Outsider", "competitive-water-outsider-" + UUID.randomUUID() + "@example.com");
+        mvc.perform(put("/api/profile")
+                        .header("Authorization", bearer(owner))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"fullName":"Competitive Water Owner","weightKg":70.00,"heightCm":170}
+                                """))
+                .andExpect(status().isOk());
         String dietId = createCompetitiveDiet(owner, "Competitive Water Diet");
         String authorization = bearer(owner);
 
@@ -434,6 +606,7 @@ class ApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.consumedMl").value(500))
                 .andExpect(jsonPath("$.pointsEarned").value(2))
+                .andExpect(jsonPath("$.suggestedGoalMl").value(2450))
                 .andReturn().getResponse().getContentAsString();
         String checkId = objectMapper.readTree(response).get("checks").get(0).get("id").asText();
 
@@ -451,9 +624,10 @@ class ApiIntegrationTest {
         mvc.perform(put("/api/diets/{dietId}/water/goal", dietId)
                         .header("Authorization", authorization)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"goalMl\":1000}"))
+                        .content("{\"goalMl\":2500}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.goalMl").value(1000));
+                .andExpect(jsonPath("$.goalMl").value(2500))
+                .andExpect(jsonPath("$.suggestedGoalMl").value(2450));
         assertThat(rankingEvents.findById(event.getId()).orElseThrow().getWaterGoalMl()).isEqualTo(2000);
 
         mvc.perform(get("/api/diets/{dietId}/water/today", dietId)
@@ -485,7 +659,7 @@ class ApiIntegrationTest {
         mvc.perform(put("/api/diets/{dietId}/water/goal", dietId)
                         .header("Authorization", authorization)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"goalMl\":1500}"))
+                        .content("{\"goalMl\":2000}"))
                 .andExpect(status().isConflict());
         mvc.perform(post("/api/diets/{dietId}/water/checks", dietId)
                         .header("Authorization", authorization)
@@ -530,6 +704,8 @@ class ApiIntegrationTest {
                 .andExpect(jsonPath("$.fullName").value("Test User"))
                 .andExpect(jsonPath("$.sex").value("MALE"))
                 .andExpect(jsonPath("$.birthDate").value("1990-01-01"))
+                .andExpect(jsonPath("$.waterGoalSuggestionReview.status").value("NOT_REQUIRED"))
+                .andExpect(jsonPath("$.waterGoalSuggestionReview.suggestedGoalMl").value(nullValue()))
                 .andExpect(jsonPath("$.weightKg").doesNotExist())
                 .andExpect(jsonPath("$.heightCm").doesNotExist());
 
@@ -624,6 +800,104 @@ class ApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.fullName").value("Legacy User Updated"))
                 .andExpect(jsonPath("$.birthDate").doesNotExist());
+    }
+
+    @Test
+    void legacyBirthDateUpdateCreatesPendingGoalReviewAndKeepDecisionIsIdempotent() throws Exception {
+        String email = "legacy-water-review-" + UUID.randomUUID() + "@example.com";
+        users.saveAndFlush(new User(email, passwordEncoder.encode("password123"), "Legacy Review User", UserSex.MALE));
+        JsonNode auth = login(email, "password123");
+        String authorization = bearer(auth);
+
+        mvc.perform(put("/api/profile")
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"fullName":"Legacy Review User","weightKg":70.00,"heightCm":170,"birthDate":"1990-04-15"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.waterGoalSuggestionReview.status").value("PENDING"))
+                .andExpect(jsonPath("$.waterGoalSuggestionReview.suggestedGoalMl").value(2450));
+
+        mvc.perform(get("/api/water/today").header("Authorization", authorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.goalMl").value(2000))
+                .andExpect(jsonPath("$.suggestedGoalMl").value(2450));
+
+        mvc.perform(put("/api/profile/water-goal-suggestion")
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"decision\":\"KEEP_CURRENT\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.waterGoalSuggestionReview.status").value("RESOLVED"));
+
+        mvc.perform(put("/api/profile/water-goal-suggestion")
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"decision\":\"APPLY_RECOMMENDATION\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.waterGoalSuggestionReview.status").value("RESOLVED"));
+        mvc.perform(get("/api/water/today").header("Authorization", authorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.goalMl").value(2000));
+    }
+
+    @Test
+    void legacyBirthDateReviewAppliesSuggestionOnlyAfterExplicitDecision() throws Exception {
+        String email = "legacy-water-apply-" + UUID.randomUUID() + "@example.com";
+        users.saveAndFlush(new User(email, passwordEncoder.encode("password123"), "Legacy Apply User", UserSex.MALE));
+        JsonNode auth = login(email, "password123");
+        String authorization = bearer(auth);
+        String dietId = createCompetitiveDiet(auth, "Suggestion Review Diet");
+
+        mvc.perform(put("/api/profile")
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"fullName":"Legacy Apply User","weightKg":70.00,"heightCm":170,"birthDate":"1990-04-15"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.waterGoalSuggestionReview.status").value("PENDING"));
+
+        mvc.perform(put("/api/profile/water-goal-suggestion")
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "decision", "APPLY_RECOMMENDATION", "dietId", dietId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.waterGoalSuggestionReview.status").value("RESOLVED"));
+
+        mvc.perform(get("/api/diets/{dietId}/water/today", dietId).header("Authorization", authorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.goalMl").value(2450))
+                .andExpect(jsonPath("$.suggestedGoalMl").value(2450));
+
+        mvc.perform(put("/api/profile/water-goal-suggestion")
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "decision", "APPLY_RECOMMENDATION", "dietId", dietId))))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/diets/{dietId}/water/today", dietId).header("Authorization", authorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.goalMl").value(2450));
+    }
+
+    @Test
+    void legacyBirthDateWithoutAnEligibleSuggestionDoesNotCreateGoalReview() throws Exception {
+        String email = "legacy-water-no-suggestion-" + UUID.randomUUID() + "@example.com";
+        users.saveAndFlush(new User(email, passwordEncoder.encode("password123"), "Legacy User", UserSex.MALE));
+        JsonNode auth = login(email, "password123");
+
+        mvc.perform(put("/api/profile")
+                        .header("Authorization", bearer(auth))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"fullName":"Legacy User","weightKg":55.00,"heightCm":170,"birthDate":"1990-04-15"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.waterGoalSuggestionReview.status").value("NOT_REQUIRED"))
+                .andExpect(jsonPath("$.waterGoalSuggestionReview.suggestedGoalMl").value(nullValue()));
     }
 
     @Test
@@ -1654,6 +1928,15 @@ class ApiIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                          .content(objectMapper.writeValueAsString(new RegisterRequest(name, email, "password123", "MALE",
                                  LocalDate.of(1990, 1, 1)))))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(response);
+    }
+
+    private JsonNode login(String email, String password) throws Exception {
+        String response = mvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new LoginRequest(email, password))))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(response);

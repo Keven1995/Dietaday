@@ -18,8 +18,7 @@ import { useToast } from '../state/ToastContext'
 import { useAuth } from '../state/AuthContext'
 import { reportUxEvent } from '../lib/uxTelemetry'
 import type { FeatureDiscoveryContext, FeatureDiscoveryResource } from '../lib/featureDiscovery'
-
-const WATER_OPTIONS = [500, 1000, 1500, 2000, 2500, 3000, 3500, 4000]
+import { WATER_CHECK_OPTIONS, WATER_GOAL_OPTIONS } from '../lib/water'
 
 function formatLiters(amountMl: number) {
   return `${amountMl / 1000}`.replace('.', ',') + ' L'
@@ -82,7 +81,7 @@ export function Water() {
   useEffect(() => {
     if (water) {
       setGoal(water.goalMl)
-      const firstAvailable = WATER_OPTIONS.find((amount) => amount <= water.remainingMl)
+      const firstAvailable = WATER_CHECK_OPTIONS.find((amount) => amount <= water.remainingMl)
       setCheckAmount(firstAvailable ? String(firstAvailable) : '')
     }
   }, [water?.goalMl, water?.remainingMl])
@@ -132,7 +131,7 @@ export function Water() {
     }
   }
 
-  const remainingOptions = water ? WATER_OPTIONS.filter((amount) => amount <= water.remainingMl) : []
+  const remainingOptions = water ? WATER_CHECK_OPTIONS.filter((amount) => amount <= water.remainingMl) : []
   const complete = water?.remainingMl === 0
   const showReminderHint = featureDiscovery.campaign?.id === 'water_reminders'
 
@@ -190,10 +189,11 @@ export function Water() {
               </div>
               <p>Sua meta padrão é de 2 L por dia. Ajuste esse valor de acordo com o que melhor se adapta às suas necessidades.</p>
               <label htmlFor="water-goal">Litros por dia</label>
-              <select id="water-goal" value={goal} onChange={(event) => setGoal(Number(event.target.value))} disabled={saving}>
-                {WATER_OPTIONS.map((amount) => <option value={amount} key={amount}>{formatLiters(amount)}</option>)}
+              <select id="water-goal" value={goal} onChange={(event) => setGoal(Number(event.target.value))} disabled={saving || loading}>
+                {!WATER_GOAL_OPTIONS.includes(goal) && <option value={goal} disabled>Meta anterior: {formatLiters(goal)} — selecione uma nova</option>}
+                {WATER_GOAL_OPTIONS.map((amount) => <option value={amount} key={amount}>{formatLiters(amount)}</option>)}
               </select>
-              <Button type="button" className="outline" loading={saving} onClick={() => void handleGoalSave()}>
+              <Button type="button" className="outline" loading={saving} disabled={loading || !WATER_GOAL_OPTIONS.includes(goal)} onClick={() => void handleGoalSave()}>
                 <Save size={18} /> Salvar meta
               </Button>
             </div>

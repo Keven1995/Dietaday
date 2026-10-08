@@ -5,6 +5,10 @@ export type User = {
   weightKg?: number | null
   heightCm?: number | null
   birthDate?: string | null
+  waterGoalSuggestionReview?: {
+    status: 'NOT_REQUIRED' | 'PENDING' | 'RESOLVED'
+    suggestedGoalMl: number | null
+  }
   sex: UserSex
   emailVerified?: boolean
 }

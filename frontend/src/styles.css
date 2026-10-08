@@ -618,6 +618,16 @@ label, .field-label { display: grid; gap: 7px; color: #34433f; font-size: .86rem
 .profile-bmi-sources { display: flex; flex-wrap: wrap; gap: 6px 16px; }
 .profile-bmi-sources a { color: var(--green-2); font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
 .profile-bmi-sources a:hover { color: var(--orange); }
+.water-goal-review-reminder { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin-top: 18px; padding: 15px 18px; }
+.water-goal-review-reminder p { margin: 0; color: var(--green); font-size: .82rem; line-height: 1.45; }
+.water-goal-review-modal h2 { max-width: 28ch; padding-right: 28px; }
+.water-goal-review-values { display: grid; gap: 9px; margin: 20px 0; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: #faf8f2; }
+.water-goal-review-values > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.water-goal-review-values dt { color: var(--muted); font-size: .8rem; }
+.water-goal-review-values dd { margin: 0; color: var(--green); font-size: .9rem; font-weight: 800; }
+.water-goal-review-actions { display: grid; gap: 9px; margin-top: 20px; }
+.water-goal-review-saving { margin: -9px 0 0; color: var(--muted); font-size: .78rem; text-align: center; }
+.water-goal-review-later { min-height: 44px; border: 0; background: transparent; color: var(--muted); font: inherit; font-size: .82rem; font-weight: 700; }
 .profile-form > .button { justify-self: end; }
 .logout-button { display: flex; align-items: center; gap: 9px; margin: 25px auto 0; padding: 10px; border: 0; background: transparent; color: #a34f3a; font-weight: 700; }
 

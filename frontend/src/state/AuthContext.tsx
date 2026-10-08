@@ -12,6 +12,7 @@ type AuthContextValue = {
   login: (email: string, password: string) => Promise<void>
   register: (data: RegisterRequest) => Promise<void>
   updateUser: (data: UpdateProfileRequest) => Promise<void>
+  refreshProfile: () => Promise<void>
   logout: () => void
 }
 
@@ -121,6 +122,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(updated)
   }
 
+  async function refreshProfile() {
+    if (!user || isDemoMode) return
+    const refreshed = await api<User>('/profile', { token })
+    localStorage.setItem('Dietaday_user', JSON.stringify(refreshed))
+    setUser(refreshed)
+  }
+
   function logout() {
     if (!isDemoMode) void api('/auth/logout', { method: 'POST', skipRefresh: true }).catch(() => undefined)
     if (user) {
@@ -134,7 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, token, ready, login, register, updateUser, logout }}>
+    <AuthContext.Provider value={{ user, token, ready, login, register, updateUser, refreshProfile, logout }}>
       {children}
     </AuthContext.Provider>
   )
