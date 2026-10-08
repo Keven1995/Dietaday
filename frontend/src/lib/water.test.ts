@@ -7,7 +7,17 @@ vi.mock('./api', () => ({
   isDemoMode: false,
 }))
 
-import { addWaterCheck, getWaterToday, updateWaterGoal } from './water'
+import { addWaterCheck, getWaterToday, updateWaterGoal, WATER_CHECK_OPTIONS, WATER_GOAL_OPTIONS } from './water'
+
+describe('water amount options', () => {
+  it('allows 50 ml goal increments from 2 L through 4 L while checks remain in 500 ml increments', () => {
+    expect(WATER_GOAL_OPTIONS[0]).toBe(2000)
+    expect(WATER_GOAL_OPTIONS[WATER_GOAL_OPTIONS.length - 1]).toBe(4000)
+    expect(WATER_GOAL_OPTIONS).toContain(2450)
+    expect(WATER_GOAL_OPTIONS.every((amount) => amount >= 2000 && amount <= 4000 && amount % 50 === 0)).toBe(true)
+    expect(WATER_CHECK_OPTIONS).toEqual([500, 1000, 1500, 2000, 2500, 3000, 3500, 4000])
+  })
+})
 
 describe('competitive water endpoints', () => {
   beforeEach(() => apiMock.mockResolvedValue({}))

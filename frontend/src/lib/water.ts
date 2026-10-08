@@ -5,6 +5,8 @@ import { readCachedResource } from './resourceCache'
 
 const DEFAULT_GOAL_ML = 2000
 export const WATER_CACHE_RESOURCE = 'water:today'
+export const WATER_CHECK_OPTIONS = [500, 1000, 1500, 2000, 2500, 3000, 3500, 4000]
+export const WATER_GOAL_OPTIONS = Array.from({ length: 41 }, (_, index) => 2000 + index * 50)
 
 function waterResource(dietId?: string | null) {
   return dietId ? `${WATER_CACHE_RESOURCE}:${dietId}` : WATER_CACHE_RESOURCE
