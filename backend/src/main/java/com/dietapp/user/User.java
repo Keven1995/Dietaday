@@ -29,6 +29,9 @@ public class User {
     private Integer heightCm;
     @Column(name = "birth_date")
     private LocalDate birthDate;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "water_goal_suggestion_review_status", nullable = false, length = 20)
+    private WaterGoalSuggestionReviewStatus waterGoalSuggestionReviewStatus = WaterGoalSuggestionReviewStatus.NOT_REQUIRED;
     @Column(name = "daily_water_goal_ml", nullable = false)
     private int dailyWaterGoalMl;
     @Enumerated(EnumType.STRING)
@@ -64,6 +67,7 @@ public class User {
     public BigDecimal getWeightKg() { return weightKg; }
     public Integer getHeightCm() { return heightCm; }
     public LocalDate getBirthDate() { return birthDate; }
+    public WaterGoalSuggestionReviewStatus getWaterGoalSuggestionReviewStatus() { return waterGoalSuggestionReviewStatus; }
     public int getDailyWaterGoalMl() { return dailyWaterGoalMl; }
     public UserSex getSex() { return sex; }
     public boolean isEmailVerified() { return emailVerified; }
@@ -82,5 +86,13 @@ public class User {
 
     public void updateDailyWaterGoal(int dailyWaterGoalMl) {
         this.dailyWaterGoalMl = dailyWaterGoalMl;
+    }
+
+    public void markWaterGoalSuggestionReviewPending() {
+        this.waterGoalSuggestionReviewStatus = WaterGoalSuggestionReviewStatus.PENDING;
+    }
+
+    public void resolveWaterGoalSuggestionReview() {
+        this.waterGoalSuggestionReviewStatus = WaterGoalSuggestionReviewStatus.RESOLVED;
     }
 }

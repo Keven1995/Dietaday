@@ -1,13 +1,15 @@
-import { Bell, BellOff, Info, LogOut, Save, UserRound, Shield } from 'lucide-react'
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { Bell, BellOff, Info, LogOut, Save, UserRound, Shield, X } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Button, PageTitle } from '../components/Ui'
 import { api, getErrorMessage } from '../lib/api'
 import { ageOnDate, calculateBmi, classifyAdultBmi } from '../lib/bmi'
 import { brazilDateKey } from '../lib/date'
+import { useCompetitiveMode } from '../hooks/useCompetitiveMode'
 import { usePushStatus } from '../hooks/usePushStatus'
 import { completeFeatureCampaign } from '../lib/featureDiscoveryTelemetry'
 import { useAuth } from '../state/AuthContext'
+import { useWater } from '../state/WaterContext'
 import type { User, UserSex } from '../types'
 import { disablePushNotifications, enablePushNotifications } from '../lib/pushNotifications'
 
@@ -27,11 +29,19 @@ function formatBmi(value: number) {
   return value.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 }
 
+function formatLiters(amountMl: number) {
+  return `${amountMl / 1000}`.replace('.', ',') + ' L'
+}
+
 export function Profile() {
-  const { user, token, updateUser, logout } = useAuth()
+  const { user, token, updateUser, refreshProfile, logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const reminderHeadingRef = useRef<HTMLHeadingElement>(null)
+  const goalReviewDialogRef = useRef<HTMLElement>(null)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
+  const { dietId: competitiveDietId } = useCompetitiveMode()
+  const { water, loading: waterLoading, refresh: refreshWater } = useWater()
   const { status: pushStatus, refresh: refreshPushStatus } = usePushStatus()
   const [form, setForm] = useState(() => userToForm(user))
   const [loading, setLoading] = useState(false)
@@ -42,6 +52,19 @@ export function Profile() {
   const [pushError, setPushError] = useState('')
   const [verificationMessage, setVerificationMessage] = useState('')
   const [bmiInfoOpen, setBmiInfoOpen] = useState(false)
+  const [goalReviewOpen, setGoalReviewOpen] = useState(false)
+  const [goalReviewDeferred, setGoalReviewDeferred] = useState(false)
+  const [goalReviewSaving, setGoalReviewSaving] = useState(false)
+  const [goalReviewError, setGoalReviewError] = useState('')
+  const goalReview = user?.waterGoalSuggestionReview
+  const suggestedGoalMl = goalReview?.suggestedGoalMl ?? null
+  const hasPendingGoalReview = goalReview?.status === 'PENDING' && suggestedGoalMl !== null
+
+  const deferGoalReview = useCallback(() => {
+    setGoalReviewDeferred(true)
+    setGoalReviewOpen(false)
+    setGoalReviewError('')
+  }, [])
 
   useEffect(() => {
     setForm(userToForm(user))
@@ -52,6 +75,44 @@ export function Profile() {
     reminderHeadingRef.current?.scrollIntoView({ block: 'center' })
     reminderHeadingRef.current?.focus({ preventScroll: true })
   }, [location.hash])
+
+  useEffect(() => {
+    if (!hasPendingGoalReview || goalReviewDeferred) return
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    setGoalReviewOpen(true)
+  }, [hasPendingGoalReview, goalReviewDeferred])
+
+  useEffect(() => {
+    if (!goalReviewOpen) return
+    const focusTimer = window.setTimeout(() => document.getElementById('keep-current-water-goal')?.focus(), 0)
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') deferGoalReview()
+    }
+    function keepFocusInsideDialog(event: KeyboardEvent) {
+      if (event.key !== 'Tab' || !goalReviewDialogRef.current) return
+      const focusable = Array.from(goalReviewDialogRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ))
+      if (focusable.length === 0) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    window.addEventListener('keydown', keepFocusInsideDialog)
+    return () => {
+      window.clearTimeout(focusTimer)
+      window.removeEventListener('keydown', closeOnEscape)
+      window.removeEventListener('keydown', keepFocusInsideDialog)
+      if (previousFocusRef.current?.isConnected) previousFocusRef.current.focus()
+    }
+  }, [goalReviewOpen, deferGoalReview])
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -129,6 +190,27 @@ export function Profile() {
     }
   }
 
+  async function decideWaterGoal(decision: 'KEEP_CURRENT' | 'APPLY_RECOMMENDATION') {
+    if (!token || !user || !hasPendingGoalReview || goalReviewSaving) return
+    setGoalReviewSaving(true)
+    setGoalReviewError('')
+    try {
+      await api('/profile/water-goal-suggestion', {
+        method: 'PUT',
+        token,
+        body: JSON.stringify({ decision, dietId: competitiveDietId }),
+      })
+      await refreshProfile()
+      if (decision === 'APPLY_RECOMMENDATION') await refreshWater()
+      setGoalReviewDeferred(true)
+      setGoalReviewOpen(false)
+    } catch (decisionError) {
+      setGoalReviewError(getErrorMessage(decisionError, 'Não foi possível salvar sua escolha. Tente novamente.'))
+    } finally {
+      setGoalReviewSaving(false)
+    }
+  }
+
   const bmi = calculateBmi(form.weight === '' ? null : Number(form.weight), form.height === '' ? null : Number(form.height))
   const age = ageOnDate(form.birthDate || null, brazilDateKey())
   const bmiClassification = age !== null && age >= 18 ? classifyAdultBmi(bmi) : null
@@ -146,6 +228,37 @@ export function Profile() {
         <Button type="button" className="outline" onClick={() => void resendVerification()}>Reenviar confirmação</Button>
         {verificationMessage && <div className="success-message" role="status">{verificationMessage}</div>}
       </section>}
+      {hasPendingGoalReview && !goalReviewOpen && (
+        <section className="card water-goal-review-reminder" role="status">
+          <p>Sua escolha sobre a sugestão de meta de hidratação continua pendente.</p>
+          <Button type="button" className="outline" onClick={() => {
+            previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+            setGoalReviewDeferred(false)
+            setGoalReviewOpen(true)
+          }}>Rever sugestão de meta</Button>
+        </section>
+      )}
+      {goalReviewOpen && hasPendingGoalReview && suggestedGoalMl !== null && (
+        <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && deferGoalReview()}>
+          <section ref={goalReviewDialogRef} className="modal water-goal-review-modal" role="dialog" aria-modal="true" aria-labelledby="water-goal-review-title" aria-describedby="water-goal-review-description">
+            <button type="button" className="close" onClick={deferGoalReview} disabled={goalReviewSaving} aria-label="Fechar"><X /></button>
+            <span className="overline">SUGESTÃO DO SEU PERFIL</span>
+            <h2 id="water-goal-review-title">Quer atualizar sua meta de hidratação?</h2>
+            <p id="water-goal-review-description">A estimativa é uma referência simplificada, não uma prescrição médica. Você decide se quer manter sua meta ou usar a sugestão.</p>
+            <dl className="water-goal-review-values">
+              <div><dt>Meta atual</dt><dd>{water ? formatLiters(water.goalMl) : waterLoading ? 'Carregando…' : 'Não disponível'}</dd></div>
+              <div><dt>Sugestão</dt><dd>{formatLiters(suggestedGoalMl)}</dd></div>
+            </dl>
+            {goalReviewError && <div className="error-message" role="alert">{goalReviewError}</div>}
+            {goalReviewSaving && <p className="water-goal-review-saving" role="status">Salvando sua escolha…</p>}
+            <div className="water-goal-review-actions">
+              <Button id="keep-current-water-goal" type="button" className="outline" disabled={goalReviewSaving} onClick={() => void decideWaterGoal('KEEP_CURRENT')}>Manter meta atual</Button>
+              <Button type="button" disabled={goalReviewSaving} onClick={() => void decideWaterGoal('APPLY_RECOMMENDATION')}>Usar meta recomendada</Button>
+              <button type="button" className="water-goal-review-later" disabled={goalReviewSaving} onClick={deferGoalReview}>Agora não</button>
+            </div>
+          </section>
+        </div>
+      )}
       <form className="card profile-form" onSubmit={submit}>
         <h2>Informações pessoais</h2>
         <p>Esses dados ajudam a acompanhar sua jornada.</p>

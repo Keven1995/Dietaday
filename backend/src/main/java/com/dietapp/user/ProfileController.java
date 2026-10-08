@@ -25,4 +25,9 @@ public class ProfileController {
     public ProfileResponse update(@Valid @RequestBody UpdateProfileRequest request) {
         return profileService.update(request);
     }
+
+    @PutMapping("/water-goal-suggestion")
+    public ProfileResponse decideWaterGoalSuggestion(@Valid @RequestBody WaterGoalSuggestionDecisionRequest request) {
+        return profileService.decideWaterGoalSuggestion(request);
+    }
 }

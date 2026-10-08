@@ -14,20 +14,31 @@ const profile = vi.hoisted(() => ({
     heightCm: 178,
     sex: 'FEMALE',
     birthDate: null as string | null,
+    waterGoalSuggestionReview: {
+      status: 'NOT_REQUIRED' as 'NOT_REQUIRED' | 'PENDING' | 'RESOLVED',
+      suggestedGoalMl: null as number | null,
+    },
   },
   updateUser: vi.fn(),
+  refreshProfile: vi.fn(),
   logout: vi.fn(),
+  api: vi.fn(),
+  refreshWater: vi.fn(),
 }))
 
 vi.mock('../state/AuthContext', () => ({
   useAuth: () => ({ ...profile, token: 'profile-token' }),
 }))
+vi.mock('../hooks/useCompetitiveMode', () => ({ useCompetitiveMode: () => ({ dietId: null }) }))
 vi.mock('../hooks/usePushStatus', () => ({
   usePushStatus: () => ({ status: 'unsupported', refresh: vi.fn() }),
 }))
 vi.mock('../lib/api', () => ({
-  api: vi.fn(),
+  api: profile.api,
   getErrorMessage: (error: unknown, fallback: string) => error instanceof Error ? error.message : fallback,
+}))
+vi.mock('../state/WaterContext', () => ({
+  useWater: () => ({ water: { goalMl: 2000 }, loading: false, refresh: profile.refreshWater }),
 }))
 vi.mock('../lib/featureDiscoveryTelemetry', () => ({ completeFeatureCampaign: vi.fn() }))
 vi.mock('../lib/pushNotifications', () => ({
@@ -48,8 +59,12 @@ function renderProfile() {
 describe('Profile birth date', () => {
   beforeEach(() => {
     profile.user.birthDate = null
+    profile.user.waterGoalSuggestionReview = { status: 'NOT_REQUIRED', suggestedGoalMl: null }
     profile.updateUser.mockReset().mockResolvedValue(undefined)
+    profile.refreshProfile.mockReset().mockResolvedValue(undefined)
     profile.logout.mockReset()
+    profile.api.mockReset().mockResolvedValue({})
+    profile.refreshWater.mockReset().mockResolvedValue(undefined)
     setReducedMotionPreference(true)
   })
 
@@ -76,6 +91,18 @@ describe('Profile birth date', () => {
     })))
   })
 
+  it('opens the review modal after saving a legacy birth date with an eligible suggestion', async () => {
+    profile.updateUser.mockImplementation(async () => {
+      profile.user.birthDate = '1990-04-15'
+      profile.user.waterGoalSuggestionReview = { status: 'PENDING', suggestedGoalMl: 2450 }
+    })
+    renderProfile()
+    fireEvent.change(screen.getByLabelText('Data de nascimento'), { target: { value: '1990-04-15' } })
+    fireEvent.click(screen.getByRole('button', { name: /Salvar alterações/ }))
+
+    expect(await screen.findByRole('dialog', { name: 'Quer atualizar sua meta de hidratação?' })).toBeTruthy()
+  })
+
   it('shows the numeric BMI and adult reference category with an accessible explanation', () => {
     profile.user.birthDate = '1990-04-15'
     renderProfile()
@@ -100,5 +127,59 @@ describe('Profile birth date', () => {
     expect(screen.getByText('22,7')).toBeTruthy()
     expect(screen.queryByText('— Faixa adequada')).toBeNull()
     expect(screen.getByText(/Para menores de 18 anos/)).toBeTruthy()
+  })
+
+  it('asks an eligible legacy user whether to keep or apply the suggested goal', () => {
+    profile.user.waterGoalSuggestionReview = { status: 'PENDING', suggestedGoalMl: 2450 }
+    renderProfile()
+
+    expect(screen.getByRole('dialog', { name: 'Quer atualizar sua meta de hidratação?' })).toBeTruthy()
+    expect(screen.getByText('2 L')).toBeTruthy()
+    expect(screen.getByText('2,45 L')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Manter meta atual' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Usar meta recomendada' })).toBeTruthy()
+  })
+
+  it('defers the goal choice and lets the user reopen it during the session', () => {
+    profile.user.waterGoalSuggestionReview = { status: 'PENDING', suggestedGoalMl: 2450 }
+    renderProfile()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Agora não' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Rever sugestão de meta' }))
+    expect(screen.getByRole('dialog', { name: 'Quer atualizar sua meta de hidratação?' })).toBeTruthy()
+  })
+
+  it('keeps the current goal without applying a second goal update', async () => {
+    profile.user.waterGoalSuggestionReview = { status: 'PENDING', suggestedGoalMl: 2450 }
+    renderProfile()
+    fireEvent.click(screen.getByRole('button', { name: 'Manter meta atual' }))
+
+    await waitFor(() => expect(profile.api).toHaveBeenCalledWith('/profile/water-goal-suggestion', expect.objectContaining({
+      method: 'PUT',
+      token: 'profile-token',
+      body: JSON.stringify({ decision: 'KEEP_CURRENT', dietId: null }),
+    })))
+    expect(profile.updateUser).not.toHaveBeenCalled()
+    expect(profile.refreshWater).not.toHaveBeenCalled()
+    await waitFor(() => expect(profile.refreshProfile).toHaveBeenCalledOnce())
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('applies an explicit suggestion using the current context and refreshes profile and water', async () => {
+    profile.user.waterGoalSuggestionReview = { status: 'PENDING', suggestedGoalMl: 2450 }
+    renderProfile()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Usar meta recomendada' }))
+
+    await waitFor(() => expect(profile.api).toHaveBeenCalledWith('/profile/water-goal-suggestion', expect.objectContaining({
+      method: 'PUT',
+      token: 'profile-token',
+      body: JSON.stringify({ decision: 'APPLY_RECOMMENDATION', dietId: null }),
+    })))
+    await waitFor(() => expect(profile.refreshProfile).toHaveBeenCalledOnce())
+    expect(profile.refreshWater).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 })

@@ -17,6 +17,7 @@ POST /auth/refresh
 POST /auth/logout
 GET  /profile
 PUT  /profile
+PUT  /profile/water-goal-suggestion
 ```
 
 `register` e `login` retornam um access token para uso no header `Authorization`. Eles também criam um refresh token rotativo em cookie `HttpOnly`; o frontend deve enviar `credentials: include` e o header `X-Requested-With: Dietaday` nos endpoints `refresh` e `logout`.
@@ -44,6 +45,25 @@ na serialização JSON) até que seja informado.
 ser omitido ou enviado como `null` sem apagar uma data já salva, permitindo que clientes
 anteriores continuem atualizando os demais dados do perfil. Envie uma data válida para
 preencher ou atualizar o nascimento.
+
+`GET /profile` inclui `waterGoalSuggestionReview`, com `status` igual a `NOT_REQUIRED`,
+`PENDING` ou `RESOLVED` e `suggestedGoalMl` nullable. Contas antigas sem data de nascimento
+recebem `status = PENDING` quando informam pela primeira vez uma data válida e há uma
+sugestão hídrica disponível; novos cadastros não recebem essa revisão.
+Para resolver a decisão, use `PUT /profile/water-goal-suggestion`:
+
+```json
+{
+  "decision": "APPLY_RECOMMENDATION",
+  "dietId": "7b9d6c2f-3e0f-4f55-bf5b-4f3c0e6bc123"
+}
+```
+
+`decision` aceita `KEEP_CURRENT` ou `APPLY_RECOMMENDATION`; `dietId` é opcional e, quando
+enviado, exige membership em uma dieta competitiva ativa. `KEEP_CURRENT` preserva a meta;
+`APPLY_RECOMMENDATION` recalcula a sugestão no backend e a aplica à meta atual. Ambos
+resolvem a revisão. Repetir uma decisão já resolvida não altera a meta novamente. Fechar
+ou adiar o modal no frontend não envia decisão e mantém o estado pendente.
 
 ## Dietas
 
@@ -164,7 +184,22 @@ POST /diets/{dietId}/water/checks
 
 Esses endpoints exigem que o usuário seja membro da dieta. A meta continua sendo do usuário, mas os checks competitivos são associados à dieta. Dietas não competitivas continuam usando os endpoints gerais acima.
 
-Os valores de meta e check são enviados em mililitros. Os valores válidos ficam entre `500` e `4000`, em intervalos de `500`.
+Metas e checks são enviados em mililitros e têm validações distintas. Metas válidas vão de
+`2000` a `4000`, em intervalos de `50` (por exemplo, `2450`). Checks válidos vão de
+`500` a `4000`, em intervalos de `500`. Na migração, metas já salvas abaixo de `2000` são
+ajustadas para `2000`; checks existentes não são alterados.
+
+As respostas de `/water/today` e `/diets/{dietId}/water/today` incluem
+`suggestedGoalMl`, nullable. A sugestão é calculada como `35 mL × peso em kg`, arredondada
+ao múltiplo de `50 mL` mais próximo (empates para cima), apenas para adultos com peso e
+data de nascimento disponíveis. Só é retornada quando fica entre `2000` e `4000` mL;
+menores de idade, dados ausentes ou resultados fora desse intervalo recebem `null`.
+`goalMl` continua representando a meta atual escolhida e não é substituída pela sugestão.
+
+A meta efetiva de cada dia é salva por usuário e escopo (geral ou dieta) no primeiro check
+ou quando a meta é alterada. Uma alteração atualiza apenas o snapshot da data e do escopo
+atuais; snapshots anteriores permanecem imutáveis. Checks legados sem snapshot não recebem
+uma meta histórica inferida.
 
 As respostas de registro de check incluem `pointsEarned`, calculado pelo
 backend. O campo vale `0` para hidratação não competitiva e contém o delta
