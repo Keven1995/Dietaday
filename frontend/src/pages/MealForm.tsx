@@ -7,6 +7,7 @@ import { Button, EmptyState, PageTitle } from '../components/Ui'
 import { getErrorMessage, isDemoMode } from '../lib/api'
 import { compressPhoto, isPhotoUploadConfigured, validatePhoto } from '../lib/cloudinary'
 import { localDateKey } from '../lib/date'
+import { isMealNudgeMealType, mealLabelForApiType } from '../lib/mealNudges'
 import { createUuid } from '../lib/uuid'
 import { reportUxEvent } from '../lib/uxTelemetry'
 import { useAuth } from '../state/AuthContext'
@@ -46,6 +47,15 @@ export function MealForm() {
   const notify = useEffectEvent(showToast)
   const editId = (location.state as { offlineOperationId?: string } | null)?.offlineOperationId
   const editedOperation = operations.find((operation) => operation.id === editId)
+  const searchParams = new URLSearchParams(location.search)
+  const requestedMealType = searchParams.get('mealType') ?? ''
+  const requestedMealLabel = isMealNudgeMealType(requestedMealType) ? mealLabelForApiType(requestedMealType) : ''
+  const requestedMealDateValue = searchParams.get('mealDate') ?? ''
+  const requestedMealDate = /^\d{4}-\d{2}-\d{2}$/.test(requestedMealDateValue)
+    && Number.isFinite(Date.parse(`${requestedMealDateValue}T00:00:00Z`))
+    && new Date(`${requestedMealDateValue}T00:00:00Z`).toISOString().slice(0, 10) === requestedMealDateValue
+    ? requestedMealDateValue
+    : null
   const formDietId = editedOperation?.dietId ?? (!editId ? activeDiet?.id : undefined)
   const [formSessionId] = useState(() => createUuid())
   const initializedEditRef = useRef<string | null>(null)
@@ -62,7 +72,7 @@ export function MealForm() {
   const [preview, setPreview] = useState('')
   const [photo, setPhoto] = useState<File | null>(null)
   const [photoChanged, setPhotoChanged] = useState(false)
-  const [form, setForm] = useState({ mealType: 'Café da manhã', description: '' })
+  const [form, setForm] = useState(() => ({ mealType: requestedMealLabel || 'Café da manhã', description: '' }))
 
   useEffect(() => () => {
     if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current)
@@ -133,6 +143,11 @@ export function MealForm() {
     }
   }, [editedOperation])
 
+  useEffect(() => {
+    if (editedOperation || !requestedMealLabel) return
+    setForm((current) => ({ ...current, mealType: requestedMealLabel }))
+  }, [editedOperation, requestedMealLabel])
+
   function choosePhoto(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null
     if (file) {
@@ -201,7 +216,7 @@ export function MealForm() {
           request: {
             mealType: form.mealType,
             description,
-            mealDate: editedOperation?.request.mealDate ?? localDateKey(),
+             mealDate: editedOperation?.request.mealDate ?? requestedMealDate ?? localDateKey(),
           },
           photo: editedOperation && !photoChanged ? undefined : storedPhoto,
         })

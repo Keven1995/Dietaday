@@ -555,6 +555,18 @@ label, .field-label { display: grid; gap: 7px; color: #34433f; font-size: .86rem
 .member-role { display: flex; align-items: center; gap: 5px; color: var(--green-2); font-size: .7rem; font-weight: 700; }
 .member-role svg { width: 14px; }
 .member-actions { display: flex; align-items: center; gap: 12px; }
+.meal-nudge-control { position: relative; display: grid; justify-items: end; }
+.meal-nudge-trigger { min-height: 44px; padding: 7px 12px; border: 1px solid #d1ded7; border-radius: 12px; background: #f4f7f2; color: var(--green); font-size: .72rem; font-weight: 800; }
+.meal-nudge-trigger:hover { background: #e9f0e9; }
+.meal-nudge-menu { position: absolute; top: calc(100% + 7px); right: 0; z-index: 12; display: grid; gap: 6px; width: min(270px, calc(100vw - 42px)); padding: 12px; border: 1px solid var(--line); border-radius: 15px; background: var(--white); box-shadow: 0 12px 32px #20372c24; }
+.meal-nudge-menu-title { padding: 2px 4px 5px; color: var(--muted); font-size: .68rem; font-weight: 700; }
+.meal-nudge-menu button { min-height: 44px; padding: 8px 10px; border: 0; border-radius: 10px; background: #f4f7f2; color: var(--green); font-size: .73rem; font-weight: 700; text-align: left; }
+.meal-nudge-menu button:hover:not(:disabled) { background: #e9f0e9; }
+.meal-nudge-menu button:disabled { opacity: .6; }
+.meal-nudge-sent-option { padding: 8px 10px; color: var(--muted); font-size: .7rem; }
+.meal-nudge-status { color: var(--green-2); font-size: .68rem; font-weight: 700; }
+.meal-nudge-error { color: #a34f3a; font-size: .68rem; line-height: 1.45; }
+.meal-nudge-error button { padding: 0; border: 0; background: transparent; color: #8e3c2c; text-decoration: underline; }
 .leave-diet-trigger { padding: 5px 0; border: 0; background: transparent; color: #a34f3a; font-size: .7rem; font-weight: 800; letter-spacing: .08em; }
 .leave-diet-trigger:hover { color: #7f3826; }
 .leave-diet-modal .leave-diet-icon { width: 27px; color: var(--orange); }
@@ -595,6 +607,7 @@ label, .field-label { display: grid; gap: 7px; color: #34433f; font-size: .86rem
 .comment-notification-list svg { width: 16px; }
 .comment-notification-list strong, .comment-notification-list time { display: block; }
 .comment-notification-list strong { color: var(--green); font-size: .76rem; line-height: 1.4; }
+.comment-notification-list .notification-action { display: inline-block; margin-top: 4px; color: var(--orange); font-size: .66rem; font-weight: 800; }
 .comment-notification-list time { margin-top: 3px; color: var(--muted); font-size: .62rem; }
 .invitation-subtitle { margin: 5px 0 10px; color: var(--green); font-size: .85rem; }
 .invitation-list { display: grid; gap: 12px; }
