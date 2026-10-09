@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { X } from 'lucide-react'
 import { api, getErrorMessage } from '../lib/api'
 import type { MealNudgeEligibility, MealNudgeMealType } from '../types'
 import { useToast } from '../state/ToastContext'
@@ -20,16 +21,23 @@ export function MealNudgeButton({ dietId, recipientId, recipientName, token, eli
   const [sentFeedback, setSentFeedback] = useState(false)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
   const statusRef = useRef<HTMLSpanElement | null>(null)
+  const sheetTitleRef = useRef<HTMLHeadingElement | null>(null)
 
   useEffect(() => {
     if (!open) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    sheetTitleRef.current?.focus()
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       setOpen(false)
       triggerRef.current?.focus()
     }
     window.addEventListener('keydown', closeOnEscape)
-    return () => window.removeEventListener('keydown', closeOnEscape)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', closeOnEscape)
+    }
   }, [open])
 
   useEffect(() => {
@@ -80,17 +88,40 @@ export function MealNudgeButton({ dietId, recipientId, recipientName, token, eli
         aria-controls={menuId}
         onClick={() => setOpen((current) => !current)}
       >👀 Cutucar</button>
-      {open && <div className="meal-nudge-menu" id={menuId} role="group" aria-label={`Refeições pendentes de ${recipientName}`}>
-        <span className="meal-nudge-menu-title">Escolha a refeição:</span>
-        {eligibility.meals.filter((meal) => meal.eligible || meal.alreadySentByMe).map((meal) => meal.alreadySentByMe
-          ? <span className="meal-nudge-sent-option" key={meal.mealType}>{meal.mealLabel} — ✓ Enviada</span>
-          : <button
-            type="button"
-            key={meal.mealType}
-            disabled={sendingType !== null}
-            onClick={() => void send(meal.mealType)}
-          >{sendingType === meal.mealType ? 'Enviando…' : meal.buttonLabel}</button>)}
-        {error && <span className="meal-nudge-error" role="alert">{error}</span>}
+      {open && <div
+        className="meal-nudge-backdrop"
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) {
+            setOpen(false)
+            triggerRef.current?.focus()
+          }
+        }}
+      >
+        <div
+          className="meal-nudge-sheet"
+          id={menuId}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={`${menuId}-title`}
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          <button type="button" className="meal-nudge-close" onClick={() => { setOpen(false); triggerRef.current?.focus() }} aria-label="Fechar">
+            <X aria-hidden="true" />
+          </button>
+          <h2 id={`${menuId}-title`} ref={sheetTitleRef} tabIndex={-1}>Escolha a refeição:</h2>
+          <p className="meal-nudge-recipient">Para {recipientName}</p>
+          <div className="meal-nudge-options">
+            {eligibility.meals.filter((meal) => meal.eligible || meal.alreadySentByMe).map((meal) => meal.alreadySentByMe
+              ? <span className="meal-nudge-sent-option" key={meal.mealType}>{meal.mealLabel} — ✓ Enviada</span>
+              : <button
+                type="button"
+                key={meal.mealType}
+                disabled={sendingType !== null}
+                onClick={() => void send(meal.mealType)}
+              >{sendingType === meal.mealType ? 'Enviando…' : meal.buttonLabel}</button>)}
+          </div>
+          {error && <span className="meal-nudge-error" role="alert">{error}</span>}
+        </div>
       </div>}
     </div>
   )
