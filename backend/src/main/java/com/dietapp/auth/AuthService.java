@@ -96,7 +96,7 @@ public class AuthService {
 
     AuthResponse responseFor(User user) {
         return new AuthResponse(jwtService.generate(user.getId()), user.getId(), user.getEmail(), user.getFullName(),
-                user.getSex(), user.getBirthDate());
+                user.getSex(), user.getBirthDate(), user.isReceivingMealNudges());
     }
 
     private void validateBirthDate(LocalDate birthDate) {

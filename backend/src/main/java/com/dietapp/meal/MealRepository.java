@@ -13,6 +13,7 @@ import java.time.LocalDate;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.List;
+import java.util.Collection;
 
 public interface MealRepository extends JpaRepository<Meal, UUID> {
     boolean existsByDiet_IdAndAuthor_Id(UUID dietId, UUID authorId);
@@ -31,7 +32,16 @@ public interface MealRepository extends JpaRepository<Meal, UUID> {
            "where m.diet.id = :dietId and m.author.id = :userId " +
            "and m.mealDate between :fromDate and :toDate order by m.mealDate asc")
     List<DailyMealEntry> findDailyMealEntries(@Param("dietId") UUID dietId, @Param("userId") UUID userId,
-                                               @Param("fromDate") LocalDate fromDate, @Param("toDate") LocalDate toDate);
+                                                @Param("fromDate") LocalDate fromDate, @Param("toDate") LocalDate toDate);
+
+    boolean existsByDiet_IdAndAuthor_IdAndMealDateAndMealTypeIn(UUID dietId, UUID authorId,
+                                                                 LocalDate mealDate,
+                                                                 Collection<String> mealTypes);
+
+    @Query("select m.author.id as userId, m.mealType as mealType from Meal m " +
+            "where m.diet.id = :dietId and m.mealDate = :date")
+    List<DietDailyMealEntry> findDietDailyMealEntries(@Param("dietId") UUID dietId,
+                                                       @Param("date") LocalDate date);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @EntityGraph(attributePaths = "author")
@@ -40,6 +50,11 @@ public interface MealRepository extends JpaRepository<Meal, UUID> {
 
     interface DailyMealEntry {
         LocalDate getMealDate();
+        String getMealType();
+    }
+
+    interface DietDailyMealEntry {
+        UUID getUserId();
         String getMealType();
     }
 }

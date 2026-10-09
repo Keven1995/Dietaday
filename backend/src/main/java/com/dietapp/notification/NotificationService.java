@@ -5,6 +5,8 @@ import com.dietapp.common.NotFoundException;
 import com.dietapp.diet.Diet;
 import com.dietapp.diet.DietMemberRepository;
 import com.dietapp.meal.Meal;
+import com.dietapp.nudge.MealNudge;
+import com.dietapp.nudge.MealNudgeRepository;
 import com.dietapp.security.CurrentUser;
 import com.dietapp.user.User;
 import org.springframework.stereotype.Service;
@@ -17,12 +19,15 @@ import java.util.UUID;
 @Service
 public class NotificationService {
     private final NotificationRepository notifications;
+    private final MealNudgeRepository mealNudges;
     private final DietMemberRepository members;
     private final CurrentUser currentUser;
 
-    public NotificationService(NotificationRepository notifications, DietMemberRepository members,
+    public NotificationService(NotificationRepository notifications, MealNudgeRepository mealNudges,
+                               DietMemberRepository members,
                                CurrentUser currentUser) {
         this.notifications = notifications;
+        this.mealNudges = mealNudges;
         this.members = members;
         this.currentUser = currentUser;
     }
@@ -35,24 +40,31 @@ public class NotificationService {
     }
 
     @Transactional(readOnly = true)
-    public Page<NotificationResponse> list(Pageable pageable) {
-        return notifications.findAccessible(currentUser.id(), pageable).map(NotificationResponse::from);
+    public Page<NotificationFeedResponse> list(Pageable pageable) {
+        return notifications.findAccessibleFeed(currentUser.id(), pageable).map(NotificationFeedResponse::from);
     }
 
     @Transactional(readOnly = true)
     public UnreadCountResponse unreadCount() {
-        return new UnreadCountResponse(notifications.countUnreadAccessible(currentUser.id()));
+        return new UnreadCountResponse(notifications.countUnreadAccessible(currentUser.id())
+                + mealNudges.countUnreadAccessible(currentUser.id()));
     }
 
     @Transactional
     public void markRead(UUID id) {
-        notifications.findAccessibleById(id, currentUser.id())
-                .orElseThrow(() -> new NotFoundException("Notification not found"))
-                .markRead();
+        var commentNotification = notifications.findAccessibleById(id, currentUser.id());
+        if (commentNotification.isPresent()) {
+            commentNotification.get().markRead();
+            return;
+        }
+        MealNudge nudge = mealNudges.findAccessibleById(id, currentUser.id())
+                .orElseThrow(() -> new NotFoundException("Notification not found"));
+        nudge.markRead(java.time.Instant.now());
     }
 
     @Transactional
     public void markAllRead() {
         notifications.markAllUnread(currentUser.id());
+        mealNudges.markAllUnread(currentUser.id());
     }
 }

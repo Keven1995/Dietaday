@@ -76,6 +76,14 @@ public class ProfileService {
         return responseFor(user);
     }
 
+    @Transactional
+    public ProfileResponse updateMealNudgePreference(MealNudgePreferenceRequest request) {
+        User user = currentUser.require();
+        user.setReceiveMealNudges(request.enabled());
+        audit.profileUpdated(user.getId());
+        return responseFor(user);
+    }
+
     private ProfileResponse responseFor(User user) {
         Integer suggestedGoalMl = user.getWaterGoalSuggestionReviewStatus() == WaterGoalSuggestionReviewStatus.PENDING
                 ? goalSuggestions.suggestedGoalMl(user)

@@ -117,7 +117,9 @@ public class MealService {
     public Meal update(UUID dietId, UUID mealId, String mealType, String description,
                        LocalDate mealDate, String photoUrl) {
         photoUrlPolicy.validate(photoUrl);
-        Meal meal = get(dietId, mealId);
+        diets.requireMemberForUpdate(dietId);
+        Meal meal = meals.findByIdAndDietId(mealId, dietId)
+                .orElseThrow(() -> new NotFoundException("Meal not found"));
         requireAuthor(meal);
         ensureCompetitiveWriteAllowed(meal.getDiet());
         meal.update(mealType, description, mealDate, photoUrl);
@@ -126,7 +128,9 @@ public class MealService {
 
     @Transactional
     public void delete(UUID dietId, UUID mealId) {
-        Meal meal = get(dietId, mealId);
+        diets.requireMemberForUpdate(dietId);
+        Meal meal = meals.findByIdAndDietId(mealId, dietId)
+                .orElseThrow(() -> new NotFoundException("Meal not found"));
         requireAuthor(meal);
         ensureCompetitiveWriteAllowed(meal.getDiet());
         rankingEvents.revokeMeal(meal.getId());
