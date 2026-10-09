@@ -30,6 +30,10 @@ public class SecurityAuditService {
         audit("profile_updated", userId, null, null, null);
     }
 
+    public void mealNudgeSent(UUID senderId, UUID dietId, UUID recipientId, String mealType) {
+        audit("meal_nudge_sent", senderId, dietId, recipientId, safeType(mealType));
+    }
+
     public void dietCreated(UUID userId, UUID dietId) {
         audit("diet_created", userId, dietId, null, null);
     }

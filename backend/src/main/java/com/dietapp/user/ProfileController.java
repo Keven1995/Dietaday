@@ -30,4 +30,9 @@ public class ProfileController {
     public ProfileResponse decideWaterGoalSuggestion(@Valid @RequestBody WaterGoalSuggestionDecisionRequest request) {
         return profileService.decideWaterGoalSuggestion(request);
     }
+
+    @PutMapping("/meal-nudges")
+    public ProfileResponse updateMealNudgePreference(@Valid @RequestBody MealNudgePreferenceRequest request) {
+        return profileService.updateMealNudgePreference(request);
+    }
 }

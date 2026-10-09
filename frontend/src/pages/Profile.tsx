@@ -2,7 +2,7 @@ import { Bell, BellOff, Info, LogOut, Save, UserRound, Shield, X } from 'lucide-
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Button, PageTitle } from '../components/Ui'
-import { api, getErrorMessage } from '../lib/api'
+import { api, getErrorMessage, isDemoMode } from '../lib/api'
 import { ageOnDate, calculateBmi, classifyAdultBmi } from '../lib/bmi'
 import { brazilDateKey } from '../lib/date'
 import { useCompetitiveMode } from '../hooks/useCompetitiveMode'
@@ -50,6 +50,10 @@ export function Profile() {
   const [pushLoading, setPushLoading] = useState(false)
   const [pushMessage, setPushMessage] = useState('')
   const [pushError, setPushError] = useState('')
+  const [mealNudgesEnabled, setMealNudgesEnabled] = useState(user?.receiveMealNudges !== false)
+  const [mealNudgesLoading, setMealNudgesLoading] = useState(false)
+  const [mealNudgesMessage, setMealNudgesMessage] = useState('')
+  const [mealNudgesError, setMealNudgesError] = useState('')
   const [verificationMessage, setVerificationMessage] = useState('')
   const [bmiInfoOpen, setBmiInfoOpen] = useState(false)
   const [goalReviewOpen, setGoalReviewOpen] = useState(false)
@@ -69,6 +73,10 @@ export function Profile() {
   useEffect(() => {
     setForm(userToForm(user))
   }, [user])
+
+  useEffect(() => {
+    setMealNudgesEnabled(user?.receiveMealNudges !== false)
+  }, [user?.receiveMealNudges])
 
   useEffect(() => {
     if (location.hash !== '#lembretes-agua') return
@@ -187,6 +195,28 @@ export function Profile() {
       await refreshPushStatus()
     } finally {
       setPushLoading(false)
+    }
+  }
+
+  async function toggleMealNudges() {
+    if (!token) return
+    const enabled = !mealNudgesEnabled
+    setMealNudgesLoading(true)
+    setMealNudgesMessage('')
+    setMealNudgesError('')
+    try {
+      const updated = await api<User>('/profile/meal-nudges', {
+        method: 'PUT',
+        token,
+        body: JSON.stringify({ enabled }),
+      })
+      setMealNudgesEnabled(updated.receiveMealNudges ?? enabled)
+      setMealNudgesMessage(enabled ? 'Você receberá cutucadas sobre refeições.' : 'Recebimento de cutucadas desativado.')
+      await refreshProfile().catch(() => undefined)
+    } catch (preferenceError) {
+      setMealNudgesError(getErrorMessage(preferenceError, 'Não foi possível atualizar essa preferência.'))
+    } finally {
+      setMealNudgesLoading(false)
     }
   }
 
@@ -356,6 +386,15 @@ export function Profile() {
         {pushError && <div className="error-message" role="alert">{pushError}</div>}
         {pushMessage && <div className="success-message" role="status">{pushMessage}</div>}
       </section>
+      {!isDemoMode && <section className="card profile-form">
+        <h2>Cutucadas de refeição</h2>
+        <p>Escolha se seus amigos podem enviar cutucadas quando uma refeição ainda não foi registrada.</p>
+        <Button type="button" aria-pressed={mealNudgesEnabled} loading={mealNudgesLoading} className={mealNudgesEnabled ? 'outline' : ''} onClick={() => void toggleMealNudges()}>
+          {mealNudgesEnabled ? 'Desativar recebimento' : 'Ativar recebimento'}
+        </Button>
+        {mealNudgesError && <div className="error-message" role="alert">{mealNudgesError}</div>}
+        {mealNudgesMessage && <div className="success-message" role="status">{mealNudgesMessage}</div>}
+      </section>}
       <button type="button" className="logout-button" onClick={signOut}><LogOut /> Sair da conta</button>
     </div>
   )

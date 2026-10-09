@@ -11,6 +11,7 @@ export type User = {
   }
   sex: UserSex
   emailVerified?: boolean
+  receiveMealNudges?: boolean
 }
 
 export type UserSex = 'MALE' | 'FEMALE' | 'NEUTRAL'
@@ -57,19 +58,39 @@ export type MealComment = {
   reactions: MealReaction[]
 }
 
-export type CommentNotification = {
+export type NotificationFeedItem = {
   id: string
   type: string
   dietId: string
-  mealId: string
+  mealId: string | null
   mealDate: string
-  commentId: string
+  commentId: string | null
   actorId: string
   actorName: string
   mealType: string
+  message?: string | null
   createdAt: string
   readAt: string | null
 }
+
+export type CommentNotification = NotificationFeedItem
+
+export type MealNudgeMealType = 'BREAKFAST' | 'MORNING_SNACK' | 'LUNCH' | 'AFTERNOON_SNACK' | 'DINNER' | 'SUPPER'
+
+export type MealNudgeEligibility = {
+  recipientId: string
+  mealDate: string
+  meals: Array<{
+    mealType: MealNudgeMealType
+    mealLabel: string
+    buttonLabel: string
+    eligible: boolean
+    alreadySentByMe: boolean
+    reason: string | null
+  }>
+}
+
+export type MealNudgeMemberEligibility = MealNudgeEligibility & { recipientName: string }
 
 export type Member = {
   userId: string
@@ -94,6 +115,7 @@ export type AuthResponse = {
   fullName: string
   sex: UserSex
   birthDate?: string | null
+  receiveMealNudges?: boolean
 }
 
 

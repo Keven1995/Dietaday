@@ -2,14 +2,16 @@ import { LogOut, Mail, UserPlus, Users, X } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Button, EmptyState, PageTitle } from '../components/Ui'
+import { MealNudgeButton } from '../components/MealNudgeButton'
 import { initialMembers, leaveDemoDiet } from '../data'
 import { useDietResource } from '../hooks/useDietResource'
 import { api, getErrorMessage, isDemoMode } from '../lib/api'
 import { completeFeatureCampaign } from '../lib/featureDiscoveryTelemetry'
 import { clearDietCache } from '../lib/resourceCache'
+import { MEAL_SYNCED_EVENT } from '../state/OfflineMealContext'
 import { useAuth } from '../state/AuthContext'
 import { useDiets } from '../state/DietContext'
-import type { Invitation, InviteMemberRequest, LeaveDietRequest, Member } from '../types'
+import type { Invitation, InviteMemberRequest, LeaveDietRequest, MealNudgeEligibility, MealNudgeMealType, MealNudgeMemberEligibility, Member } from '../types'
 
 const NO_MEMBERS: Member[] = []
 
@@ -34,9 +36,13 @@ export function Members() {
   const leaveControllerRef = useRef<AbortController | null>(null)
   const leaveTriggerRef = useRef<HTMLButtonElement | null>(null)
   const leaveDialogRef = useRef<HTMLDivElement | null>(null)
+  const nudgeRequestRef = useRef<AbortController | null>(null)
   const leaveTitleRef = useRef<HTMLHeadingElement | null>(null)
   const leavingRef = useRef(false)
   const membersResource = useDietResource('members', initialMembers, NO_MEMBERS, 'Não foi possível carregar os membros.')
+  const [nudgeEligibility, setNudgeEligibility] = useState<Record<string, MealNudgeEligibility>>({})
+  const [nudgeEligibilityLoading, setNudgeEligibilityLoading] = useState(false)
+  const [nudgeEligibilityError, setNudgeEligibilityError] = useState('')
   const discoveryNavigation = typeof location.state === 'object' && location.state !== null
     ? location.state as { featureDiscoveryCampaignId?: unknown; featureDiscoveryDietId?: unknown }
     : null
@@ -44,7 +50,52 @@ export function Members() {
   useEffect(() => () => {
     inviteControllerRef.current?.abort()
     leaveControllerRef.current?.abort()
+    nudgeRequestRef.current?.abort()
   }, [])
+
+  useEffect(() => {
+    setNudgeEligibility({})
+    setNudgeEligibilityError('')
+    if (!activeDiet || !token || isDemoMode) {
+      setNudgeEligibilityLoading(false)
+      return
+    }
+
+    const refreshEligibility = () => {
+      nudgeRequestRef.current?.abort()
+      const controller = new AbortController()
+      nudgeRequestRef.current = controller
+      setNudgeEligibilityLoading(true)
+      setNudgeEligibilityError('')
+      void api<MealNudgeMemberEligibility[]>(`/diets/${activeDiet.id}/meal-nudges/eligibility/all`, {
+        token,
+        signal: controller.signal,
+      }).then((entries) => {
+        if (controller.signal.aborted) return
+        setNudgeEligibility(Object.fromEntries(entries.map((entry) => [entry.recipientId, entry])))
+      }).catch((loadError) => {
+        if (!controller.signal.aborted) setNudgeEligibilityError(getErrorMessage(loadError, 'Não foi possível verificar as refeições pendentes.'))
+      }).finally(() => {
+        if (!controller.signal.aborted) setNudgeEligibilityLoading(false)
+      })
+    }
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine) refreshEligibility()
+    }
+
+    refreshEligibility()
+    const timer = window.setInterval(refreshWhenVisible, 30_000)
+    window.addEventListener('focus', refreshWhenVisible)
+    window.addEventListener(MEAL_SYNCED_EVENT, refreshEligibility)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('focus', refreshWhenVisible)
+      window.removeEventListener(MEAL_SYNCED_EVENT, refreshEligibility)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+      nudgeRequestRef.current?.abort()
+    }
+  }, [activeDiet?.id, token])
 
   useEffect(() => {
     if (!leaveModalOpen) return
@@ -197,6 +248,8 @@ export function Members() {
           {message && <div className="success-message" role="status"><span aria-hidden="true">✓</span> {message}</div>}
           <section className="member-section">
             <div className="section-heading"><div><span>ACESSO ATUAL</span><h2>{members.length} {members.length === 1 ? 'membro' : 'membros'}</h2></div></div>
+            {nudgeEligibilityError && <div className="error-message" role="alert">{nudgeEligibilityError}</div>}
+            {nudgeEligibilityLoading && !Object.keys(nudgeEligibility).length && <p className="loading-text" role="status">Verificando refeições pendentes…</p>}
             {membersResource.loading ? <p className="loading-text">Carregando membros...</p> : members.map((member) => (
               <article className="member-row" key={member.userId}>
                 <div className="avatar large" aria-hidden="true">{getInitials(member.fullName)}</div>
@@ -204,6 +257,26 @@ export function Members() {
                 <div className="member-actions">
                   <div className="member-role">{member.role === 'OWNER' ? 'Responsável' : 'Membro'}</div>
                   {member.userId === user?.id && <button type="button" className="leave-diet-trigger" onClick={openLeaveModal}>SAIR</button>}
+                  {!isDemoMode && member.userId !== user?.id && <MealNudgeButton
+                    dietId={activeDiet.id}
+                    recipientId={member.userId}
+                    recipientName={member.fullName}
+                    token={token}
+                    eligibility={nudgeEligibility[member.userId] ?? null}
+                    onSent={(mealType: MealNudgeMealType) => setNudgeEligibility((current) => {
+                      const currentEntry = current[member.userId]
+                      if (!currentEntry) return current
+                      return {
+                        ...current,
+                        [member.userId]: {
+                          ...currentEntry,
+                          meals: currentEntry.meals.map((meal) => meal.mealType === mealType
+                            ? { ...meal, eligible: false, alreadySentByMe: true, reason: 'ALREADY_SENT' }
+                            : meal),
+                        },
+                      }
+                    })}
+                  />}
                 </div>
               </article>
             ))}

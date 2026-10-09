@@ -35,6 +35,7 @@ vi.mock('../hooks/usePushStatus', () => ({
 }))
 vi.mock('../lib/api', () => ({
   api: profile.api,
+  isDemoMode: false,
   getErrorMessage: (error: unknown, fallback: string) => error instanceof Error ? error.message : fallback,
 }))
 vi.mock('../state/WaterContext', () => ({
@@ -79,6 +80,18 @@ describe('Profile birth date', () => {
     await waitFor(() => expect(profile.updateUser).toHaveBeenCalledWith(expect.objectContaining({
       birthDate: null,
     })))
+  })
+
+  it('lets the user disable receiving meal nudges', async () => {
+    renderProfile()
+    fireEvent.click(screen.getByRole('button', { name: 'Desativar recebimento' }))
+
+    await waitFor(() => expect(profile.api).toHaveBeenCalledWith('/profile/meal-nudges', expect.objectContaining({
+      method: 'PUT',
+      token: 'profile-token',
+      body: JSON.stringify({ enabled: false }),
+    })))
+    expect((await screen.findByRole('status')).textContent).toContain('Recebimento de cutucadas desativado.')
   })
 
   it('submits a valid birth date when updating the profile', async () => {

@@ -41,6 +41,8 @@ public class User {
     private Instant createdAt;
     @Column(name = "email_verified", nullable = false)
     private boolean emailVerified;
+    @Column(name = "receive_meal_nudges", nullable = false)
+    private boolean receiveMealNudges = true;
 
     protected User() {}
 
@@ -71,6 +73,7 @@ public class User {
     public int getDailyWaterGoalMl() { return dailyWaterGoalMl; }
     public UserSex getSex() { return sex; }
     public boolean isEmailVerified() { return emailVerified; }
+    public boolean isReceivingMealNudges() { return receiveMealNudges; }
 
     public void verifyEmail() { this.emailVerified = true; }
     public void updatePassword(String passwordHash) { this.passwordHash = passwordHash; }
@@ -86,6 +89,10 @@ public class User {
 
     public void updateDailyWaterGoal(int dailyWaterGoalMl) {
         this.dailyWaterGoalMl = dailyWaterGoalMl;
+    }
+
+    public void setReceiveMealNudges(boolean receiveMealNudges) {
+        this.receiveMealNudges = receiveMealNudges;
     }
 
     public void markWaterGoalSuggestionReviewPending() {

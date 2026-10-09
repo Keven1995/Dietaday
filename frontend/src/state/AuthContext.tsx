@@ -51,6 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       fullName: data.fullName,
       sex: data.sex,
       birthDate: data.birthDate ?? null,
+      receiveMealNudges: data.receiveMealNudges ?? true,
     }
     localStorage.setItem('Dietaday_user', JSON.stringify(authenticatedUser))
     setToken(data.token)

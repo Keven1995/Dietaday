@@ -19,5 +19,6 @@ public interface DietMemberRepository extends JpaRepository<DietMember, UUID> {
 
     long countByDietId(UUID dietId);
 
+    @EntityGraph(attributePaths = "user")
     List<DietMember> findAllByDietId(UUID dietId);
 }

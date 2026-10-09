@@ -70,6 +70,7 @@ public class RequestRateLimitFilter extends OncePerRequestFilter {
         UPLOAD_SIGNATURE(30),
         PUSH_SUBSCRIPTION(60),
         TELEMETRY(120),
+        MEAL_NUDGE(20),
         PUSH_TEST(2);
 
         private final int limit;
@@ -85,6 +86,9 @@ public class RequestRateLimitFilter extends OncePerRequestFilter {
         static Rule forRequest(String method, String path) {
             if (!"POST".equalsIgnoreCase(method)) {
                 return null;
+            }
+            if (path.startsWith("/api/diets/") && path.endsWith("/meal-nudges")) {
+                return MEAL_NUDGE;
             }
             return switch (path) {
                 case "/api/auth/register" -> AUTH_REGISTER;

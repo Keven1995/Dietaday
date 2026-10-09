@@ -24,10 +24,10 @@ public class NotificationController {
     }
 
     @GetMapping
-    public ResponseEntity<java.util.List<NotificationResponse>> list(
+    public ResponseEntity<java.util.List<NotificationFeedResponse>> list(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
-        Page<NotificationResponse> result = service.list(Pagination.request(page, size));
+        Page<NotificationFeedResponse> result = service.list(Pagination.request(page, size));
         return Pagination.headers(ResponseEntity.ok(), result).body(result.getContent());
     }
 

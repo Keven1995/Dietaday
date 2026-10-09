@@ -3,10 +3,10 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getDemoInvitations, respondToDemoInvitation } from '../data'
 import { api, getErrorMessage, isDemoMode } from '../lib/api'
-import { notificationDeepLink, notificationMessage, unreadNotifications } from '../lib/notifications'
+import { notificationAction, notificationDeepLink, notificationMessage, unreadNotifications } from '../lib/notifications'
 import { useAuth } from '../state/AuthContext'
 import { useDiets } from '../state/DietContext'
-import type { CommentNotification, Invitation } from '../types'
+import type { Invitation, NotificationFeedItem } from '../types'
 import { Button } from './Ui'
 
 export function InvitationNotifications() {
@@ -14,7 +14,7 @@ export function InvitationNotifications() {
   const { reload, selectDiet } = useDiets()
   const navigate = useNavigate()
   const [invitations, setInvitations] = useState<Invitation[]>([])
-  const [notifications, setNotifications] = useState<CommentNotification[]>([])
+  const [notifications, setNotifications] = useState<NotificationFeedItem[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -44,9 +44,10 @@ export function InvitationNotifications() {
       requestRef.current = { id, controller }
       setLoading(true)
       try {
-        const [invitationResult, notificationResult] = await Promise.allSettled([
+        const [invitationResult, notificationResult, unreadResult] = await Promise.allSettled([
           isDemoMode ? Promise.resolve(getDemoInvitations()) : api<Invitation[]>('/invitations', { token, signal: controller.signal }),
-          isDemoMode ? Promise.resolve([] as CommentNotification[]) : api<CommentNotification[]>('/notifications', { token, signal: controller.signal }),
+          isDemoMode ? Promise.resolve([] as NotificationFeedItem[]) : api<NotificationFeedItem[]>('/notifications', { token, signal: controller.signal }),
+          isDemoMode ? Promise.resolve({ count: 0 }) : api<{ count: number }>('/notifications/unread-count', { token, signal: controller.signal }),
         ])
         if (!controller.signal.aborted && requestRef.current?.id === id) {
           const errors: string[] = []
@@ -54,9 +55,12 @@ export function InvitationNotifications() {
           else errors.push(getErrorMessage(invitationResult.reason, 'Não foi possível carregar os convites.'))
           if (notificationResult.status === 'fulfilled') {
             setNotifications(notificationResult.value)
-            setUnreadCount(unreadNotifications(notificationResult.value))
+            setUnreadCount(unreadResult.status === 'fulfilled'
+              ? unreadResult.value.count
+              : unreadNotifications(notificationResult.value))
           } else {
             errors.push(getErrorMessage(notificationResult.reason, 'Não foi possível carregar as notificações.'))
+            if (unreadResult.status === 'fulfilled') setUnreadCount(unreadResult.value.count)
           }
           setError(errors.join(' '))
         }
@@ -140,7 +144,7 @@ export function InvitationNotifications() {
     }
   }
 
-  async function openNotification(notification: CommentNotification) {
+  async function openNotification(notification: NotificationFeedItem) {
     if (!token) return
     if (!notification.readAt) {
       const previousNotifications = notifications
@@ -210,7 +214,7 @@ export function InvitationNotifications() {
             {error && <div className="error-message" role="alert">{error}</div>}
             {loading && !invitations.length && !notifications.length ? <p className="loading-text">Carregando notificações...</p> : (invitations.length || notifications.length) ? (<>
               {notifications.length > 0 && <div className="comment-notification-list">
-                {notifications.map((notification) => <button type="button" key={notification.id} className={notification.readAt ? 'read' : 'unread'} onClick={() => void openNotification(notification)}><span aria-hidden="true"><Bell /></span><span><strong>{notificationMessage(notification)}</strong><time dateTime={notification.createdAt}>{new Date(notification.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</time></span></button>)}
+                {notifications.map((notification) => <button type="button" key={notification.id} className={notification.readAt ? 'read' : 'unread'} onClick={() => void openNotification(notification)}><span aria-hidden="true"><Bell /></span><span><strong>{notificationMessage(notification)}</strong><small className="notification-action">{notificationAction(notification)}</small><time dateTime={notification.createdAt}>{new Date(notification.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</time></span></button>)}
               </div>}
               {invitations.length > 0 && <h3 className="invitation-subtitle">Convites para dietas</h3>}
               <div className="invitation-list">

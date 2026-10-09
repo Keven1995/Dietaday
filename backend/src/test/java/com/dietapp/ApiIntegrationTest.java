@@ -26,6 +26,7 @@ import org.springframework.test.web.servlet.MvcResult;
 
 import java.util.UUID;
 import java.util.Map;
+import java.util.List;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.YearMonth;
@@ -1776,6 +1777,196 @@ class ApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].commentId").value(firstCommentId));
+    }
+
+    @Test
+    void mealNudgesSupportEveryOfficialMealAndAppearInTheUnifiedNotificationFeed() throws Exception {
+        String ownerEmail = "nudge-owner-" + UUID.randomUUID() + "@example.com";
+        String recipientEmail = "nudge-recipient-" + UUID.randomUUID() + "@example.com";
+        JsonNode owner = register("Nudge Owner", ownerEmail);
+        JsonNode recipient = register("Nudge Recipient", recipientEmail);
+        LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+        String dietId = mvc.perform(post("/api/diets")
+                        .header("Authorization", bearer(owner))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "name", "Noncompetitive nudge diet",
+                                "startDate", today.minusDays(2).toString(),
+                                "endDate", today.plusDays(30).toString(),
+                                "competitiveMode", false))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.competitiveMode").value(false))
+                .andReturn().getResponse().getContentAsString();
+        dietId = objectMapper.readTree(dietId).get("id").asText();
+        joinDiet(owner, recipient, dietId, recipientEmail);
+
+        mvc.perform(get("/api/diets/{dietId}/meal-nudges/eligibility", dietId)
+                        .param("recipientId", recipient.get("userId").asText())
+                        .header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meals.length()").value(6))
+                .andExpect(jsonPath("$.meals[0].eligible").value(true));
+
+        String[] mealTypes = {"BREAKFAST", "MORNING_SNACK", "LUNCH", "AFTERNOON_SNACK", "DINNER", "SUPPER"};
+        String[] messages = {
+                "O café da manhã foi tomar café sozinho? Cadê o registro? ☕😂",
+                "E esse lanchinho da manhã, tá em missão secreta? 🍎🕵️",
+                "Tá comendo escondido aí? 😂",
+                "A tarde chegou e o lanche sumiu! Cadê as provas? 🥪👀",
+                "E o jantar, foi abduzido ou você esqueceu de postar? 🛸🍽️",
+                "A fiscalização noturna passou: cadê a ceia? 🌙😂",
+        };
+        for (int index = 0; index < mealTypes.length; index++) {
+            String request = objectMapper.writeValueAsString(Map.of(
+                    "recipientId", recipient.get("userId").asText(), "mealType", mealTypes[index]));
+            mvc.perform(post("/api/diets/{dietId}/meal-nudges", dietId)
+                            .header("Authorization", bearer(owner))
+                            .contentType(MediaType.APPLICATION_JSON).content(request))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.mealType").value(mealTypes[index]))
+                    .andExpect(jsonPath("$.message").value(messages[index]))
+                    .andExpect(jsonPath("$.mealDate").value(today.toString()));
+            mvc.perform(post("/api/diets/{dietId}/meal-nudges", dietId)
+                            .header("Authorization", bearer(owner))
+                            .contentType(MediaType.APPLICATION_JSON).content(request))
+                    .andExpect(status().isOk());
+        }
+
+        mvc.perform(get("/api/notifications/unread-count").header("Authorization", bearer(recipient)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.count").value(6));
+        mvc.perform(get("/api/notifications").header("Authorization", bearer(recipient)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(6))
+                .andExpect(jsonPath("$[0].type").value("MEAL_NUDGED"))
+                .andExpect(jsonPath("$[0].actorName").value("Nudge Owner"))
+                .andExpect(jsonPath("$[0].message").isNotEmpty())
+                .andExpect(jsonPath("$[0].mealId").doesNotExist())
+                .andExpect(jsonPath("$[0].readAt").doesNotExist());
+
+        String firstNudgeId = mvc.perform(get("/api/notifications").header("Authorization", bearer(recipient)))
+                .andReturn().getResponse().getContentAsString();
+        firstNudgeId = objectMapper.readTree(firstNudgeId).get(0).get("id").asText();
+        mvc.perform(put("/api/notifications/{id}/read", firstNudgeId)
+                        .header("Authorization", bearer(recipient)))
+                .andExpect(status().isNoContent());
+        mvc.perform(get("/api/notifications/unread-count").header("Authorization", bearer(recipient)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.count").value(5));
+        mvc.perform(put("/api/notifications/read-all").header("Authorization", bearer(recipient)))
+                .andExpect(status().isNoContent());
+        mvc.perform(get("/api/notifications/unread-count").header("Authorization", bearer(recipient)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.count").value(0));
+    }
+
+    @Test
+    void mealNudgeEligibilityRechecksMealsPreferencesMembershipAndSelfTargeting() throws Exception {
+        String ownerEmail = "nudge-rules-owner-" + UUID.randomUUID() + "@example.com";
+        String recipientEmail = "nudge-rules-recipient-" + UUID.randomUUID() + "@example.com";
+        JsonNode owner = register("Nudge Rules Owner", ownerEmail);
+        JsonNode recipient = register("Nudge Rules Recipient", recipientEmail);
+        JsonNode outsider = register("Nudge Rules Outsider", "nudge-outsider-" + UUID.randomUUID() + "@example.com");
+        LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+        String dietId = mvc.perform(post("/api/diets")
+                        .header("Authorization", bearer(owner)).contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("name", "Nudge Rules Diet",
+                                "startDate", today.minusDays(1).toString(), "endDate", today.plusDays(2).toString()))))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        dietId = objectMapper.readTree(dietId).get("id").asText();
+        joinDiet(owner, recipient, dietId, recipientEmail);
+
+        mvc.perform(get("/api/diets/{dietId}/meal-nudges/eligibility", dietId)
+                        .param("recipientId", owner.get("userId").asText())
+                        .header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meals[0].eligible").value(false))
+                .andExpect(jsonPath("$.meals[0].reason").value("SELF"));
+        mvc.perform(post("/api/diets/{dietId}/meal-nudges", dietId)
+                        .header("Authorization", bearer(owner)).contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("recipientId", owner.get("userId").asText(), "mealType", "LUNCH"))))
+                .andExpect(status().isConflict());
+
+        mvc.perform(post("/api/diets/{dietId}/meals", dietId)
+                        .header("Authorization", bearer(recipient)).contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("mealType", "Almoço", "description", "Already registered", "mealDate", today.toString()))))
+                .andExpect(status().isCreated());
+        mvc.perform(get("/api/diets/{dietId}/meal-nudges/eligibility", dietId)
+                        .param("recipientId", recipient.get("userId").asText())
+                        .header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meals[2].eligible").value(false))
+                .andExpect(jsonPath("$.meals[2].reason").value("ALREADY_REGISTERED"));
+        mvc.perform(post("/api/diets/{dietId}/meal-nudges", dietId)
+                        .header("Authorization", bearer(owner)).contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("recipientId", recipient.get("userId").asText(), "mealType", "LUNCH"))))
+                .andExpect(status().isConflict());
+
+        mvc.perform(put("/api/profile/meal-nudges").header("Authorization", bearer(recipient))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"enabled\":false}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.receiveMealNudges").value(false));
+        mvc.perform(post("/api/diets/{dietId}/meal-nudges", dietId)
+                        .header("Authorization", bearer(owner)).contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("recipientId", recipient.get("userId").asText(), "mealType", "DINNER"))))
+                .andExpect(status().isConflict());
+
+        mvc.perform(get("/api/diets/{dietId}/meal-nudges/eligibility/all", dietId)
+                        .header("Authorization", bearer(outsider)))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/diets/{dietId}/meal-nudges/eligibility", dietId)
+                        .param("recipientId", outsider.get("userId").asText())
+                        .header("Authorization", bearer(owner)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void simultaneousMealNudgesPersistOnlyOneForTheSameDailyKey() throws Exception {
+        String ownerEmail = "nudge-race-owner-" + UUID.randomUUID() + "@example.com";
+        String recipientEmail = "nudge-race-recipient-" + UUID.randomUUID() + "@example.com";
+        JsonNode owner = register("Nudge Race Owner", ownerEmail);
+        JsonNode recipient = register("Nudge Race Recipient", recipientEmail);
+        LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+        String dietJson = mvc.perform(post("/api/diets")
+                        .header("Authorization", bearer(owner)).contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("name", "Nudge Race Diet",
+                                "startDate", today.minusDays(1).toString(), "endDate", today.plusDays(2).toString()))))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        String dietId = objectMapper.readTree(dietJson).get("id").asText();
+        joinDiet(owner, recipient, dietId, recipientEmail);
+        String request = objectMapper.writeValueAsString(Map.of(
+                "recipientId", recipient.get("userId").asText(), "mealType", "LUNCH"));
+        String authorization = bearer(owner);
+        var ready = new CountDownLatch(2);
+        var start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            var sendNudge = (java.util.concurrent.Callable<Integer>) () -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Concurrent test did not start");
+                return mvc.perform(post("/api/diets/{dietId}/meal-nudges", dietId)
+                                .header("Authorization", authorization)
+                                .contentType(MediaType.APPLICATION_JSON).content(request))
+                        .andReturn().getResponse().getStatus();
+            };
+            Future<Integer> first = executor.submit(sendNudge);
+            Future<Integer> second = executor.submit(sendNudge);
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            int firstStatus = first.get(10, TimeUnit.SECONDS);
+            int secondStatus = second.get(10, TimeUnit.SECONDS);
+            assertThat(List.of(firstStatus, secondStatus)).contains(201);
+            assertThat(List.of(firstStatus, secondStatus)).allMatch(status -> status == 201 || status == 200 || status == 409);
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+        }
+        mvc.perform(get("/api/notifications").header("Authorization", bearer(recipient)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1));
+        mvc.perform(get("/api/notifications/unread-count").header("Authorization", bearer(recipient)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.count").value(1));
     }
 
     @Test

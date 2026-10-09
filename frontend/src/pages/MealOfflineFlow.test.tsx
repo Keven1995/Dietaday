@@ -79,9 +79,9 @@ let revokeObjectUrlDescriptor: PropertyDescriptor | undefined
 let blobDescriptor: PropertyDescriptor | undefined
 let fileDescriptor: PropertyDescriptor | undefined
 
-function renderMealFlow() {
+function renderMealFlow(initialEntry = '/refeicoes/nova') {
   return render(
-    <MemoryRouter initialEntries={['/refeicoes/nova']}>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <OfflineMealProvider>
         <Routes>
           <Route path="/refeicoes/nova" element={<MealForm />} />
@@ -199,6 +199,20 @@ describe('offline meal flow from form to history', () => {
     else Reflect.deleteProperty(globalThis, 'Blob')
     if (fileDescriptor) Object.defineProperty(globalThis, 'File', fileDescriptor)
     else Reflect.deleteProperty(globalThis, 'File')
+  })
+
+  it('preselects the nudged meal and preserves its local date in the offline queue', async () => {
+    renderMealFlow('/refeicoes/nova?mealType=LUNCH&mealDate=2026-10-08')
+
+    expect((screen.getByLabelText('Tipo de refeição') as HTMLSelectElement).value).toBe('Almoço')
+    fireEvent.change(screen.getByLabelText('Descrição'), { target: { value: 'Almoço pendente' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar refeição' }))
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /Aguardando sincronização/ })).toBeTruthy())
+    const queued = await listOfflineMeals(flow.user.id)
+    expect(queued).toHaveLength(1)
+    expect(queued[0].request.mealType).toBe('Almoço')
+    expect(queued[0].request.mealDate).toBe('2026-10-08')
   })
 
   it('retains a locally saved meal in history and retries an ambiguous create once by idempotency key', async () => {
