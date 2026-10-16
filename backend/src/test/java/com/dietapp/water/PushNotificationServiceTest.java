@@ -19,8 +19,8 @@ class PushNotificationServiceTest {
     }
 
     @Test
-    void convertsOnlyTheVapidKeyToStandardBase64ForFcm() {
+    void keepsVapidKeyAndRemovesDhForFcm() {
         assertThat(PushNotificationService.toFcmCompatibleCryptoKey("dh=abc-_123;p256ecdsa=-_8"))
-                .isEqualTo("dh=abc-_123;p256ecdsa=+/8=");
+                .isEqualTo("p256ecdsa=-_8");
     }
 }

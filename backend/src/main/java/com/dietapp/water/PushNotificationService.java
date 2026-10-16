@@ -122,10 +122,8 @@ public class PushNotificationService {
     static String toFcmCompatibleCryptoKey(String value) {
         String[] parts = value.split(";", -1);
         for (int index = 0; index < parts.length; index++) {
-            if (!parts[index].startsWith("p256ecdsa=")) continue;
-            String encoded = parts[index].substring("p256ecdsa=".length());
-            byte[] key = java.util.Base64.getUrlDecoder().decode(encoded);
-            parts[index] = "p256ecdsa=" + java.util.Base64.getEncoder().encodeToString(key);
+            String part = parts[index].trim();
+            if (part.startsWith("p256ecdsa=")) return part;
         }
         return String.join(";", parts);
     }
