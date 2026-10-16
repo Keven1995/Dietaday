@@ -6,6 +6,7 @@ import nl.martijndwars.webpush.Notification;
 import nl.martijndwars.webpush.PushService;
 import org.jose4j.lang.JoseException;
 import org.apache.http.HttpResponse;
+import org.apache.http.util.EntityUtils;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,6 +16,7 @@ import jakarta.annotation.PostConstruct;
 
 import java.security.GeneralSecurityException;
 import java.security.Security;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 @Service
@@ -72,13 +74,19 @@ public class PushNotificationService {
                     subscription.getEndpoint(), subscription.getP256dh(), subscription.getAuth(), payload);
             HttpResponse response = pushService.send(notification);
             int status = response.getStatusLine().getStatusCode();
+            String providerMessage = readProviderMessage(response);
             if (status == 404 || status == 410) {
                 subscription.disable();
                 return false;
             }
             if (status < 200 || status >= 300) {
                 audit.pushFailure(subscription.getId(), status, "http_error");
-                log.warn("push_notification_failed subscriptionId={} status={}", subscription.getId(), status);
+                if (providerMessage.isEmpty()) {
+                    log.warn("push_notification_failed subscriptionId={} status={}", subscription.getId(), status);
+                } else {
+                    log.warn("push_notification_failed subscriptionId={} status={} providerMessage={}",
+                            subscription.getId(), status, providerMessage);
+                }
                 return false;
             }
             return true;
@@ -90,5 +98,20 @@ public class PushNotificationService {
                     subscription.getId(), exception.getClass().getSimpleName());
             return false;
         }
+    }
+
+    private String readProviderMessage(HttpResponse response) {
+        if (response.getEntity() == null) return "";
+        try {
+            return sanitizeProviderMessage(EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8));
+        } catch (java.io.IOException exception) {
+            return "";
+        }
+    }
+
+    static String sanitizeProviderMessage(String value) {
+        String normalized = value.replaceAll("[\\r\\n\\t]+", " ").trim();
+        if (normalized.length() > 512) normalized = normalized.substring(0, 512);
+        return normalized;
     }
 }
