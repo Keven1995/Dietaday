@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { BellRing, X } from 'lucide-react'
+import { motion } from 'motion/react'
+import { MOTION_SCALE, MOTION_SPRING } from '../constants/motion'
+import { useReducedMotionPreference } from '../hooks/useReducedMotionPreference'
 import { api, getErrorMessage } from '../lib/api'
 import type { MealNudgeEligibility, MealNudgeMealType } from '../types'
 import { useToast } from '../state/ToastContext'
@@ -15,6 +18,7 @@ type Props = {
 
 export function MealNudgeButton({ dietId, recipientId, recipientName, token, eligibility, onSent }: Props) {
   const { showToast } = useToast()
+  const reducedMotion = useReducedMotionPreference()
   const [sendingType, setSendingType] = useState<MealNudgeMealType | null>(null)
   const [error, setError] = useState('')
   const [open, setOpen] = useState(false)
@@ -80,7 +84,8 @@ export function MealNudgeButton({ dietId, recipientId, recipientName, token, eli
   const menuId = `meal-nudge-options-${dietId}-${recipientId}`
   return (
     <div className="meal-nudge-control">
-      <button
+      <motion.button
+        initial={false}
         type="button"
         ref={triggerRef}
         className="meal-nudge-trigger"
@@ -89,8 +94,17 @@ export function MealNudgeButton({ dietId, recipientId, recipientName, token, eli
         aria-controls={open ? menuId : undefined}
         aria-haspopup="dialog"
         disabled={!token}
+        whileHover={!reducedMotion && token ? { y: -2, scale: MOTION_SCALE.hover } : undefined}
+        whileTap={!reducedMotion && token ? { scale: MOTION_SCALE.tap } : undefined}
+        transition={MOTION_SPRING.soft}
         onClick={() => setOpen((current) => !current)}
-      ><BellRing aria-hidden="true" /> <span>Enviar lembrete</span></button>
+      ><motion.span
+        className="meal-nudge-icon"
+        aria-hidden="true"
+        initial={false}
+        animate={open && !reducedMotion ? { rotate: [0, -10, 8, -5, 0], scale: [1, 1.08, 1] } : { rotate: 0, scale: 1 }}
+        transition={{ duration: reducedMotion ? 0 : .4, ease: 'easeOut' }}
+      ><BellRing /></motion.span><span>Cutucar</span></motion.button>
       {open && <div
         className="meal-nudge-backdrop"
         onMouseDown={(event) => {

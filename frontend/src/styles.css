@@ -588,11 +588,14 @@ label, .field-label { display: grid; gap: 7px; color: #34433f; font-size: .86rem
 .member-role svg { width: 14px; }
 .member-actions { display: flex; align-items: center; gap: 12px; }
 .meal-nudge-control { display: grid; justify-items: end; }
-.meal-nudge-trigger { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; padding: 0 13px; border: 1px solid var(--green); border-radius: 12px; background: var(--green); box-shadow: 0 2px 5px #173f351a; color: #fff; font-size: .73rem; font-weight: 800; white-space: nowrap; transition: background var(--motion-interaction), transform var(--motion-interaction), box-shadow var(--motion-interaction); }
-.meal-nudge-trigger svg { width: 17px; height: 17px; flex: 0 0 auto; }
-.meal-nudge-trigger:hover:not(:disabled) { transform: translateY(-1px); background: #24574a; box-shadow: 0 4px 10px #173f3526; }
-.meal-nudge-trigger:active:not(:disabled) { transform: translateY(0); }
-.meal-nudge-trigger:disabled { cursor: not-allowed; opacity: .58; }
+.meal-nudge-trigger { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; padding: 5px 11px 5px 6px; border: 1px solid #d1ded7; border-radius: 14px; background: linear-gradient(135deg, #fffdf9 0%, #f0f6ef 100%); box-shadow: 0 3px 9px #173f3512, inset 0 1px #ffffffc9; color: var(--green); font-size: .72rem; font-weight: 800; white-space: nowrap; transition: border-color var(--motion-interaction), background var(--motion-interaction), box-shadow var(--motion-interaction); }
+.meal-nudge-icon { display: grid; width: 28px; height: 28px; flex: 0 0 auto; place-items: center; border-radius: 9px; background: #fae5da; color: #bd5834; }
+.meal-nudge-icon svg { width: 15px; height: 15px; }
+.meal-nudge-trigger:hover:not(:disabled) { border-color: #e6a589; background: linear-gradient(135deg, #fffdf9 0%, #fff3eb 100%); box-shadow: 0 6px 14px #173f351c, inset 0 1px #ffffffc9; }
+.meal-nudge-trigger:hover:not(:disabled) .meal-nudge-icon, .meal-nudge-trigger[aria-expanded="true"] .meal-nudge-icon { background: #f5d5c6; color: #a74732; }
+.meal-nudge-trigger:active:not(:disabled) { box-shadow: 0 1px 3px #173f3518; }
+.meal-nudge-trigger[aria-expanded="true"] { border-color: #e6a589; background: #fff3eb; }
+.meal-nudge-trigger:disabled { cursor: not-allowed; opacity: .58; box-shadow: none; }
 .meal-nudge-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; align-items: end; background: #173f351c; }
 .meal-nudge-sheet { position: relative; width: min(100%, 520px); max-height: min(78vh, 610px); overflow-y: auto; margin: 0 auto; padding: 30px 22px max(22px, env(safe-area-inset-bottom)); border: 1px solid var(--line); border-bottom: 0; border-radius: 25px 25px 0 0; background: var(--white); box-shadow: 0 -12px 35px #20372c1c; }
 .meal-nudge-sheet h2 { margin: 0 44px 5px 0; color: var(--green); font-size: 1.12rem; }
