@@ -23,8 +23,15 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.UUID;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
+import java.sql.Timestamp;
+import java.util.HexFormat;
 import java.util.Map;
 import java.util.List;
 import java.time.LocalDate;
@@ -61,6 +68,7 @@ class ApiIntegrationTest {
     @Autowired WaterCheckRepository waterChecks;
     @Autowired WaterDailyGoalRepository waterDailyGoals;
     @Autowired UxEventRepository uxEvents;
+    @Autowired JdbcTemplate jdbcTemplate;
 
     @Test
     void healthEndpointIsPublic() throws Exception {
@@ -2247,6 +2255,81 @@ class ApiIntegrationTest {
     }
 
     @Test
+    void reusableInvitationLinkCanBePreviewedAcceptedByMultipleUsersRotatedRevokedAndExpires() throws Exception {
+        JsonNode owner = register("Link Owner", "link-owner-" + UUID.randomUUID() + "@example.com");
+        JsonNode firstMember = register("First Link Member", "first-link-member-" + UUID.randomUUID() + "@example.com");
+        JsonNode secondMember = register("Second Link Member", "second-link-member-" + UUID.randomUUID() + "@example.com");
+        String dietId = createDiet(owner, "Link Diet");
+
+        String createdJson = mvc.perform(post("/api/diets/{id}/invitation-link", dietId)
+                        .header("Authorization", bearer(owner)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.token").isNotEmpty())
+                .andExpect(jsonPath("$.expiresAt").isNotEmpty())
+                .andReturn().getResponse().getContentAsString();
+        String token = objectMapper.readTree(createdJson).get("token").asText();
+        assertThat(token).hasSize(43);
+        String pendingEmailInvitationId = invite(owner, dietId, firstMember.get("email").asText());
+
+        mvc.perform(get("/api/invitation-links/{token}", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.dietId").value(dietId))
+                .andExpect(jsonPath("$.dietName").value("Link Diet"))
+                .andExpect(jsonPath("$.inviterName").value("Link Owner"))
+                .andExpect(jsonPath("$.token").doesNotExist());
+        mvc.perform(post("/api/invitation-links/{token}/accept", token))
+                .andExpect(status().isUnauthorized());
+
+        mvc.perform(post("/api/invitation-links/{token}/accept", token)
+                        .header("Authorization", bearer(firstMember)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.dietId").value(dietId));
+        mvc.perform(get("/api/invitations").header("Authorization", bearer(firstMember)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
+        mvc.perform(post("/api/invitations/{id}/accept", pendingEmailInvitationId)
+                        .header("Authorization", bearer(firstMember)))
+                .andExpect(status().isConflict());
+        mvc.perform(post("/api/invitation-links/{token}/accept", token)
+                        .header("Authorization", bearer(secondMember)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.dietId").value(dietId));
+        mvc.perform(post("/api/invitation-links/{token}/accept", token)
+                        .header("Authorization", bearer(firstMember)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("You are already a member of this diet"));
+
+        mvc.perform(post("/api/diets/{id}/invitation-link", dietId)
+                        .header("Authorization", bearer(firstMember)))
+                .andExpect(status().isForbidden());
+
+        String rotatedJson = mvc.perform(post("/api/diets/{id}/invitation-link", dietId)
+                        .header("Authorization", bearer(owner)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String rotatedToken = objectMapper.readTree(rotatedJson).get("token").asText();
+        assertThat(rotatedToken).isNotEqualTo(token);
+        mvc.perform(get("/api/invitation-links/{token}", token)).andExpect(status().isNotFound());
+
+        mvc.perform(delete("/api/diets/{id}/invitation-link", dietId)
+                        .header("Authorization", bearer(owner)))
+                .andExpect(status().isNoContent());
+        mvc.perform(get("/api/invitation-links/{token}", rotatedToken)).andExpect(status().isNotFound());
+
+        String expiringJson = mvc.perform(post("/api/diets/{id}/invitation-link", dietId)
+                        .header("Authorization", bearer(owner)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String expiringToken = objectMapper.readTree(expiringJson).get("token").asText();
+        jdbcTemplate.update("UPDATE diet_invitation_links SET expires_at = ? WHERE token_hash = ?",
+                Timestamp.from(Instant.now().minusSeconds(1)), hashInvitationToken(expiringToken));
+        mvc.perform(get("/api/invitation-links/{token}", expiringToken)).andExpect(status().isNotFound());
+        mvc.perform(post("/api/invitation-links/{token}/accept", expiringToken)
+                        .header("Authorization", bearer(secondMember)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void memberLeavesWithoutDeletingMealHistoryOrAuthorship() throws Exception {
         String memberEmail = "leaving-member-" + UUID.randomUUID() + "@example.com";
         JsonNode owner = register("Leave Owner", "leave-owner-" + UUID.randomUUID() + "@example.com");
@@ -2461,6 +2544,11 @@ class ApiIntegrationTest {
 
     private String bearer(JsonNode auth) {
         return "Bearer " + auth.get("token").asText();
+    }
+
+    private String hashInvitationToken(String token) throws NoSuchAlgorithmException {
+        return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                .digest(token.getBytes(StandardCharsets.US_ASCII)));
     }
 
     private record RegisterRequest(String fullName, String email, String password, String sex, LocalDate birthDate) {}

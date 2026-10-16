@@ -76,6 +76,14 @@ public class SecurityAuditService {
         audit("member_invitation_declined", userId, dietId, null, null);
     }
 
+    public void memberInvitationLinkCreated(UUID userId, UUID dietId) {
+        audit("member_invitation_link_created", userId, dietId, null, null);
+    }
+
+    public void memberInvitationLinkRevoked(UUID userId, UUID dietId) {
+        audit("member_invitation_link_revoked", userId, dietId, null, null);
+    }
+
     public void memberLeft(UUID userId, UUID dietId) {
         audit("member_left", userId, dietId, null, null);
     }

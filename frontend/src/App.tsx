@@ -14,6 +14,7 @@ const Water = lazy(() => import('./pages/Water').then(({ Water: page }) => ({ de
 const Ranking = lazy(() => import('./pages/Ranking').then(({ Ranking: page }) => ({ default: page })))
 const PasswordResetPage = lazy(() => import('./pages/AccountSecurity').then(({ PasswordResetPage: page }) => ({ default: page })))
 const VerifyEmailPage = lazy(() => import('./pages/AccountSecurity').then(({ VerifyEmailPage: page }) => ({ default: page })))
+const InvitationLinkPage = lazy(() => import('./pages/InvitationLink').then(({ InvitationLinkPage: page }) => ({ default: page })))
 
 function RouteFallback() {
   return <div className="page" role="status" aria-live="polite"><p className="loading-text">Carregando página...</p></div>
@@ -29,7 +30,7 @@ function ProtectedLayout() {
   if (!ready) return null
   return user
     ? <Layout />
-    : <Navigate to="/login" replace state={{ from: location.pathname }} />
+    : <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}` }} />
 }
 
 export default function App() {
@@ -40,6 +41,7 @@ export default function App() {
       <Route path="/recuperar-senha" element={<LazyRoute><PasswordResetPage /></LazyRoute>} />
       <Route path="/redefinir-senha" element={<LazyRoute><PasswordResetPage /></LazyRoute>} />
       <Route path="/verificar-email" element={<LazyRoute><VerifyEmailPage /></LazyRoute>} />
+      <Route path="/convite/:token" element={<LazyRoute><InvitationLinkPage /></LazyRoute>} />
       <Route element={<ProtectedLayout />}>
         <Route index element={<LazyRoute><Dashboard /></LazyRoute>} />
         <Route path="dietas" element={<LazyRoute><Diets /></LazyRoute>} />

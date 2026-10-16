@@ -108,6 +108,18 @@ export type Invitation = {
   createdAt: string
 }
 
+export type CreatedDietInvitationLink = {
+  token: string
+  expiresAt: string
+}
+
+export type DietInvitationLinkPreview = {
+  dietId: string
+  dietName: string
+  inviterName: string
+  expiresAt: string
+}
+
 export type AuthResponse = {
   token: string
   userId: string
