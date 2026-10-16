@@ -4,6 +4,7 @@ import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { CommentsModal } from '../components/CommentsModal'
 import { FeatureHint } from '../components/FeatureHint'
+import { PhotoLightbox } from '../components/PhotoLightbox'
 import { AnimatedCard } from '../components/motion/AnimatedCard'
 import { AnimatedError } from '../components/motion/AnimatedError'
 import { FloatingEmoji } from '../components/motion/FloatingEmoji'
@@ -33,21 +34,21 @@ const NO_MEALS: Meal[] = []
 const MEAL_ICONS = [Coffee, Sun, Moon]
 type HistoryDirection = -1 | 0 | 1
 
-function QueuedPhoto({ photo, description }: { photo: Blob; description: string }) {
+function QueuedPhoto({ photo, description, onOpen }: { photo: Blob; description: string; onOpen: (source: string) => void }) {
   const [source, setSource] = useState('')
   useEffect(() => {
     const objectUrl = URL.createObjectURL(photo)
     setSource(objectUrl)
     return () => URL.revokeObjectURL(objectUrl)
   }, [photo])
-  return source ? <img className="meal-thumb" src={source} alt={`Refeição: ${description}`} /> : null
+  return source ? <button type="button" className="photo-trigger" onClick={() => onOpen(source)} aria-label={`Ampliar foto da refeição: ${description}`}><img className="meal-thumb" src={source} alt={`Refeição: ${description}`} /></button> : null
 }
 
-function MealPhoto({ source, description }: { source: string; description: string }) {
+function MealPhoto({ source, description, onOpen }: { source: string; description: string; onOpen: (source: string) => void }) {
   const [loaded, setLoaded] = useState(false)
   const [failed, setFailed] = useState(false)
   if (failed) return <div className="meal-photo-fallback" role="img" aria-label={`Foto indisponível: ${description}`}><ImageOff aria-hidden="true" /></div>
-  return <img className={`meal-thumb${loaded ? ' is-revealed' : ' is-loading'}`} src={source} alt={`Refeição: ${description}`} onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />
+  return <button type="button" className="photo-trigger" onClick={() => onOpen(source)} aria-label={`Ampliar foto da refeição: ${description}`}><img className={`meal-thumb${loaded ? ' is-revealed' : ' is-loading'}`} src={source} alt={`Refeição: ${description}`} onLoad={() => setLoaded(true)} onError={() => setFailed(true)} /></button>
 }
 
 export function History() {
@@ -60,6 +61,7 @@ export function History() {
   const [reactingMealIds, setReactingMealIds] = useState<Set<string>>(() => new Set())
   const [reactionOverrides, setReactionOverrides] = useState<Record<string, MealReaction[]>>({})
   const [commentsMealId, setCommentsMealId] = useState<string | null>(null)
+  const [photoLightbox, setPhotoLightbox] = useState<{ source: string; description: string } | null>(null)
   const [reactionError, setReactionError] = useState('')
   const [floatingReaction, setFloatingReaction] = useState<{ mealId: string; emoji: string; key: number } | null>(null)
   const [socialUsedDietId, setSocialUsedDietId] = useState<string | null>(null)
@@ -150,7 +152,7 @@ export function History() {
       authenticated: Boolean(user),
       dataStatus: discoveryDataStatus,
       formStatus: 'idle',
-      modalOpen: Boolean(commentsMealId || pickerMealId),
+     modalOpen: Boolean(commentsMealId || pickerMealId || photoLightbox),
       celebrationActive: Boolean(activeCelebration),
       seasonalMessageActive: false,
       operationalError: Boolean(historyError),
@@ -324,10 +326,10 @@ export function History() {
                 <div className="timeline-dot" />
                 <AnimatedCard delay={mealIndex} className="timeline-card-motion">
                  <div className="timeline-card" tabIndex={-1}>
-                   {meal.photoUrl
-                     ? <MealPhoto source={meal.photoUrl} description={meal.description} />
-                    : queuedOperation?.photo
-                      ? <QueuedPhoto photo={queuedOperation.photo} description={meal.description} />
+                     {meal.photoUrl
+                       ? <MealPhoto source={meal.photoUrl} description={meal.description} onOpen={(source) => setPhotoLightbox({ source, description: meal.description })} />
+                     : queuedOperation?.photo
+                       ? <QueuedPhoto photo={queuedOperation.photo} description={meal.description} onOpen={(source) => setPhotoLightbox({ source, description: meal.description })} />
                       : <Icon aria-hidden="true" />}
                   <div className="meal-details">
                     <span>{meal.mealType}</span><h3>{meal.description}</h3><small>Por {meal.authorName}</small>
@@ -398,6 +400,11 @@ export function History() {
         onCommentCountChange={(delta) => changeCommentCount(commentsMeal, delta)}
         onCommentCreated={() => { if (commentsMeal.authorId !== user?.id) completeSocialDiscovery(activeDiet.id) }}
         onCommentsSettled={settleCommentCount}
+      />}
+      {photoLightbox && <PhotoLightbox
+        source={photoLightbox.source}
+        description={photoLightbox.description}
+        onClose={() => setPhotoLightbox(null)}
       />}
     </div>
   )
