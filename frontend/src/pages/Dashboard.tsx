@@ -65,7 +65,7 @@ function WeekCalendar({ dates, meals, todayKey, selectedKey, periodStart, onSele
   )
 }
 
-function TodayMeals({ meals, loading, dateKey, dietName, firstOwnMeal }: { meals: Meal[]; loading: boolean; dateKey: string; dietName: string; firstOwnMeal: boolean }) {
+function TodayMeals({ meals, loading, dateKey, firstOwnMeal }: { meals: Meal[]; loading: boolean; dateKey: string; firstOwnMeal: boolean }) {
   const isToday = dateKey === localDateKey()
   const showFirstMealPrompt = firstOwnMeal && isToday
   return (
@@ -74,7 +74,7 @@ function TodayMeals({ meals, loading, dateKey, dietName, firstOwnMeal }: { meals
         <div><span>{isToday ? 'HOJE' : parseLocalDate(dateKey).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '')}</span><h2>Refeições da dieta</h2></div>
         <Link to="/historico">Ver histórico <ArrowRight size={16} /></Link>
       </div>
-      {showFirstMealPrompt && <p className="first-meal-guidance">Comece com o que você comeu hoje. O registro vai para {dietName}; a foto é opcional.</p>}
+      {showFirstMealPrompt && <p className="first-meal-guidance">Que tal registrar sua primeira refeição de hoje? É um ótimo começo!</p>}
       {loading && !meals.length ? <SkeletonList count={3} /> : meals.length ? (
         <div className="meal-list">
           {meals.map((meal, index) => (
@@ -342,7 +342,7 @@ export function Dashboard() {
            {showCompetitiveProgress && <div className="daily-progress-grid"><AnimatedCard delay={2}><DailyGoalCard progress={dailyProgress.data} /></AnimatedCard><AnimatedCard delay={3}><StreakAnimation days={dailyProgress.data.streakDays} dietId={dailyProgress.data.dietId} eventDate={dailyProgress.data.date} /></AnimatedCard></div>}
             <AnimatedCard delay={showCompetitiveProgress ? 4 : 2}><WeekCalendar dates={days} meals={meals} todayKey={todayKey} selectedKey={selectedDate} periodStart={start} onSelect={setSelectedDate} /></AnimatedCard>
             <div className="dashboard-grid">
-              <AnimatedCard delay={showCompetitiveProgress ? 5 : 3}><TodayMeals meals={selectedMeals} loading={mealsResource.loading} dateKey={selectedDate} dietName={activeDiet.name} firstOwnMeal={needsFirstMealPrompt} /></AnimatedCard>
+              <AnimatedCard delay={showCompetitiveProgress ? 5 : 3}><TodayMeals meals={selectedMeals} loading={mealsResource.loading} dateKey={selectedDate} firstOwnMeal={needsFirstMealPrompt} /></AnimatedCard>
               <AnimatedCard delay={showCompetitiveProgress ? 6 : 4}><MembersSummary
                 members={members}
                 loading={membersResource.loading}
