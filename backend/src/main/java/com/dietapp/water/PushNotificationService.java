@@ -55,14 +55,19 @@ public class PushNotificationService {
     }
 
     public boolean send(PushSubscription subscription, String title, String message) {
+        return send(subscription, title, message, "/", "water-reminder");
+    }
+
+    public boolean send(PushSubscription subscription, String title, String message,
+                        String url, String tag) {
         if (!isConfigured()) return false;
         try {
             PushService pushService = new PushService(publicKey, privateKey, subject);
             String payload = objectMapper.writeValueAsString(Map.of(
                     "title", title,
                     "body", message,
-                    "url", "/",
-                    "tag", "water-reminder"));
+                    "url", url,
+                    "tag", tag));
             Notification notification = new Notification(
                     subscription.getEndpoint(), subscription.getP256dh(), subscription.getAuth(), payload);
             HttpResponse response = pushService.send(notification);
@@ -73,7 +78,7 @@ public class PushNotificationService {
             }
             if (status < 200 || status >= 300) {
                 audit.pushFailure(subscription.getId(), status, "http_error");
-                log.warn("water_push_failed subscriptionId={} status={}", subscription.getId(), status);
+                log.warn("push_notification_failed subscriptionId={} status={}", subscription.getId(), status);
                 return false;
             }
             return true;
@@ -81,7 +86,7 @@ public class PushNotificationService {
                  | java.util.concurrent.ExecutionException | InterruptedException exception) {
             if (exception instanceof InterruptedException) Thread.currentThread().interrupt();
             audit.pushFailure(subscription.getId(), null, exception.getClass().getSimpleName());
-            log.warn("water_push_failed subscriptionId={} errorType={}",
+            log.warn("push_notification_failed subscriptionId={} errorType={}",
                     subscription.getId(), exception.getClass().getSimpleName());
             return false;
         }
