@@ -16,7 +16,7 @@ type AuthForm = LoginRequest & { fullName: string; sex: UserSex | ''; birthDate:
 
 function getRedirectPath(state: unknown) {
   if (typeof state !== 'object' || state === null || !('from' in state)) return '/'
-  return typeof state.from === 'string' && state.from.startsWith('/') ? state.from : '/'
+  return typeof state.from === 'string' && state.from.startsWith('/') && !state.from.startsWith('//') ? state.from : '/'
 }
 
 export function AuthPage({ mode }: { mode: AuthMode }) {
@@ -46,7 +46,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
     }
   }, [])
 
-  if (user) return <Navigate to="/" replace />
+  if (user) return <Navigate to={getRedirectPath(location.state)} replace />
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -195,7 +195,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
           </form>
            <p className="auth-switch">
             {isLogin ? 'Ainda não tem conta?' : 'Já possui uma conta?'}{' '}
-            <Link to={isLogin ? '/cadastro' : '/login'}>{isLogin ? 'Cadastre-se' : 'Entrar'}</Link>
+             <Link to={isLogin ? '/cadastro' : '/login'} state={{ from: getRedirectPath(location.state) }}>{isLogin ? 'Cadastre-se' : 'Entrar'}</Link>
            </p>
            {isLogin && <p className="auth-switch"><Link to="/recuperar-senha">Esqueci minha senha</Link></p>}
         </div>}

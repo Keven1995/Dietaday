@@ -2,7 +2,7 @@
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { setReducedMotionPreference } from '../test/matchMedia'
 
 const auth = vi.hoisted(() => ({
@@ -33,6 +33,11 @@ function fillRegistration(birthDate: string) {
   fireEvent.change(screen.getByLabelText('Data de nascimento'), { target: { value: birthDate } })
   fireEvent.change(screen.getByLabelText('E-mail'), { target: { value: 'pessoa@example.com' } })
   fireEvent.change(screen.getByLabelText('Senha'), { target: { value: 'password123' } })
+}
+
+function InvitationContinuation() {
+  const location = useLocation()
+  return <div data-testid="invitation-continuation">{location.pathname}</div>
 }
 
 describe('AuthPage registration birth date', () => {
@@ -67,5 +72,18 @@ describe('AuthPage registration birth date', () => {
     fireEvent.click(screen.getByRole('button', { name: /Criar conta/ }))
 
     expect(auth.register).not.toHaveBeenCalled()
+  })
+
+  it('returns a new account to the invitation link after registration', async () => {
+    render(<MemoryRouter initialEntries={[{ pathname: '/cadastro', state: { from: '/convite/invite-token' } }]}>
+      <Routes>
+        <Route path="/cadastro" element={<AuthPage mode="register" />} />
+        <Route path="/convite/:token" element={<InvitationContinuation />} />
+      </Routes>
+    </MemoryRouter>)
+    fillRegistration('1990-04-15')
+    fireEvent.click(screen.getByRole('button', { name: /Criar conta/ }))
+
+    expect((await screen.findByTestId('invitation-continuation')).textContent).toBe('/convite/invite-token')
   })
 })

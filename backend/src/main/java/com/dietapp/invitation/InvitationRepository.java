@@ -19,4 +19,9 @@ public interface InvitationRepository extends JpaRepository<Invitation, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @EntityGraph(attributePaths = {"diet", "inviter", "invitee"})
     Optional<Invitation> findForUpdateById(UUID id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @EntityGraph(attributePaths = {"diet", "inviter", "invitee"})
+    Optional<Invitation> findFirstForUpdateByDietIdAndInviteeIdAndStatus(
+            UUID dietId, UUID inviteeId, Invitation.Status status);
 }

@@ -85,7 +85,7 @@ label, .field-label { display: grid; gap: 7px; color: #34433f; font-size: .86rem
 .button.danger:hover { background: #873624; }
 .spin { animation: spin var(--motion-spin) linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.toast-viewport { position: fixed; right: 16px; bottom: 86px; z-index: 90; display: grid; gap: 8px; width: min(calc(100% - 32px), 360px); pointer-events: none; }
+.toast-viewport { position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(86px + env(safe-area-inset-bottom, 0px)); z-index: 90; display: grid; gap: 8px; width: min(calc(100vw - 32px), 360px); pointer-events: none; }
 .toast { padding: 12px 14px; border: 1px solid var(--line); border-radius: 13px; box-shadow: 0 12px 30px #173f3520; background: var(--white); color: var(--green); font-size: .8rem; line-height: 1.4; pointer-events: auto; }
 .toast-success { border-color: #bfd7c2; background: #edf6ed; color: #34603d; }
 .toast-warning { border-color: #ead8ad; background: #fff8e8; color: #765d1d; }
@@ -555,6 +555,30 @@ label, .field-label { display: grid; gap: 7px; color: #34433f; font-size: .86rem
 .invite-card label { position: relative; }
 .invite-card label svg { position: absolute; z-index: 1; top: 13px; left: 13px; width: 18px; color: var(--muted); }
 .invite-card input { padding-left: 41px; }
+.invitation-link-card { display: grid; gap: 15px; margin-bottom: 18px; padding: 22px; border: 1px solid var(--line); border-radius: 20px; background: var(--white); box-shadow: 0 8px 24px #173f3508; }
+.invitation-link-heading { display: flex; align-items: flex-start; gap: 13px; }
+.invitation-link-heading .members-icon { flex: 0 0 auto; margin: 0; }
+.invitation-link-heading h2 { margin: 2px 0 5px; color: var(--green); font-size: 1.05rem; }
+.invitation-link-heading p { margin: 0; color: var(--muted); font-size: .78rem; line-height: 1.5; }
+.invitation-link-field input { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: #faf9f5; color: var(--green); font-size: .75rem; }
+.invitation-link-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.invitation-link-actions .button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.invitation-link-actions svg, .invitation-link-card > .button svg { width: 16px; height: 16px; }
+.invitation-link-expiry { color: var(--muted); font-size: .7rem; }
+.invitation-link-feedback { display: flex; align-items: flex-start; gap: 7px; margin: 0; color: #34603d; font-size: .78rem; line-height: 1.45; }
+.invitation-link-feedback svg { flex: 0 0 auto; width: 16px; }
+.danger-outline { color: #9e3d32 !important; border-color: #e5b7ae !important; }
+.invitation-link-page { display: grid; min-height: 100dvh; place-items: center; padding: 24px; background: radial-gradient(ellipse at top, #e9eee5 0, #f7f5ef 55%); }
+.invitation-link-panel { display: grid; justify-items: start; gap: 14px; width: min(100%, 510px); padding: clamp(24px, 6vw, 40px); border: 1px solid #e2e2d9; border-radius: 24px; background: var(--white); box-shadow: 0 18px 50px #173f3512; }
+.invitation-link-page-icon { display: grid; width: 54px; height: 54px; place-items: center; border-radius: 17px; background: #e6eee5; color: var(--green-2); }
+.invitation-link-page-icon svg { width: 25px; }
+.invitation-link-panel .overline { color: var(--orange); font-size: .68rem; font-weight: 800; letter-spacing: .1em; }
+.invitation-link-panel h1 { margin: 0; color: var(--green); font-size: clamp(1.45rem, 5vw, 1.9rem); line-height: 1.15; }
+.invitation-link-description { margin: 0; color: var(--muted); font-size: .9rem; line-height: 1.6; }
+.invitation-link-description strong { color: var(--green); }
+.invitation-link-page-actions { display: flex; flex-wrap: wrap; gap: 9px; width: 100%; }
+.invitation-link-page-actions > * { flex: 1 1 180px; }
+.invitation-link-panel > a { color: var(--green-2); font-size: .83rem; font-weight: 700; }
 .member-section { margin-top: 34px; }
 .member-row { display: grid; grid-template-columns: 46px 1fr auto; align-items: center; gap: 12px; padding: 15px 0; border-bottom: 1px solid var(--line); }
 .avatar.large { width: 46px; height: 46px; }
@@ -779,7 +803,7 @@ label, .field-label { display: grid; gap: 7px; color: #34433f; font-size: .86rem
 
 /* Temas sazonais: camada decorativa independente da interface funcional. */
 .seasonal-root { position: relative; min-height: 100vh; isolation: isolate; }
-.seasonal-root > :not(.seasonal-theme-layer) { position: relative; z-index: 1; }
+.seasonal-root > :not(.seasonal-theme-layer):not(.toast-viewport) { position: relative; z-index: 1; }
 .seasonal-theme-layer { position: fixed; z-index: 0; inset: 0; overflow: hidden; pointer-events: none; }
 .halloween-background { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .halloween-orb { position: absolute; display: block; width: min(34vw, 390px); aspect-ratio: 1; border-radius: 50%; filter: blur(55px); opacity: .1; }

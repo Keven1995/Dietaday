@@ -1,4 +1,4 @@
-import { LogOut, Mail, UserPlus, Users, X } from 'lucide-react'
+import { Check, Copy, Link2, LogOut, Mail, Share2, UserPlus, Users, X } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Button, EmptyState, PageTitle } from '../components/Ui'
@@ -11,7 +11,7 @@ import { clearDietCache } from '../lib/resourceCache'
 import { MEAL_SYNCED_EVENT } from '../state/OfflineMealContext'
 import { useAuth } from '../state/AuthContext'
 import { useDiets } from '../state/DietContext'
-import type { Invitation, InviteMemberRequest, LeaveDietRequest, MealNudgeEligibility, MealNudgeMealType, MealNudgeMemberEligibility, Member } from '../types'
+import type { CreatedDietInvitationLink, Invitation, InviteMemberRequest, LeaveDietRequest, MealNudgeEligibility, MealNudgeMealType, MealNudgeMemberEligibility, Member } from '../types'
 
 const NO_MEMBERS: Member[] = []
 
@@ -28,11 +28,16 @@ export function Members() {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [inviting, setInviting] = useState(false)
+  const [invitationLink, setInvitationLink] = useState('')
+  const [invitationLinkExpiresAt, setInvitationLinkExpiresAt] = useState('')
+  const [invitationLinkBusy, setInvitationLinkBusy] = useState(false)
+  const [invitationLinkMessage, setInvitationLinkMessage] = useState('')
   const [leaveModalOpen, setLeaveModalOpen] = useState(false)
   const [successorId, setSuccessorId] = useState('')
   const [leaveError, setLeaveError] = useState('')
   const [leaving, setLeaving] = useState(false)
   const inviteControllerRef = useRef<AbortController | null>(null)
+  const invitationLinkControllerRef = useRef<AbortController | null>(null)
   const leaveControllerRef = useRef<AbortController | null>(null)
   const leaveTriggerRef = useRef<HTMLButtonElement | null>(null)
   const leaveDialogRef = useRef<HTMLDivElement | null>(null)
@@ -49,9 +54,18 @@ export function Members() {
 
   useEffect(() => () => {
     inviteControllerRef.current?.abort()
+    invitationLinkControllerRef.current?.abort()
     leaveControllerRef.current?.abort()
     nudgeRequestRef.current?.abort()
   }, [])
+
+  useEffect(() => {
+    invitationLinkControllerRef.current?.abort()
+    setInvitationLink('')
+    setInvitationLinkExpiresAt('')
+    setInvitationLinkMessage('')
+    setInvitationLinkBusy(false)
+  }, [activeDiet?.id])
 
   useEffect(() => {
     setNudgeEligibility({})
@@ -164,6 +178,79 @@ export function Members() {
     }
   }
 
+  async function createInvitationLink() {
+    if (!activeDiet || !token || isDemoMode) return
+    const controller = new AbortController()
+    invitationLinkControllerRef.current?.abort()
+    invitationLinkControllerRef.current = controller
+    setInvitationLinkBusy(true)
+    setError('')
+    setInvitationLinkMessage('')
+    try {
+      const created = await api<CreatedDietInvitationLink>(`/diets/${activeDiet.id}/invitation-link`, {
+        method: 'POST', token, signal: controller.signal,
+      })
+      if (controller.signal.aborted) return
+      setInvitationLink(`${window.location.origin}/convite/${encodeURIComponent(created.token)}`)
+      setInvitationLinkExpiresAt(created.expiresAt)
+      setInvitationLinkMessage('Link criado. Ele pode ser usado por várias pessoas e expira em 30 dias.')
+    } catch (linkError) {
+      if (!controller.signal.aborted) setError(getErrorMessage(linkError, 'Não foi possível criar o link de convite.'))
+    } finally {
+      if (!controller.signal.aborted) setInvitationLinkBusy(false)
+    }
+  }
+
+  async function copyInvitationLink() {
+    if (!invitationLink) return
+    try {
+      await navigator.clipboard.writeText(invitationLink)
+      setInvitationLinkMessage('Link copiado. Envie para as pessoas que deseja convidar.')
+    } catch {
+      setError('Não foi possível copiar o link. Selecione e copie o endereço exibido.')
+    }
+  }
+
+  async function shareInvitationLink() {
+    if (!invitationLink || !activeDiet) return
+    if (!navigator.share) {
+      await copyInvitationLink()
+      return
+    }
+    try {
+      await navigator.share({
+        title: `Convite para ${activeDiet.name}`,
+        text: `Participe do grupo da dieta ${activeDiet.name} no Dietaday.`,
+        url: invitationLink,
+      })
+    } catch (shareError) {
+      if (shareError instanceof Error && shareError.name !== 'AbortError') {
+        setError('Não foi possível compartilhar o link neste dispositivo.')
+      }
+    }
+  }
+
+  async function revokeInvitationLink() {
+    if (!activeDiet || !token || isDemoMode) return
+    const controller = new AbortController()
+    invitationLinkControllerRef.current?.abort()
+    invitationLinkControllerRef.current = controller
+    setInvitationLinkBusy(true)
+    setError('')
+    setInvitationLinkMessage('')
+    try {
+      await api<void>(`/diets/${activeDiet.id}/invitation-link`, { method: 'DELETE', token, signal: controller.signal })
+      if (controller.signal.aborted) return
+      setInvitationLink('')
+      setInvitationLinkExpiresAt('')
+      setInvitationLinkMessage('Link revogado. Ele não poderá mais ser usado para entrar na dieta.')
+    } catch (linkError) {
+      if (!controller.signal.aborted) setError(getErrorMessage(linkError, 'Não foi possível revogar o link.'))
+    } finally {
+      if (!controller.signal.aborted) setInvitationLinkBusy(false)
+    }
+  }
+
   function openLeaveModal(event: MouseEvent<HTMLButtonElement>) {
     leaveTriggerRef.current = event.currentTarget
     setSuccessorId('')
@@ -231,13 +318,30 @@ export function Members() {
   return (
     <div className="page">
       <PageTitle eyebrow="DIETA COMPARTILHADA" title="Membros" />
-      <p className="page-lead">Convide pessoas já cadastradas para acompanhar o plano e registrar refeições em conjunto.</p>
+      <p className="page-lead">Compartilhe um link para qualquer pessoa entrar no grupo ou envie um convite por e-mail para alguém já cadastrado.</p>
       {displayedError && <div className="error-message" role="alert">{displayedError}</div>}
       {activeDiet ? (
         <>
+          {!isDemoMode && currentMember?.role === 'OWNER' && <section className="invitation-link-card" aria-labelledby="invitation-link-title">
+            <div className="invitation-link-heading"><span className="members-icon"><Link2 aria-hidden="true" /></span><div><h2 id="invitation-link-title">Compartilhe um link de convite</h2><p>Qualquer pessoa com o link poderá entrar em {activeDiet.name}. Ele pode ser usado por várias pessoas e expira após 30 dias.</p></div></div>
+            {invitationLink ? <>
+              <label className="invitation-link-field">
+                <span className="sr-only">Link para entrar na dieta</span>
+                <input readOnly value={invitationLink} onFocus={(event) => event.currentTarget.select()} />
+              </label>
+              <div className="invitation-link-actions">
+                <Button type="button" onClick={() => void copyInvitationLink()}><Copy aria-hidden="true" /> Copiar link</Button>
+                <Button type="button" className="outline" onClick={() => void shareInvitationLink()}><Share2 aria-hidden="true" /> Compartilhar</Button>
+                <Button type="button" className="outline" disabled={invitationLinkBusy} onClick={() => void createInvitationLink()}>{invitationLinkBusy ? 'Gerando…' : 'Gerar novo link'}</Button>
+                <Button type="button" className="outline danger-outline" loading={invitationLinkBusy} onClick={() => void revokeInvitationLink()}>Revogar</Button>
+              </div>
+              {invitationLinkExpiresAt && <small className="invitation-link-expiry">Expira em {new Date(invitationLinkExpiresAt).toLocaleDateString('pt-BR')}.</small>}
+            </> : <Button type="button" loading={invitationLinkBusy} onClick={() => void createInvitationLink()}><Link2 aria-hidden="true" /> Gerar link de convite</Button>}
+            {invitationLinkMessage && <p className="invitation-link-feedback" role="status"><Check aria-hidden="true" /> {invitationLinkMessage}</p>}
+          </section>}
           <form className="invite-card" onSubmit={invite}>
             <div className="members-icon"><UserPlus /></div>
-            <div><h2>Convide alguém para {activeDiet.name}</h2><p>A pessoa precisa ter uma conta no Dietaday.</p></div>
+            <div><h2>Convide alguém por e-mail</h2><p>Este convite é para uma pessoa com cadastro no Dietaday.</p></div>
             <label>
               <span className="sr-only">E-mail do novo membro</span>
               <Mail aria-hidden="true" />

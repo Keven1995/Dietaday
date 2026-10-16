@@ -73,11 +73,21 @@ POST   /diets
 PUT    /diets/{dietId}
 DELETE /diets/{dietId}
 POST   /diets/{dietId}/invitations
+POST   /diets/{dietId}/invitation-link
+DELETE /diets/{dietId}/invitation-link
 GET    /invitations
 POST   /invitations/{id}/accept
 POST   /invitations/{id}/decline
+GET    /invitation-links/{token}
+POST   /invitation-links/{token}/accept
 POST   /diets/{dietId}/leave
 ```
+
+O responsável pela dieta pode criar um link reutilizável para várias pessoas. A cada novo link,
+o anterior é revogado; o link também expira em 30 dias e pode ser revogado manualmente. A prévia
+pública retorna somente o nome da dieta e de quem criou o convite. Para entrar no grupo, cada
+pessoa precisa estar autenticada e aceitar o convite; o token é armazenado no backend somente
+como hash.
 
 Uma resposta de dieta inclui `competitiveMode`:
 
