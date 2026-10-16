@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { MealNudgeEligibility } from '../types'
+import { setReducedMotionPreference } from '../test/matchMedia'
 
 const mocks = vi.hoisted(() => ({ api: vi.fn() }))
 
@@ -28,6 +29,8 @@ const eligibility: MealNudgeEligibility = {
 }
 
 describe('MealNudgeButton', () => {
+  beforeEach(() => setReducedMotionPreference(true))
+
   afterEach(() => {
     cleanup()
     mocks.api.mockReset()
