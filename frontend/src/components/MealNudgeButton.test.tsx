@@ -45,7 +45,7 @@ describe('MealNudgeButton', () => {
       onSent={onSent}
     /></ToastProvider>)
 
-    fireEvent.click(screen.getByRole('button', { name: '👀 Cutucar' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar lembrete de refeição para Rafael' }))
     fireEvent.click(screen.getByRole('button', { name: '👀 Cadê o almoço?' }))
 
     await waitFor(() => expect(mocks.api).toHaveBeenCalledWith('/diets/diet-1/meal-nudges', expect.objectContaining({
@@ -69,7 +69,7 @@ describe('MealNudgeButton', () => {
       onSent={onSent}
     /></ToastProvider>)
 
-    fireEvent.click(screen.getByRole('button', { name: '👀 Cutucar' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar lembrete de refeição para Rafael' }))
     fireEvent.click(screen.getByRole('button', { name: '👀 Cadê o almoço?' }))
 
     expect((await screen.findByRole('alert')).textContent).toContain('A refeição já foi registrada.')

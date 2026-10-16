@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { X } from 'lucide-react'
+import { BellRing, X } from 'lucide-react'
 import { api, getErrorMessage } from '../lib/api'
 import type { MealNudgeEligibility, MealNudgeMealType } from '../types'
 import { useToast } from '../state/ToastContext'
@@ -84,10 +84,13 @@ export function MealNudgeButton({ dietId, recipientId, recipientName, token, eli
         type="button"
         ref={triggerRef}
         className="meal-nudge-trigger"
+        aria-label={`Enviar lembrete de refeição para ${recipientName}`}
         aria-expanded={open}
-        aria-controls={menuId}
+        aria-controls={open ? menuId : undefined}
+        aria-haspopup="dialog"
+        disabled={!token}
         onClick={() => setOpen((current) => !current)}
-      >👀 Cutucar</button>
+      ><BellRing aria-hidden="true" /> <span>Enviar lembrete</span></button>
       {open && <div
         className="meal-nudge-backdrop"
         onMouseDown={(event) => {
@@ -108,8 +111,8 @@ export function MealNudgeButton({ dietId, recipientId, recipientName, token, eli
           <button type="button" className="meal-nudge-close" onClick={() => { setOpen(false); triggerRef.current?.focus() }} aria-label="Fechar">
             <X aria-hidden="true" />
           </button>
-          <h2 id={`${menuId}-title`} ref={sheetTitleRef} tabIndex={-1}>Escolha a refeição:</h2>
-          <p className="meal-nudge-recipient">Para {recipientName}</p>
+          <h2 id={`${menuId}-title`} ref={sheetTitleRef} tabIndex={-1}>Qual refeição vamos lembrar?</h2>
+          <p className="meal-nudge-recipient">Enviaremos um lembrete para {recipientName}.</p>
           <div className="meal-nudge-options">
             {eligibility.meals.filter((meal) => meal.eligible || meal.alreadySentByMe).map((meal) => meal.alreadySentByMe
               ? <span className="meal-nudge-sent-option" key={meal.mealType}>{meal.mealLabel} — ✓ Enviada</span>
