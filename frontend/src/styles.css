@@ -425,6 +425,8 @@ label, .field-label { display: grid; gap: 7px; color: #34433f; font-size: .86rem
 .meal-thumb { flex: 0 0 auto; width: 48px; height: 48px; border-radius: 12px; object-fit: cover; }
 .meal-thumb.is-loading { filter: blur(10px); transform: scale(1.04); }
 .meal-thumb.is-revealed { filter: blur(0); transform: scale(1); transition: filter var(--motion-slow) ease, transform var(--motion-slow) ease; }
+.photo-trigger { flex: 0 0 auto; width: 48px; height: 48px; padding: 0; border: 0; border-radius: 12px; background: transparent; cursor: zoom-in; }
+.photo-trigger:focus-visible { outline: 3px solid #e8a184; outline-offset: 3px; }
 .meal-photo-fallback { display: grid; place-items: center; flex: 0 0 auto; width: 48px; height: 48px; border-radius: 12px; background: #f0eee8; color: var(--muted); }
 .timeline-card span { color: var(--orange); font-size: .66rem; font-weight: 800; text-transform: uppercase; }
 .timeline-card h3 { margin: 5px 0 0; font-family: 'DM Sans'; font-size: .9rem; line-height: 1.45; }
@@ -454,6 +456,12 @@ label, .field-label { display: grid; gap: 7px; color: #34433f; font-size: .86rem
 .meal-comments-button:disabled { cursor: not-allowed; opacity: .45; }
 .meal-comments-button svg { width: 15px; }
 .meal-comments-button b { font-size: .68rem; }
+.photo-lightbox-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 20px; background: #0d211dcc; backdrop-filter: blur(5px); }
+.photo-lightbox { position: relative; display: grid; place-items: center; width: min(100%, 1100px); height: min(100%, 900px); }
+.photo-lightbox > img { max-width: 100%; max-height: 100%; border-radius: 12px; object-fit: contain; box-shadow: 0 20px 70px #00000055; }
+.photo-lightbox-close { position: absolute; top: 0; right: 0; z-index: 1; display: grid; place-items: center; width: 42px; height: 42px; border: 0; border-radius: 50%; background: #fff; color: var(--green); box-shadow: 0 5px 20px #00000030; }
+.photo-lightbox-close:hover { background: #fff4ee; }
+.photo-lightbox-close:focus-visible { outline: 3px solid #f2c5ae; outline-offset: 3px; }
 .reaction-pill, .add-reaction { display: inline-flex; align-items: center; justify-content: center; height: 31px; border: 1px solid var(--line); background: #f7f5ef; color: var(--green); }
 .reaction-pill { gap: 4px; padding: 0 9px; border-radius: 18px; }
 .reaction-pill span { color: inherit; font-size: 1rem; line-height: 1; text-transform: none; }
