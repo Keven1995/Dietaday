@@ -18,9 +18,4 @@ class PushNotificationServiceTest {
         assertThat(PushNotificationService.sanitizeProviderMessage("x".repeat(600))).hasSize(512);
     }
 
-    @Test
-    void convertsOnlyTheVapidKeyToStandardBase64ForFcm() {
-        assertThat(PushNotificationService.toFcmCompatibleCryptoKey("dh=abc-_123;p256ecdsa=-_8"))
-                .isEqualTo("p256ecdsa=+/8=");
-    }
 }

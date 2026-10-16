@@ -3,12 +3,9 @@ package com.dietapp.water;
 import com.dietapp.security.SecurityAuditService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import nl.martijndwars.webpush.Notification;
-import nl.martijndwars.webpush.Encoding;
 import nl.martijndwars.webpush.PushService;
 import org.jose4j.lang.JoseException;
 import org.apache.http.HttpResponse;
-import org.apache.http.Header;
-import org.apache.http.client.methods.HttpPost;
 import org.apache.http.util.EntityUtils;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.slf4j.Logger;
@@ -67,7 +64,7 @@ public class PushNotificationService {
                         String url, String tag) {
         if (!isConfigured()) return false;
         try {
-            PushService pushService = new FcmCompatiblePushService(publicKey, privateKey, subject);
+            PushService pushService = new PushService(publicKey, privateKey, subject);
             String payload = objectMapper.writeValueAsString(Map.of(
                     "title", title,
                     "body", message,
@@ -119,35 +116,4 @@ public class PushNotificationService {
         return normalized;
     }
 
-    static String toFcmCompatibleCryptoKey(String value) {
-        String[] parts = value.split(";", -1);
-        for (int index = 0; index < parts.length; index++) {
-            String part = parts[index].trim();
-            if (!part.startsWith("p256ecdsa=")) continue;
-            String encoded = part.substring("p256ecdsa=".length());
-            byte[] key = java.util.Base64.getUrlDecoder().decode(encoded);
-            return "p256ecdsa=" + java.util.Base64.getEncoder().encodeToString(key);
-        }
-        return String.join(";", parts);
-    }
-
-    private static final class FcmCompatiblePushService extends PushService {
-        private FcmCompatiblePushService(String publicKey, String privateKey, String subject)
-                throws GeneralSecurityException {
-            super(publicKey, privateKey, subject);
-        }
-
-        @Override
-        public HttpPost preparePost(Notification notification, Encoding encoding)
-                throws GeneralSecurityException, java.io.IOException, JoseException {
-            HttpPost request = super.preparePost(notification, encoding);
-            if (!request.getURI().getHost().equals("fcm.googleapis.com")) return request;
-            Header cryptoKey = request.getFirstHeader("Crypto-Key");
-            if (cryptoKey != null) {
-                request.removeHeaders("Crypto-Key");
-                request.addHeader("Crypto-Key", toFcmCompatibleCryptoKey(cryptoKey.getValue()));
-            }
-            return request;
-        }
-    }
 }
