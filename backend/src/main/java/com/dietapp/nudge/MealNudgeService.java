@@ -10,6 +10,8 @@ import com.dietapp.meal.MealRepository;
 import com.dietapp.security.CurrentUser;
 import com.dietapp.security.SecurityAuditService;
 import com.dietapp.user.User;
+import com.dietapp.water.PushNotificationService;
+import com.dietapp.water.PushSubscriptionRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,17 +34,22 @@ public class MealNudgeService {
     private final DietMemberRepository members;
     private final CurrentUser currentUser;
     private final SecurityAuditService audit;
+    private final PushSubscriptionRepository pushSubscriptions;
+    private final PushNotificationService push;
     private final Clock clock;
 
     public MealNudgeService(MealNudgeRepository nudges, MealRepository meals, DietService diets,
                             DietMemberRepository members, CurrentUser currentUser,
-                            SecurityAuditService audit, Clock clock) {
+                            SecurityAuditService audit, PushSubscriptionRepository pushSubscriptions,
+                            PushNotificationService push, Clock clock) {
         this.nudges = nudges;
         this.meals = meals;
         this.diets = diets;
         this.members = members;
         this.currentUser = currentUser;
         this.audit = audit;
+        this.pushSubscriptions = pushSubscriptions;
+        this.push = push;
         this.clock = clock;
     }
 
@@ -126,6 +133,7 @@ public class MealNudgeService {
         try {
             MealNudge created = nudges.saveAndFlush(nudge);
             audit.mealNudgeSent(senderId, dietId, recipient.getId(), mealType.name());
+            sendPush(created);
             return new SendResult(created, true);
         } catch (DataIntegrityViolationException exception) {
             // The unique constraint is the final guard for simultaneous requests.
@@ -167,6 +175,15 @@ public class MealNudgeService {
 
     private boolean isActiveToday(Diet diet, LocalDate today) {
         return !today.isBefore(diet.getStartDate()) && !today.isAfter(diet.getEndDate());
+    }
+
+    private void sendPush(MealNudge nudge) {
+        String url = "/refeicoes/nova?mealType=" + nudge.getMealType().name()
+                + "&mealDate=" + nudge.getMealDate();
+        pushSubscriptions.findByUserIdAndEnabledTrue(nudge.getRecipient().getId()).stream()
+                .forEach(subscription -> push.send(subscription, "Você recebeu uma cutucada 👀",
+                        nudge.getSender().getFullName() + " perguntou: " + nudge.getMealType().buttonLabel(),
+                        url, "meal-nudge-" + nudge.getId()));
     }
 
     public record SendResult(MealNudge nudge, boolean created) {}
