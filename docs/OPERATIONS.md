@@ -87,6 +87,22 @@ O endpoint de teste manual deve permanecer desativado em produção:
 APP_PUSH_TEST_ENABLED=false
 ```
 
+## Pool de conexões PostgreSQL
+
+O pool Hikari usa limites conservadores para o backend do Render e permite sobrescrita por
+variáveis de ambiente:
+
+- `DB_POOL_MAXIMUM_SIZE` (padrão `5`).
+- `DB_POOL_MINIMUM_IDLE` (padrão `0`).
+- `DB_POOL_IDLE_TIMEOUT_MS` (padrão `60000`).
+- `DB_POOL_CONNECTION_TIMEOUT_MS` (padrão `10000`).
+- `DB_POOL_MAX_LIFETIME_MS` (padrão `1800000`).
+- `DB_POOL_KEEPALIVE_TIME_MS` (padrão `0`, keepalive desativado).
+
+No Neon, compare CU-h, conexões, tráfego de rede e períodos de suspensão antes e depois de
+alterar esses valores. Conexões ociosas no Hikari não comprovam, por si só, consumo de compute;
+evite habilitar keepalive periódico sem evidência de que é necessário.
+
 ## Backfill De Sexo
 
 Depois de aplicar a migration `V9__user_sex.sql` no banco de produção, execute uma vez:

@@ -28,18 +28,21 @@ public class PushNotificationService {
     private final String privateKey;
     private final String subject;
     private final SecurityAuditService audit;
+    private final PushServiceFactory pushServiceFactory;
 
     public PushNotificationService(
             ObjectMapper objectMapper,
             @Value("${app.push.public-key:}") String publicKey,
             @Value("${app.push.private-key:}") String privateKey,
             @Value("${app.push.subject:mailto:dev@dietaday.com.br}") String subject,
-            SecurityAuditService audit) {
+            SecurityAuditService audit,
+            PushServiceFactory pushServiceFactory) {
         this.objectMapper = objectMapper;
         this.publicKey = publicKey.trim();
         this.privateKey = privateKey.trim();
         this.subject = subject.trim();
         this.audit = audit;
+        this.pushServiceFactory = pushServiceFactory;
         Security.addProvider(new BouncyCastleProvider());
     }
 
@@ -64,7 +67,7 @@ public class PushNotificationService {
                         String url, String tag) {
         if (!isConfigured()) return false;
         try {
-            PushService pushService = new PushService(publicKey, privateKey, subject);
+            PushService pushService = pushServiceFactory.create(publicKey, privateKey, subject);
             String payload = objectMapper.writeValueAsString(Map.of(
                     "title", title,
                     "body", message,
