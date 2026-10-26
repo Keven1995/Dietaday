@@ -128,6 +128,41 @@ class ApiIntegrationTest {
     }
 
     @Test
+    void expiredNormalDietBlocksMealWritesButRemainsReadable() throws Exception {
+        JsonNode user = register("Expired Diet User", "expired-diet-" + UUID.randomUUID() + "@example.com");
+        String authorization = bearer(user);
+        LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+        LocalDate endDate = today.minusDays(1);
+        String dietJson = mvc.perform(post("/api/diets")
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "name", "Completed routine",
+                                "startDate", endDate.minusDays(6).toString(),
+                                "endDate", endDate.toString()))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String dietId = objectMapper.readTree(dietJson).get("id").asText();
+
+        mvc.perform(post("/api/diets/{dietId}/meals", dietId)
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "mealType", "LUNCH",
+                                "description", "Late meal",
+                                "mealDate", endDate.toString()))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("The diet period has ended"));
+
+        mvc.perform(get("/api/diets/{dietId}", dietId).header("Authorization", authorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Completed routine"));
+
+        mvc.perform(get("/api/diets/{dietId}/meals", dietId).header("Authorization", authorization))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void dailyProgressCountsTheSixOfficialMealsAndCurrentStreak() throws Exception {
         JsonNode user = register("Progress User", "progress-" + UUID.randomUUID() + "@example.com");
         String authorization = bearer(user);
@@ -2067,13 +2102,15 @@ class ApiIntegrationTest {
         String memberEmail = "member-" + UUID.randomUUID() + "@example.com";
         JsonNode owner = register("Owner", ownerEmail);
         JsonNode member = register("Member", memberEmail);
+        LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
 
         String dietJson = mvc.perform(post("/api/diets")
                         .header("Authorization", bearer(owner))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"name":"Cutting","startDate":"2026-09-01","endDate":"2026-10-01"}
-                                """))
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "name", "Cutting",
+                                "startDate", today.minusDays(30).toString(),
+                                "endDate", today.plusDays(30).toString()))))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         String dietId = objectMapper.readTree(dietJson).get("id").asText();
@@ -2469,11 +2506,12 @@ class ApiIntegrationTest {
     }
 
     private String createDiet(JsonNode auth, String name) throws Exception {
+        LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
         String response = mvc.perform(post("/api/diets")
                         .header("Authorization", bearer(auth))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new DietRequest(name, "2026-09-01", "2026-10-01"))))
+                                new DietRequest(name, today.minusDays(30).toString(), today.plusDays(30).toString()))))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(response).get("id").asText();

@@ -17,6 +17,7 @@ import { isDemoMode } from '../lib/api'
 import { completeFeatureCampaign } from '../lib/featureDiscoveryTelemetry'
 import { useDailyProgress } from '../hooks/useDailyProgress'
 import { localDateKey, mealDateKey, mealTime, parseLocalDate } from '../lib/date'
+import { isDietPeriodEnded } from '../lib/dietPeriod'
 import { getCalendarMealStatus } from '../lib/dailyCalendar'
 import { useAuth } from '../state/AuthContext'
 import { useDiets } from '../state/DietContext'
@@ -65,9 +66,9 @@ function WeekCalendar({ dates, meals, todayKey, selectedKey, periodStart, onSele
   )
 }
 
-function TodayMeals({ meals, loading, dateKey, firstOwnMeal }: { meals: Meal[]; loading: boolean; dateKey: string; firstOwnMeal: boolean }) {
+function TodayMeals({ meals, loading, dateKey, firstOwnMeal, readOnly }: { meals: Meal[]; loading: boolean; dateKey: string; firstOwnMeal: boolean; readOnly: boolean }) {
   const isToday = dateKey === localDateKey()
-  const showFirstMealPrompt = firstOwnMeal && isToday
+  const showFirstMealPrompt = firstOwnMeal && isToday && !readOnly
   return (
     <section>
       <div className="section-heading">
@@ -90,7 +91,7 @@ function TodayMeals({ meals, loading, dateKey, firstOwnMeal }: { meals: Meal[]; 
           ))}
         </div>
       ) : !showFirstMealPrompt && <p className="muted-text">Nenhuma refeição registrada hoje.</p>}
-      <Link className="button outline mobile-meal-button" to="/refeicoes/nova"><Plus size={18} /> {firstOwnMeal ? 'Registrar primeira refeição' : 'Registrar refeição'}</Link>
+      {!readOnly && <Link className="button outline mobile-meal-button" to="/refeicoes/nova"><Plus size={18} /> {firstOwnMeal ? 'Registrar primeira refeição' : 'Registrar refeição'}</Link>}
     </section>
   )
 }
@@ -296,6 +297,7 @@ export function Dashboard() {
 
   const start = activeDiet ? parseLocalDate(activeDiet.startDate) : today
   const end = activeDiet ? parseLocalDate(activeDiet.endDate) : today
+  const dietReadOnly = Boolean(activeDiet && isDietPeriodEnded(activeDiet.endDate))
   const totalDays = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 86400000) + 1)
   const elapsed = Math.min(totalDays, Math.max(0, Math.floor((today.getTime() - start.getTime()) / 86400000) + 1))
   const remaining = Math.max(0, totalDays - elapsed)
@@ -314,7 +316,7 @@ export function Dashboard() {
 
   return (
     <div className="page dashboard">
-      <PageTitle eyebrow={today.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })} title={`Olá, ${firstName}.`} action={activeDiet && <Link className="button desktop-action" to="/refeicoes/nova"><Plus size={18} /> {needsFirstMealPrompt ? 'Registrar primeira refeição' : 'Registrar refeição'}</Link>} />
+      <PageTitle eyebrow={today.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })} title={`Olá, ${firstName}.`} action={activeDiet && !dietReadOnly && <Link className="button desktop-action" to="/refeicoes/nova"><Plus size={18} /> {needsFirstMealPrompt ? 'Registrar primeira refeição' : 'Registrar refeição'}</Link>} />
       <HalloweenMessage />
       {error && <AnimatedError>{error}</AnimatedError>}
       {activeDiet ? (
@@ -322,9 +324,9 @@ export function Dashboard() {
           <AnimatedCard delay={0}>
            <section className="hero-card">
             <div>
-              <span className="pill"><Sparkles size={14} /> Dieta ativa</span>
-              <h2>{activeDiet.name}</h2>
-              <p>Você está no {elapsed}º dia de {totalDays}. Um passo de cada vez.</p>
+               <span className="pill"><Sparkles size={14} /> {dietReadOnly ? 'Dieta encerrada' : 'Dieta ativa'}</span>
+               <h2>{activeDiet.name}</h2>
+               <p>{dietReadOnly ? 'Este período terminou. Você ainda pode consultar o histórico.' : `Você está no ${elapsed}º dia de ${totalDays}. Um passo de cada vez.`}</p>
               <AnimatedProgress className="progress" value={progress} label="Período decorrido" />
               <small>Período decorrido <b>{progress}%</b></small>
             </div>
@@ -342,7 +344,7 @@ export function Dashboard() {
            {showCompetitiveProgress && <div className="daily-progress-grid"><AnimatedCard delay={2}><DailyGoalCard progress={dailyProgress.data} /></AnimatedCard><AnimatedCard delay={3}><StreakAnimation days={dailyProgress.data.streakDays} dietId={dailyProgress.data.dietId} eventDate={dailyProgress.data.date} /></AnimatedCard></div>}
             <AnimatedCard delay={showCompetitiveProgress ? 4 : 2}><WeekCalendar dates={days} meals={meals} todayKey={todayKey} selectedKey={selectedDate} periodStart={start} onSelect={setSelectedDate} /></AnimatedCard>
             <div className="dashboard-grid">
-              <AnimatedCard delay={showCompetitiveProgress ? 5 : 3}><TodayMeals meals={selectedMeals} loading={mealsResource.loading} dateKey={selectedDate} firstOwnMeal={needsFirstMealPrompt} /></AnimatedCard>
+              <AnimatedCard delay={showCompetitiveProgress ? 5 : 3}><TodayMeals meals={selectedMeals} loading={mealsResource.loading} dateKey={selectedDate} firstOwnMeal={needsFirstMealPrompt} readOnly={dietReadOnly} /></AnimatedCard>
               <AnimatedCard delay={showCompetitiveProgress ? 6 : 4}><MembersSummary
                 members={members}
                 loading={membersResource.loading}
