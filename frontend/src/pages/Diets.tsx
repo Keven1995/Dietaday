@@ -24,7 +24,7 @@ function DietCard({ diet, index, selected, canDelete, onSelect, onDelete }: { di
         <div className="diet-symbol"><Salad /></div>
         <div className="diet-card-labels">
           {diet.competitiveMode && <span className="competitive-label">Competitiva</span>}
-          {selected && <span className="active-label"><Check /> Ativa</span>}
+          {selected && <span className="active-label"><Check /> Selecionada</span>}
         </div>
       </div>
       <h2>{diet.name}</h2>

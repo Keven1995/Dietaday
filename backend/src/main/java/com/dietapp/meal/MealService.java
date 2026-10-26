@@ -9,7 +9,7 @@ import com.dietapp.diet.DietService;
 import com.dietapp.security.CurrentUser;
 import com.dietapp.upload.PhotoUrlPolicy;
 import com.dietapp.ranking.RankingPointEventService;
-import com.dietapp.ranking.CompetitivePeriodPolicy;
+import com.dietapp.ranking.DietWritePolicy;
 import com.dietapp.user.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,7 +54,7 @@ public class MealService {
         // cannot be inserted between the pending-event read and settlement.
         Diet diet = diets.requireMemberForUpdate(dietId);
         User author = currentUser.require();
-        ensureCompetitiveWriteAllowed(diet);
+        ensureDietWriteAllowed(diet);
         if (operationId == null) {
             Meal meal = meals.save(new Meal(diet, author, mealType, description, mealDate, photoUrl));
             return new MealCreationResult(meal, rankingEvents.recordMeal(meal));
@@ -121,7 +121,7 @@ public class MealService {
         Meal meal = meals.findByIdAndDietId(mealId, dietId)
                 .orElseThrow(() -> new NotFoundException("Meal not found"));
         requireAuthor(meal);
-        ensureCompetitiveWriteAllowed(meal.getDiet());
+        ensureDietWriteAllowed(meal.getDiet());
         meal.update(mealType, description, mealDate, photoUrl);
         return meal;
     }
@@ -132,7 +132,7 @@ public class MealService {
         Meal meal = meals.findByIdAndDietId(mealId, dietId)
                 .orElseThrow(() -> new NotFoundException("Meal not found"));
         requireAuthor(meal);
-        ensureCompetitiveWriteAllowed(meal.getDiet());
+        ensureDietWriteAllowed(meal.getDiet());
         rankingEvents.revokeMeal(meal.getId());
         meals.delete(meal);
     }
@@ -143,8 +143,8 @@ public class MealService {
         }
     }
 
-    private void ensureCompetitiveWriteAllowed(Diet diet) {
-        CompetitivePeriodPolicy.validateWriteToday(diet, LocalDate.now(ZoneId.of("America/Sao_Paulo")));
+    private void ensureDietWriteAllowed(Diet diet) {
+        DietWritePolicy.validateMealWriteToday(diet, LocalDate.now(ZoneId.of("America/Sao_Paulo")));
     }
 
     private String requestHash(String mealType, String description, LocalDate mealDate, String photoUrl) {

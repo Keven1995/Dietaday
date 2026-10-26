@@ -6,6 +6,7 @@ import { AnimatedError } from '../components/motion/AnimatedError'
 import { Button, EmptyState, PageTitle } from '../components/Ui'
 import { getErrorMessage, isDemoMode } from '../lib/api'
 import { compressPhoto, isPhotoUploadConfigured, validatePhoto } from '../lib/cloudinary'
+import { isDietPeriodEnded } from '../lib/dietPeriod'
 import { localDateKey } from '../lib/date'
 import { isMealNudgeMealType, mealLabelForApiType } from '../lib/mealNudges'
 import { createUuid } from '../lib/uuid'
@@ -41,7 +42,7 @@ export function MealForm() {
   const navigate = useNavigate()
   const location = useLocation()
   const { token } = useAuth()
-  const { activeDiet } = useDiets()
+  const { activeDiet, diets } = useDiets()
   const { enqueue, operations } = useOfflineMeals()
   const { showToast } = useToast()
   const notify = useEffectEvent(showToast)
@@ -57,6 +58,10 @@ export function MealForm() {
     ? requestedMealDateValue
     : null
   const formDietId = editedOperation?.dietId ?? (!editId ? activeDiet?.id : undefined)
+  const formDiet = editedOperation
+    ? diets.find((diet) => diet.id === editedOperation.dietId) ?? null
+    : activeDiet
+  const formDietEnded = Boolean(formDiet && isDietPeriodEnded(formDiet.endDate))
   const [formSessionId] = useState(() => createUuid())
   const initializedEditRef = useRef<string | null>(null)
   const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -246,6 +251,16 @@ export function MealForm() {
         <PageTitle eyebrow="NOVO REGISTRO" title="Registrar refeição" />
         <EmptyState icon={<Camera />} title="Selecione uma dieta" text="É necessário ter uma dieta ativa antes de registrar refeições." />
         <Link className="button empty-action" to="/dietas">Ir para dietas</Link>
+      </div>
+    )
+  }
+
+  if (formDietEnded) {
+    return (
+      <div className="page narrow-page">
+        <PageTitle eyebrow="PERÍODO ENCERRADO" title="Dieta somente para consulta" />
+        <EmptyState icon={<Camera />} title="Não é possível alterar esta dieta" text="O período terminou. Você ainda pode consultar as refeições no histórico." />
+        <Link className="button empty-action" to="/historico">Consultar histórico</Link>
       </div>
     )
   }

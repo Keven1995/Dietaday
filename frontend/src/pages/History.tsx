@@ -17,6 +17,7 @@ import { useDietResource } from '../hooks/useDietResource'
 import { useFeatureDiscovery } from '../hooks/useFeatureDiscovery'
 import { useReducedMotionPreference } from '../hooks/useReducedMotionPreference'
 import { api, getErrorMessage, isDemoMode } from '../lib/api'
+import { isDietPeriodEnded } from '../lib/dietPeriod'
 import { mealCommentCount } from '../lib/comments'
 import { localDateKey, mealDateKey, mealTime, parseLocalDate } from '../lib/date'
 import { nextReactionEmoji, optimisticReactions } from '../lib/mealReactions'
@@ -289,16 +290,26 @@ export function History() {
       {failedOperations.length > 0 && (
         <section className="sync-failures" aria-labelledby="sync-failures-title">
           <div><span>SINCRONIZAÇÃO</span><h2 id="sync-failures-title">Registros que precisam de atenção</h2></div>
-          {failedOperations.map((operation) => (
-            <article key={operation.id}>
-               <div><strong>{operation.request.description}</strong><small>{operation.dietName} · {parseLocalDate(operation.request.mealDate).toLocaleDateString('pt-BR')}</small><p>Não foi possível sincronizar esta refeição agora. Ela continua salva neste dispositivo.</p></div>
-              <div className="sync-failure-actions">
-                <Link className="button outline" to="/refeicoes/nova" state={{ offlineOperationId: operation.id }}><Pencil /> Editar</Link>
-                <button className="button outline" type="button" onClick={() => void retry(operation.id)}><RotateCcw /> Tentar novamente</button>
-                <button className="icon-danger" type="button" aria-label={`Descartar ${operation.request.description}`} onClick={() => void discardOperation(operation.id)}><Trash2 /></button>
-              </div>
-            </article>
-          ))}
+          {failedOperations.map((operation) => {
+            const operationDiet = diets.find((diet) => diet.id === operation.dietId)
+            const operationDietEnded = Boolean(operationDiet && isDietPeriodEnded(operationDiet.endDate))
+            return (
+              <article key={operation.id}>
+                <div>
+                  <strong>{operation.request.description}</strong>
+                  <small>{operation.dietName} · {parseLocalDate(operation.request.mealDate).toLocaleDateString('pt-BR')}</small>
+                  <p>{operationDietEnded
+                    ? 'O período desta dieta terminou. Este registro não pode ser sincronizado.'
+                    : 'Não foi possível sincronizar esta refeição agora. Ela continua salva neste dispositivo.'}</p>
+                </div>
+                <div className="sync-failure-actions">
+                  {!operationDietEnded && <Link className="button outline" to="/refeicoes/nova" state={{ offlineOperationId: operation.id }}><Pencil /> Editar</Link>}
+                  {!operationDietEnded && <button className="button outline" type="button" onClick={() => void retry(operation.id)}><RotateCcw /> Tentar novamente</button>}
+                  <button className="icon-danger" type="button" aria-label={`Descartar ${operation.request.description}`} onClick={() => void discardOperation(operation.id)}><Trash2 /></button>
+                </div>
+              </article>
+            )
+          })}
         </section>
       )}
       <div className="date-switcher">
