@@ -1,4 +1,4 @@
-import { ArrowRight, Check, Info, Plus, Salad, Trash2, X } from 'lucide-react'
+import { ArrowRight, Check, CheckCircle2, Info, Plus, Salad, Trash2, X } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, EmptyState, PageTitle } from '../components/Ui'
@@ -6,6 +6,7 @@ import { initialMembers } from '../data'
 import { useDietResource } from '../hooks/useDietResource'
 import { getErrorMessage } from '../lib/api'
 import { parseLocalDate } from '../lib/date'
+import { isDietPeriodEnded } from '../lib/dietPeriod'
 import { useAuth } from '../state/AuthContext'
 import { useDiets } from '../state/DietContext'
 import type { CreateDietRequest, Diet, Member } from '../types'
@@ -18,17 +19,21 @@ function formatDate(value: string) {
 }
 
 function DietCard({ diet, index, selected, canDelete, onSelect, onDelete }: { diet: Diet; index: number; selected: boolean; canDelete: boolean; onSelect: () => void; onDelete: () => void }) {
+  const completed = isDietPeriodEnded(diet.endDate)
+
   return (
     <article className={`diet-card ${selected ? 'selected' : ''} ${index % 2 ? 'accent-green' : ''}`}>
       <div className="diet-card-top">
         <div className="diet-symbol"><Salad /></div>
         <div className="diet-card-labels">
           {diet.competitiveMode && <span className="competitive-label">Competitiva</span>}
+          {completed && <span className="completed-label"><CheckCircle2 aria-hidden="true" /> Concluída</span>}
           {selected && <span className="active-label"><Check /> Selecionada</span>}
         </div>
       </div>
       <h2>{diet.name}</h2>
       <p>Plano alimentar de {formatDate(diet.startDate)} a {formatDate(diet.endDate)}.</p>
+      {completed && <p className="diet-completion-message" role="status" aria-live="polite"><CheckCircle2 aria-hidden="true" /> Parabéns por concluir seu plano!</p>}
       <div className="diet-meta two-items">
         <span><small>INÍCIO</small>{formatDate(diet.startDate)}</span>
         <span><small>FIM</small>{formatDate(diet.endDate)}</span>
