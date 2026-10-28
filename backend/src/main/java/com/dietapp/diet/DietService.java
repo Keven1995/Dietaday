@@ -7,12 +7,18 @@ import com.dietapp.common.NotFoundException;
 import com.dietapp.ranking.RankingPointEventService;
 import com.dietapp.security.CurrentUser;
 import com.dietapp.security.SecurityAuditService;
+import com.dietapp.user.User;
+import com.dietapp.user.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.HexFormat;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -21,23 +27,44 @@ public class DietService {
     private final DietRepository diets;
     private final DietMemberRepository members;
     private final CurrentUser currentUser;
+    private final UserRepository users;
     private final SecurityAuditService audit;
     private final RankingPointEventService rankingEvents;
 
     public DietService(DietRepository diets, DietMemberRepository members, CurrentUser currentUser,
-                       SecurityAuditService audit, RankingPointEventService rankingEvents) {
+                       UserRepository users, SecurityAuditService audit, RankingPointEventService rankingEvents) {
         this.diets = diets;
         this.members = members;
         this.currentUser = currentUser;
+        this.users = users;
         this.audit = audit;
         this.rankingEvents = rankingEvents;
     }
 
     @Transactional
-    public Diet create(String name, LocalDate startDate, LocalDate endDate, boolean competitiveMode) {
+    public Diet create(String name, LocalDate startDate, LocalDate endDate, boolean competitiveMode,
+                       UUID operationId) {
         validateDates(startDate, endDate);
-        var owner = currentUser.require();
-        Diet diet = diets.save(new Diet(name.trim(), startDate, endDate, competitiveMode));
+        User owner = users.findForUpdateById(currentUser.id()).orElseThrow();
+        String normalizedName = name.trim();
+        String requestHash = creationRequestHash(normalizedName, startDate, endDate, competitiveMode);
+        Diet existing = diets.findByCreationOperationId(operationId).orElse(null);
+        if (existing != null) {
+            boolean sameOwner = members.findByDietIdAndUserId(existing.getId(), owner.getId())
+                    .filter(member -> member.getRole() == DietMember.Role.OWNER).isPresent();
+            if (!sameOwner || !requestHash.equals(existing.getCreationRequestHash())) {
+                throw new ConflictException("Idempotency key has already been used for another request");
+            }
+            return existing;
+        }
+
+        Diet diet;
+        try {
+            diet = diets.saveAndFlush(new Diet(normalizedName, startDate, endDate, competitiveMode,
+                    operationId, requestHash));
+        } catch (DataIntegrityViolationException exception) {
+            throw new ConflictException("Idempotency key has already been used for another request", exception);
+        }
         members.save(new DietMember(diet, owner, DietMember.Role.OWNER));
         audit.dietCreated(owner.getId(), diet.getId());
         return diet;
@@ -140,6 +167,17 @@ public class DietService {
     private void validateDates(LocalDate startDate, LocalDate endDate) {
         if (endDate.isBefore(startDate)) {
             throw new BadRequestException("endDate must be on or after startDate");
+        }
+    }
+
+    private String creationRequestHash(String name, LocalDate startDate, LocalDate endDate,
+                                       boolean competitiveMode) {
+        String value = name + "\u0000" + startDate + "\u0000" + endDate + "\u0000" + competitiveMode;
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is not available", exception);
         }
     }
 }

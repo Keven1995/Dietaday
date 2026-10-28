@@ -4,6 +4,7 @@ import com.dietapp.common.BadRequestException;
 import com.dietapp.common.ForbiddenException;
 import com.dietapp.diet.DietMemberRepository;
 import com.dietapp.security.CurrentUser;
+import com.dietapp.user.UserRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
@@ -56,13 +57,15 @@ public class UxEventService {
     private final DietMemberRepository members;
     private final CurrentUser currentUser;
     private final ObjectMapper objectMapper;
+    private final UserRepository users;
 
     public UxEventService(UxEventRepository events, DietMemberRepository members,
-                          CurrentUser currentUser, ObjectMapper objectMapper) {
+                          CurrentUser currentUser, ObjectMapper objectMapper, UserRepository users) {
         this.events = events;
         this.members = members;
         this.currentUser = currentUser;
         this.objectMapper = objectMapper;
+        this.users = users;
     }
 
     @Transactional
@@ -77,6 +80,7 @@ public class UxEventService {
         if (request.dietId() != null && !members.existsByDietIdAndUserId(request.dietId(), currentUser.id())) {
             throw new ForbiddenException("The user is not a member of this diet");
         }
+        users.findForUpdateById(currentUser.id()).orElseThrow();
         if (events.existsByEventIdAndUserId(request.eventId(), currentUser.id())) return;
 
         String details = serializeDetails(request.details());

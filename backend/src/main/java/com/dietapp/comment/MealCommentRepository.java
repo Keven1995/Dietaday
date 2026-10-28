@@ -13,6 +13,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface MealCommentRepository extends JpaRepository<MealComment, UUID> {
+    Optional<MealComment> findByOperationId(UUID operationId);
+
     @Query("select case when count(c) > 0 then true else false end from MealComment c " +
             "where c.author.id = :userId and c.meal.diet.id = :dietId and c.meal.author.id <> :userId")
     boolean existsByUserCommentedOnAnotherMemberMeal(@Param("dietId") UUID dietId, @Param("userId") UUID userId);

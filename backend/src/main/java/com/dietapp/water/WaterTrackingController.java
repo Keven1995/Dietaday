@@ -6,6 +6,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -41,7 +42,8 @@ public class WaterTrackingController {
     }
 
     @PostMapping("/checks")
-    public WaterTodayResponse addCheck(@Valid @RequestBody WaterCheckRequest request) {
-        return service.addCheck(request.amountMl());
+    public WaterTodayResponse addCheck(@RequestHeader("Idempotency-Key") java.util.UUID operationId,
+                                       @Valid @RequestBody WaterCheckRequest request) {
+        return service.addCheck(request.amountMl(), operationId);
     }
 }

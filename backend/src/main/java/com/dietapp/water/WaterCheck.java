@@ -36,6 +36,10 @@ public class WaterCheck {
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
+    @Column(name = "operation_id")
+    private UUID operationId;
+    @Column(name = "request_hash", length = 64)
+    private String requestHash;
 
     protected WaterCheck() {}
 
@@ -44,12 +48,19 @@ public class WaterCheck {
     }
 
     public WaterCheck(User user, Diet diet, int amountMl, LocalDate checkDate) {
+        this(user, diet, amountMl, checkDate, null, null);
+    }
+
+    public WaterCheck(User user, Diet diet, int amountMl, LocalDate checkDate,
+                      UUID operationId, String requestHash) {
         this.id = UUID.randomUUID();
         this.user = user;
         this.diet = diet;
         this.amountMl = amountMl;
         this.checkDate = checkDate;
         this.createdAt = Instant.now();
+        this.operationId = operationId;
+        this.requestHash = requestHash;
     }
 
     public UUID getId() { return id; }
@@ -58,4 +69,6 @@ public class WaterCheck {
     public int getAmountMl() { return amountMl; }
     public LocalDate getCheckDate() { return checkDate; }
     public Instant getCreatedAt() { return createdAt; }
+    public UUID getOperationId() { return operationId; }
+    public String getRequestHash() { return requestHash; }
 }

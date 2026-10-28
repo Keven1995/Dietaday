@@ -65,6 +65,8 @@ class WaterReminderDeliveryProcessorTest {
     @BeforeEach
     void resetPushFactory() {
         reset(pushServiceFactory);
+        deliveries.deleteAll();
+        subscriptions.deleteAll();
     }
 
     @Test
@@ -83,8 +85,6 @@ class WaterReminderDeliveryProcessorTest {
 
     @Test
     void simultaneousProcessorsSendOnlyOneReminderForAUserAndSlot() throws Exception {
-        deliveries.deleteAll();
-        subscriptions.deleteAll();
         User user = createUser();
         subscriptions.saveAndFlush(createSubscription(user));
         PushService pushService = mockPushService(response(201, ""));

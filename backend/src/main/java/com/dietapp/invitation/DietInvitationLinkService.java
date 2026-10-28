@@ -11,11 +11,13 @@ import com.dietapp.security.SecurityAuditService;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
@@ -27,7 +29,6 @@ import java.util.regex.Pattern;
 public class DietInvitationLinkService {
     private static final Duration LINK_TTL = Duration.ofDays(30);
     private static final Pattern TOKEN_FORMAT = Pattern.compile("[A-Za-z0-9_-]{43}");
-    private static final SecureRandom RANDOM = new SecureRandom();
 
     private final DietInvitationLinkRepository links;
     private final InvitationRepository invitations;
@@ -35,33 +36,47 @@ public class DietInvitationLinkService {
     private final DietRepository diets;
     private final CurrentUser currentUser;
     private final SecurityAuditService audit;
+    private final byte[] tokenSigningKey;
 
     public DietInvitationLinkService(DietInvitationLinkRepository links, InvitationRepository invitations,
                                      DietMemberRepository members, DietRepository diets,
-                                     CurrentUser currentUser, SecurityAuditService audit) {
+                                     CurrentUser currentUser, SecurityAuditService audit,
+                                     @Value("${app.jwt.secret}") String tokenSigningKey) {
         this.links = links;
         this.invitations = invitations;
         this.members = members;
         this.diets = diets;
         this.currentUser = currentUser;
         this.audit = audit;
+        this.tokenSigningKey = tokenSigningKey.getBytes(StandardCharsets.UTF_8);
     }
 
     @Transactional
-    public CreatedDietInvitationLink create(UUID dietId) {
+    public CreatedDietInvitationLink create(UUID dietId, UUID operationId) {
         var actor = currentUser.require();
         diets.findForUpdateById(dietId)
                 .orElseThrow(() -> new NotFoundException("Diet not found"));
         var ownerMembership = requireOwnerMembership(dietId, actor.getId());
         Instant now = Instant.now();
+        String token = generateToken(actor.getId(), dietId, operationId);
+        String tokenHash = hashToken(token);
+        DietInvitationLink previousOperation = links.findByTokenHash(tokenHash).orElse(null);
+        if (previousOperation != null) {
+            if (!previousOperation.getCreator().getId().equals(actor.getId())
+                    || !previousOperation.getDiet().getId().equals(dietId)
+                    || previousOperation.getRevokedAt() != null || previousOperation.isExpired(now)) {
+                throw new ConflictException("This idempotency key has already created an inactive invitation link");
+            }
+            return new CreatedDietInvitationLink(token, previousOperation.getExpiresAt());
+        }
+
         links.findAllByDietIdAndRevokedAtIsNull(dietId).forEach(link -> link.revoke(now));
         links.flush();
 
-        String token = generateToken();
         Instant expiresAt = now.plus(LINK_TTL);
         try {
             links.saveAndFlush(new DietInvitationLink(
-                    ownerMembership.getDiet(), actor, hashToken(token), now, expiresAt));
+                    ownerMembership.getDiet(), actor, tokenHash, now, expiresAt));
         } catch (DataIntegrityViolationException exception) {
             throw new ConflictException("An invitation link was created concurrently. Please try again", exception);
         }
@@ -131,10 +146,16 @@ public class DietInvitationLinkService {
         return membership;
     }
 
-    private String generateToken() {
-        byte[] bytes = new byte[32];
-        RANDOM.nextBytes(bytes);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    private String generateToken(UUID creatorId, UUID dietId, UUID operationId) {
+        String message = "diet-invitation-link:v1:" + creatorId + ":" + dietId + ":" + operationId;
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(tokenSigningKey, "HmacSHA256"));
+            return Base64.getUrlEncoder().withoutPadding()
+                    .encodeToString(mac.doFinal(message.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception exception) {
+            throw new IllegalStateException("Could not derive invitation link token", exception);
+        }
     }
 
     private String hashToken(String token) {

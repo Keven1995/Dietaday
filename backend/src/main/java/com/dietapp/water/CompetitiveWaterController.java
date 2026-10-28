@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
@@ -41,7 +42,8 @@ public class CompetitiveWaterController {
 
     @PostMapping("/checks")
     public WaterTodayResponse addCheck(@PathVariable UUID dietId,
+                                       @RequestHeader("Idempotency-Key") UUID operationId,
                                        @Valid @RequestBody WaterCheckRequest request) {
-        return service.addCompetitiveCheck(dietId, request.amountMl());
+        return service.addCompetitiveCheck(dietId, request.amountMl(), operationId);
     }
 }

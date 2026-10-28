@@ -44,7 +44,7 @@ public class MealController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public MealResponse create(@PathVariable UUID dietId,
-                               @RequestHeader(value = "Idempotency-Key", required = false) UUID operationId,
+                               @RequestHeader("Idempotency-Key") UUID operationId,
                                @Valid @RequestBody MealRequest request) {
         long startedAt = System.currentTimeMillis();
         log.info("meal_create_started dietId={} operationId={} hasPhoto={}", dietId, operationId, request.photoUrl() != null);

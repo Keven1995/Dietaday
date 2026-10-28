@@ -1,6 +1,7 @@
 package com.dietapp.comment;
 
 import com.dietapp.common.BadRequestException;
+import com.dietapp.common.ConflictException;
 import com.dietapp.common.ForbiddenException;
 import com.dietapp.common.NotFoundException;
 import com.dietapp.meal.Meal;
@@ -10,6 +11,7 @@ import com.dietapp.security.CurrentUser;
 import com.dietapp.user.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -18,6 +20,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.HexFormat;
 import java.util.regex.Pattern;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -50,10 +55,28 @@ public class MealCommentService {
     }
 
     @Transactional
-    public CommentResponse create(UUID dietId, UUID mealId, String content) {
-        Meal meal = meals.get(dietId, mealId);
+    public CommentResponse create(UUID dietId, UUID mealId, String content, UUID operationId) {
+        Meal meal = meals.getForUpdate(dietId, mealId);
         User author = currentUser.require();
-        MealComment comment = comments.save(new MealComment(meal, author, content));
+        String normalizedContent = content.trim();
+        String requestHash = commentRequestHash(dietId, mealId, normalizedContent);
+        MealComment existing = comments.findByOperationId(operationId).orElse(null);
+        if (existing != null) {
+            if (!existing.getAuthor().getId().equals(author.getId())
+                    || !existing.getMeal().getId().equals(mealId)
+                    || !requestHash.equals(existing.getRequestHash())) {
+                throw new ConflictException("Idempotency key has already been used for another request");
+            }
+            return CommentResponse.from(existing, summariesFor(List.of(existing))
+                    .getOrDefault(existing.getId(), List.of()));
+        }
+        MealComment comment;
+        try {
+            comment = comments.saveAndFlush(new MealComment(meal, author, normalizedContent,
+                    operationId, requestHash));
+        } catch (DataIntegrityViolationException exception) {
+            throw new ConflictException("Idempotency key has already been used for another request", exception);
+        }
         if (!meal.getAuthor().getId().equals(author.getId())) {
             notifications.mealCommented(meal.getDiet(), meal, comment, meal.getAuthor(), author);
         }
@@ -151,6 +174,16 @@ public class MealCommentService {
     private CommentReactionsResponse reactionResponse(MealComment comment) {
         return new CommentReactionsResponse(summariesFor(List.of(comment))
                 .getOrDefault(comment.getId(), List.of()));
+    }
+
+    private String commentRequestHash(UUID dietId, UUID mealId, String content) {
+        String value = dietId + "\u0000" + mealId + "\u0000" + content;
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is not available", exception);
+        }
     }
 
     private boolean isEmoji(String value) {
