@@ -108,7 +108,8 @@ export async function updateWaterGoal(token: string | null, userId: string, goal
   return api<WaterToday>(dietId ? `/diets/${dietId}/water/goal` : '/water/goal', { method: 'PUT', token, body: JSON.stringify({ goalMl }) })
 }
 
-export async function addWaterCheck(token: string | null, userId: string, amountMl: number, dietId?: string | null): Promise<WaterToday> {
+export async function addWaterCheck(token: string | null, userId: string, amountMl: number,
+                                   dietId: string | null | undefined, operationId: string): Promise<WaterToday> {
   if (isDemoMode) {
     const state = createDemoState(userId)
     if (amountMl > state.remainingMl) throw new Error('Esse check ultrapassa o volume restante da sua meta.')
@@ -127,5 +128,7 @@ export async function addWaterCheck(token: string | null, userId: string, amount
     }
     return saveDemoState(userId, next)
   }
-  return api<WaterToday>(dietId ? `/diets/${dietId}/water/checks` : '/water/checks', { method: 'POST', token, body: JSON.stringify({ amountMl }) })
+  return api<WaterToday>(dietId ? `/diets/${dietId}/water/checks` : '/water/checks', {
+    method: 'POST', token, headers: { 'Idempotency-Key': operationId }, body: JSON.stringify({ amountMl }),
+  })
 }

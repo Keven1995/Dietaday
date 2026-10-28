@@ -8,6 +8,7 @@ import { useDietResource } from '../hooks/useDietResource'
 import { api, getErrorMessage, isDemoMode } from '../lib/api'
 import { completeFeatureCampaign } from '../lib/featureDiscoveryTelemetry'
 import { clearDietCache } from '../lib/resourceCache'
+import { createUuid } from '../lib/uuid'
 import { MEAL_SYNCED_EVENT } from '../state/OfflineMealContext'
 import { useAuth } from '../state/AuthContext'
 import { useDiets } from '../state/DietContext'
@@ -38,6 +39,7 @@ export function Members() {
   const [leaving, setLeaving] = useState(false)
   const inviteControllerRef = useRef<AbortController | null>(null)
   const invitationLinkControllerRef = useRef<AbortController | null>(null)
+  const invitationLinkOperationRef = useRef<{ dietId: string; id: string } | null>(null)
   const leaveControllerRef = useRef<AbortController | null>(null)
   const leaveTriggerRef = useRef<HTMLButtonElement | null>(null)
   const leaveDialogRef = useRef<HTMLDivElement | null>(null)
@@ -179,7 +181,11 @@ export function Members() {
   }
 
   async function createInvitationLink() {
-    if (!activeDiet || !token || isDemoMode) return
+    if (!activeDiet || !token || isDemoMode || invitationLinkBusy) return
+    if (invitationLinkOperationRef.current?.dietId !== activeDiet.id) {
+      invitationLinkOperationRef.current = { dietId: activeDiet.id, id: createUuid() }
+    }
+    const operation = invitationLinkOperationRef.current!
     const controller = new AbortController()
     invitationLinkControllerRef.current?.abort()
     invitationLinkControllerRef.current = controller
@@ -189,8 +195,10 @@ export function Members() {
     try {
       const created = await api<CreatedDietInvitationLink>(`/diets/${activeDiet.id}/invitation-link`, {
         method: 'POST', token, signal: controller.signal,
+        headers: { 'Idempotency-Key': operation.id },
       })
       if (controller.signal.aborted) return
+      invitationLinkOperationRef.current = null
       setInvitationLink(`${window.location.origin}/convite/${encodeURIComponent(created.token)}`)
       setInvitationLinkExpiresAt(created.expiresAt)
       setInvitationLinkMessage('Link criado. Ele pode ser usado por várias pessoas e expira em 30 dias.')

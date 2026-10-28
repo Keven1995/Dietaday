@@ -5,6 +5,7 @@ import { Button, EmptyState, PageTitle } from '../components/Ui'
 import { initialMembers } from '../data'
 import { useDietResource } from '../hooks/useDietResource'
 import { getErrorMessage } from '../lib/api'
+import { createUuid } from '../lib/uuid'
 import { parseLocalDate } from '../lib/date'
 import { isDietPeriodEnded } from '../lib/dietPeriod'
 import { useAuth } from '../state/AuthContext'
@@ -90,11 +91,12 @@ function DeleteDietModal({ diet, onClose, onDelete }: { diet: Diet; onClose: () 
   )
 }
 
-function CreateDietModal({ onClose, onCreate, onCreated }: { onClose: () => void; onCreate: (data: CreateDietRequest) => Promise<Diet>; onCreated: (diet: Diet) => void }) {
+function CreateDietModal({ onClose, onCreate, onCreated }: { onClose: () => void; onCreate: (data: CreateDietRequest, operationId: string) => Promise<Diet>; onCreated: (diet: Diet) => void }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [form, setForm] = useState<CreateDietRequest>(EMPTY_FORM)
   const [competitiveHelpOpen, setCompetitiveHelpOpen] = useState(false)
+  const operationRef = useRef<{ fingerprint: string; id: string } | null>(null)
 
   useEffect(() => {
     function closeOnEscape(event: KeyboardEvent) {
@@ -119,7 +121,13 @@ function CreateDietModal({ onClose, onCreate, onCreated }: { onClose: () => void
     }
     setSaving(true)
     try {
-      const createdDiet = await onCreate(request)
+      const fingerprint = JSON.stringify(request)
+      const operation = operationRef.current?.fingerprint === fingerprint
+        ? operationRef.current
+        : { fingerprint, id: createUuid() }
+      operationRef.current = operation
+      const createdDiet = await onCreate(request, operation.id)
+      operationRef.current = null
       onCreated(createdDiet)
       setSaving(false)
       onClose()
