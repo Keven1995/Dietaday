@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.http.ResponseEntity;
 import com.dietapp.common.Pagination;
 
@@ -29,8 +30,10 @@ public class DietController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public DietResponse create(@Valid @RequestBody DietRequest request) {
-        return DietResponse.from(service.create(request.name(), request.startDate(), request.endDate(), request.competitiveMode()));
+    public DietResponse create(@RequestHeader("Idempotency-Key") UUID operationId,
+                               @Valid @RequestBody DietRequest request) {
+        return DietResponse.from(service.create(request.name(), request.startDate(), request.endDate(),
+                request.competitiveMode(), operationId));
     }
 
     @GetMapping

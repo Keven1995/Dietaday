@@ -48,18 +48,14 @@ public class MealService {
 
     @Transactional
     public MealCreationResult create(UUID dietId, String mealType, String description, LocalDate mealDate,
-                                     String photoUrl, UUID operationId) {
+                                      String photoUrl, UUID operationId) {
+        if (operationId == null) throw new BadRequestException("Idempotency-Key is required");
         photoUrlPolicy.validate(photoUrl);
         // Competitive writes share the diet lock with daily closing, so a meal
         // cannot be inserted between the pending-event read and settlement.
         Diet diet = diets.requireMemberForUpdate(dietId);
         User author = currentUser.require();
         ensureDietWriteAllowed(diet);
-        if (operationId == null) {
-            Meal meal = meals.save(new Meal(diet, author, mealType, description, mealDate, photoUrl));
-            return new MealCreationResult(meal, rankingEvents.recordMeal(meal));
-        }
-
         String requestHash = requestHash(mealType, description, mealDate, photoUrl);
         var existing = syncOperations.findById(operationId);
         if (existing.isPresent()) {

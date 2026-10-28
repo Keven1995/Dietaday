@@ -13,6 +13,8 @@ import java.util.UUID;
 import java.util.List;
 
 public interface DietRepository extends JpaRepository<Diet, UUID> {
+    Optional<Diet> findByCreationOperationId(UUID creationOperationId);
+
     List<Diet> findAllByCompetitiveModeTrue();
 
     @Query("select d from Diet d join DietMember m on m.diet = d where m.user.id = :userId order by d.startDate desc")

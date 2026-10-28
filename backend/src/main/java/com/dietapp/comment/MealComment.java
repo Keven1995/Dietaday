@@ -30,16 +30,22 @@ public class MealComment {
     private Instant createdAt;
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
+    @Column(name = "operation_id")
+    private UUID operationId;
+    @Column(name = "request_hash", length = 64)
+    private String requestHash;
 
     protected MealComment() {}
 
-    public MealComment(Meal meal, User author, String content) {
+    public MealComment(Meal meal, User author, String content, UUID operationId, String requestHash) {
         this.id = UUID.randomUUID();
         this.meal = meal;
         this.author = author;
         this.createdAt = Instant.now();
         this.updatedAt = createdAt;
         this.content = content.trim();
+        this.operationId = operationId;
+        this.requestHash = requestHash;
     }
 
     public UUID getId() { return id; }
@@ -48,6 +54,8 @@ public class MealComment {
     public String getContent() { return content; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
+    public UUID getOperationId() { return operationId; }
+    public String getRequestHash() { return requestHash; }
 
     public void update(String content) {
         this.content = content.trim();

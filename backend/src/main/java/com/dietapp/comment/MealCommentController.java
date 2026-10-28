@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestHeader;
 import com.dietapp.common.Pagination;
 
 import java.util.List;
@@ -39,8 +40,9 @@ public class MealCommentController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public CommentResponse create(@PathVariable UUID dietId, @PathVariable UUID mealId,
+                                  @RequestHeader("Idempotency-Key") UUID operationId,
                                   @Valid @RequestBody CommentRequest request) {
-        return service.create(dietId, mealId, request.content());
+        return service.create(dietId, mealId, request.content(), operationId);
     }
 
     @PutMapping("/{commentId}")

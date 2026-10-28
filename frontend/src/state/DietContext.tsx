@@ -13,7 +13,7 @@ type DietContextValue = {
   loading: boolean
   error: string
   selectDiet: (id: string) => void
-  createDiet: (data: CreateDietRequest) => Promise<Diet>
+  createDiet: (data: CreateDietRequest, operationId: string) => Promise<Diet>
   deleteDiet: (id: string) => Promise<void>
   reload: () => Promise<void>
 }
@@ -89,12 +89,14 @@ export function DietProvider({ children }: { children: ReactNode }) {
     setActiveDietId(id)
   }
 
-  async function createDiet(data: CreateDietRequest) {
+  async function createDiet(data: CreateDietRequest, operationId: string) {
     if (!token || !user) throw new Error('Sua sessão expirou. Entre novamente.')
     requestIdRef.current += 1
     const created = isDemoMode
       ? { id: createUuid(), ...data }
-      : await api<Diet>('/diets', { method: 'POST', token, body: JSON.stringify(data) })
+      : await api<Diet>('/diets', {
+        method: 'POST', token, headers: { 'Idempotency-Key': operationId }, body: JSON.stringify(data),
+      })
     setDiets((current) => {
       const next = [...current, created]
       if (!isDemoMode) writeCachedResource(user.id, 'diets', next)

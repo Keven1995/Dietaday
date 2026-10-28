@@ -75,7 +75,7 @@ public class AuthService {
         String email = normalizeEmail(request.email());
         String attemptKey = email + '|' + clientAddress;
         try {
-            loginAttempts.checkAllowed(attemptKey);
+            loginAttempts.reserve(attemptKey);
         } catch (RateLimitExceededException exception) {
             audit.loginBlocked();
             throw exception;
@@ -86,6 +86,9 @@ public class AuthService {
             loginAttempts.recordFailure(attemptKey);
             audit.loginFailure();
             throw new BadCredentialsException(INVALID_CREDENTIALS);
+        } catch (RuntimeException exception) {
+            loginAttempts.release(attemptKey);
+            throw exception;
         }
         loginAttempts.recordSuccess(attemptKey);
         User user = users.findByEmailIgnoreCase(email)

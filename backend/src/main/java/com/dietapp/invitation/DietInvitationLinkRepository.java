@@ -10,6 +10,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface DietInvitationLinkRepository extends JpaRepository<DietInvitationLink, UUID> {
+    Optional<DietInvitationLink> findByTokenHash(String tokenHash);
+
     @EntityGraph(attributePaths = {"diet", "creator"})
     Optional<DietInvitationLink> findByTokenHashAndRevokedAtIsNull(String tokenHash);
 

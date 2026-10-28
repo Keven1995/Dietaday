@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.http.ResponseEntity;
 import com.dietapp.common.Pagination;
 
@@ -57,8 +58,9 @@ public class InvitationController {
 
     @PostMapping("/diets/{dietId}/invitation-link")
     @ResponseStatus(HttpStatus.CREATED)
-    public CreatedDietInvitationLink createLink(@PathVariable UUID dietId) {
-        return links.create(dietId);
+    public CreatedDietInvitationLink createLink(@PathVariable UUID dietId,
+                                                @RequestHeader("Idempotency-Key") UUID operationId) {
+        return links.create(dietId, operationId);
     }
 
     @DeleteMapping("/diets/{dietId}/invitation-link")

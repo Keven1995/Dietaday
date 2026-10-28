@@ -10,10 +10,15 @@ import com.dietapp.user.User;
 import com.dietapp.user.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.dao.DataIntegrityViolationException;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.HexFormat;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 public class WaterTrackingService {
@@ -60,16 +65,29 @@ public class WaterTrackingService {
     }
 
     @Transactional
-    public WaterTodayResponse addCheck(int amountMl) {
+    public WaterTodayResponse addCheck(int amountMl, UUID operationId) {
         validateCheckAmount(amountMl);
         User user = users.findForUpdateById(currentUser.id()).orElseThrow();
         LocalDate date = LocalDate.now(BRASILIA);
+        String requestHash = waterCheckRequestHash(null, amountMl);
+        WaterCheck existing = checks.findByOperationId(operationId).orElse(null);
+        if (existing != null) {
+            if (!existing.getUser().getId().equals(user.getId()) || existing.getDiet() != null
+                    || !requestHash.equals(existing.getRequestHash())) {
+                throw new ConflictException("Idempotency key has already been used for another request");
+            }
+            return snapshot(user, date);
+        }
         List<WaterCheck> today = checks.findByUserIdAndCheckDateOrderByCreatedAtAsc(user.getId(), date);
         int consumed = today.stream().mapToInt(WaterCheck::getAmountMl).sum();
         int remaining = user.getDailyWaterGoalMl() - consumed;
         validateCheckAgainstRemaining(amountMl, remaining);
         upsertDailyGoal(user, null, date);
-        checks.save(new WaterCheck(user, amountMl, date));
+        try {
+            checks.saveAndFlush(new WaterCheck(user, null, amountMl, date, operationId, requestHash));
+        } catch (DataIntegrityViolationException exception) {
+            throw new ConflictException("Idempotency key has already been used for another request", exception);
+        }
         return snapshot(user, date);
     }
 
@@ -91,18 +109,37 @@ public class WaterTrackingService {
     }
 
     @Transactional
-    public WaterTodayResponse addCompetitiveCheck(java.util.UUID dietId, int amountMl) {
+    public WaterTodayResponse addCompetitiveCheck(UUID dietId, int amountMl, UUID operationId) {
         validateCheckAmount(amountMl);
         Diet diet = requireCompetitiveDietForUpdate(dietId);
         User user = users.findForUpdateById(currentUser.id()).orElseThrow();
         LocalDate date = LocalDate.now(BRASILIA);
+        String requestHash = waterCheckRequestHash(dietId, amountMl);
+        WaterCheck existing = checks.findByOperationId(operationId).orElse(null);
+        if (existing != null) {
+            if (!existing.getUser().getId().equals(user.getId()) || existing.getDiet() == null
+                    || !existing.getDiet().getId().equals(dietId)
+                    || !requestHash.equals(existing.getRequestHash())) {
+                throw new ConflictException("Idempotency key has already been used for another request");
+            }
+            WaterTodayResponse snapshot = competitiveSnapshot(diet, user, date);
+            int pointsEarned = rankingEvents.recordWater(existing, 0);
+            return new WaterTodayResponse(snapshot.date(), snapshot.goalMl(), snapshot.consumedMl(),
+                    snapshot.remainingMl(), snapshot.percentage(), snapshot.checks(), pointsEarned,
+                    snapshot.suggestedGoalMl());
+        }
         List<WaterCheck> today = checks.findByDietIdAndUserIdAndCheckDateOrderByCreatedAtAsc(
                 diet.getId(), user.getId(), date);
         int consumed = today.stream().mapToInt(WaterCheck::getAmountMl).sum();
         int remaining = user.getDailyWaterGoalMl() - consumed;
         validateCheckAgainstRemaining(amountMl, remaining);
         upsertDailyGoal(user, diet, date);
-        WaterCheck check = checks.save(new WaterCheck(user, diet, amountMl, date));
+        WaterCheck check;
+        try {
+            check = checks.saveAndFlush(new WaterCheck(user, diet, amountMl, date, operationId, requestHash));
+        } catch (DataIntegrityViolationException exception) {
+            throw new ConflictException("Idempotency key has already been used for another request", exception);
+        }
         int pointsEarned = rankingEvents.recordWater(check, remaining);
         WaterTodayResponse snapshot = competitiveSnapshot(diet, user, date);
         return new WaterTodayResponse(snapshot.date(), snapshot.goalMl(), snapshot.consumedMl(), snapshot.remainingMl(),
@@ -180,6 +217,16 @@ public class WaterTrackingService {
             dailyGoals.save(new WaterDailyGoal(user, diet, date, goalMl));
         } else if (dailyGoal.getGoalMl() != null && dailyGoal.getGoalMl() != user.getDailyWaterGoalMl()) {
             dailyGoal.updateGoalMl(user.getDailyWaterGoalMl());
+        }
+    }
+
+    private String waterCheckRequestHash(UUID dietId, int amountMl) {
+        String value = (dietId == null ? "general" : dietId.toString()) + "\u0000" + amountMl;
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is not available", exception);
         }
     }
 }

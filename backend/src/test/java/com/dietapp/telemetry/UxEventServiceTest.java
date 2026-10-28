@@ -4,11 +4,16 @@ import com.dietapp.common.BadRequestException;
 import com.dietapp.common.ForbiddenException;
 import com.dietapp.diet.DietMemberRepository;
 import com.dietapp.security.CurrentUser;
+import com.dietapp.user.User;
+import com.dietapp.user.UserRepository;
+import com.dietapp.user.UserSex;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 
 import java.util.Map;
 import java.util.UUID;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -22,9 +27,18 @@ class UxEventServiceTest {
     private final UxEventRepository events = mock(UxEventRepository.class);
     private final DietMemberRepository members = mock(DietMemberRepository.class);
     private final CurrentUser currentUser = mock(CurrentUser.class);
-    private final UxEventService service = new UxEventService(events, members, currentUser, new ObjectMapper());
+    private final UserRepository users = mock(UserRepository.class);
+    private final UxEventService service = new UxEventService(events, members, currentUser,
+            new ObjectMapper(), users);
     private final UUID userId = UUID.randomUUID();
     private final UUID dietId = UUID.randomUUID();
+
+    @BeforeEach
+    void lockCurrentUser() {
+        when(currentUser.id()).thenReturn(userId);
+        when(users.findForUpdateById(userId)).thenReturn(Optional.of(
+                new User("ux-user@example.test", "hash", "UX User", UserSex.NEUTRAL)));
+    }
 
     @Test
     void recordsAllowedEventForDietMember() {

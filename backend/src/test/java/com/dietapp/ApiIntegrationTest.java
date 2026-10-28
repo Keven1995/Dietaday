@@ -25,6 +25,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.UUID;
@@ -51,7 +52,6 @@ import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -410,6 +410,40 @@ class ApiIntegrationTest {
     }
 
     @Test
+    void simultaneousUxTelemetryRetriesPersistOneEvent() throws Exception {
+        JsonNode user = register("UX Retry User", "ux-retry-" + UUID.randomUUID() + "@example.com");
+        String eventId = "meal-form-started:" + UUID.randomUUID();
+        String body = objectMapper.writeValueAsString(Map.of(
+                "eventName", "meal_form_started",
+                "eventId", eventId,
+                "details", Map.of("formSessionId", UUID.randomUUID().toString())));
+        var ready = new CountDownLatch(2);
+        var start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            var report = (java.util.concurrent.Callable<Integer>) () -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Concurrent test did not start");
+                return mvc.perform(post("/api/telemetry/ux").header("Authorization", bearer(user))
+                                .contentType(MediaType.APPLICATION_JSON).content(body))
+                        .andReturn().getResponse().getStatus();
+            };
+            Future<Integer> first = executor.submit(report);
+            Future<Integer> second = executor.submit(report);
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            assertThat(List.of(first.get(10, TimeUnit.SECONDS), second.get(10, TimeUnit.SECONDS)))
+                    .containsOnly(204);
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+        }
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from ux_events where user_id = ? and event_id = ?", Integer.class,
+                UUID.fromString(user.get("userId").asText()), eventId)).isEqualTo(1);
+    }
+
+    @Test
     void authenticatedUsersCanRegisterAndRefreshPushSubscriptions() throws Exception {
         JsonNode user = register("Push User", "push-" + UUID.randomUUID() + "@example.com");
         String subscription = """
@@ -430,6 +464,39 @@ class ApiIntegrationTest {
                         .header("Authorization", bearer(user))
                         .param("endpoint", "https://push.example.test/subscription-1"))
                 .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void simultaneousRegistrationOfTheSamePushEndpointLeavesOneSubscription() throws Exception {
+        JsonNode user = register("Concurrent Push User", "concurrent-push-" + UUID.randomUUID() + "@example.com");
+        String body = """
+                {"endpoint":"https://push.example.test/concurrent-endpoint","p256dh":"public-key","auth":"auth-key"}
+                """;
+        var ready = new CountDownLatch(2);
+        var start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            var subscribe = (java.util.concurrent.Callable<Integer>) () -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Concurrent test did not start");
+                return mvc.perform(post("/api/push/subscriptions")
+                                .header("Authorization", bearer(user)).contentType(MediaType.APPLICATION_JSON)
+                                .content(body))
+                        .andReturn().getResponse().getStatus();
+            };
+            Future<Integer> first = executor.submit(subscribe);
+            Future<Integer> second = executor.submit(subscribe);
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            assertThat(List.of(first.get(10, TimeUnit.SECONDS), second.get(10, TimeUnit.SECONDS)))
+                    .containsOnly(204);
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+        }
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from push_subscriptions where endpoint = ?",
+                Integer.class, "https://push.example.test/concurrent-endpoint")).isEqualTo(1);
     }
 
     @Test
@@ -707,6 +774,45 @@ class ApiIntegrationTest {
             start.countDown();
             executor.shutdownNow();
         }
+    }
+
+    @Test
+    void simultaneousWaterCheckRetriesWithSameKeyCreateOneCheck() throws Exception {
+        JsonNode user = register("Water Idempotency User", "water-idempotency-" + UUID.randomUUID() + "@example.com");
+        String authorization = bearer(user);
+        UUID operationId = UUID.randomUUID();
+        var ready = new CountDownLatch(2);
+        var start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            var addCheck = (java.util.concurrent.Callable<Integer>) () -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Concurrent test did not start");
+                return mvc.perform(post("/api/water/checks").header("Authorization", authorization)
+                                .header("Idempotency-Key", operationId.toString())
+                                .contentType(MediaType.APPLICATION_JSON).content("{\"amountMl\":500}"))
+                        .andReturn().getResponse().getStatus();
+            };
+            Future<Integer> first = executor.submit(addCheck);
+            Future<Integer> second = executor.submit(addCheck);
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            assertThat(List.of(first.get(10, TimeUnit.SECONDS), second.get(10, TimeUnit.SECONDS)))
+                    .allMatch(status -> status == 200 || status == 409);
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+        }
+
+        assertThat(waterChecks.findByOperationId(operationId)).isPresent();
+        assertThat(waterChecks.findByUserIdAndCheckDateOrderByCreatedAtAsc(
+                UUID.fromString(user.get("userId").asText()), LocalDate.now(ZoneId.of("America/Sao_Paulo"))))
+                .hasSize(1);
+        mvc.perform(post("/api/water/checks").header("Authorization", authorization)
+                        .header("Idempotency-Key", operationId.toString())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"amountMl\":500}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.checks.length()").value(1));
     }
 
     @Test
@@ -1367,6 +1473,39 @@ class ApiIntegrationTest {
     }
 
     @Test
+    void simultaneousFailedLoginsCannotExceedTheRemainingFailureSlots() throws Exception {
+        String email = "login-race-" + UUID.randomUUID() + "@example.com";
+        register("Login Race User", email);
+        for (int attempt = 0; attempt < 4; attempt++) {
+            mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(new LoginRequest(email, "wrong-password"))))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        var ready = new CountDownLatch(2);
+        var start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            var failedLogin = (java.util.concurrent.Callable<Integer>) () -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Concurrent test did not start");
+                return mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(new LoginRequest(email, "wrong-password"))))
+                        .andReturn().getResponse().getStatus();
+            };
+            Future<Integer> first = executor.submit(failedLogin);
+            Future<Integer> second = executor.submit(failedLogin);
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            assertThat(List.of(first.get(10, TimeUnit.SECONDS), second.get(10, TimeUnit.SECONDS)))
+                    .containsExactlyInAnyOrder(401, 429);
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
     void dietAndHistoryRejectInvertedDateRanges() throws Exception {
         JsonNode owner = register("Date Owner", "dates-" + UUID.randomUUID() + "@example.com");
 
@@ -1437,6 +1576,98 @@ class ApiIntegrationTest {
                         .header("Authorization", bearer(owner)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1));
+    }
+
+    @Test
+    void simultaneousSyncTelemetryRetriesPersistOneErrorEvent() throws Exception {
+        JsonNode owner = register("Sync Telemetry Owner", "sync-telemetry-" + UUID.randomUUID() + "@example.com");
+        String dietId = createDiet(owner, "Sync Telemetry Diet");
+        UUID operationId = UUID.randomUUID();
+        String body = objectMapper.writeValueAsString(Map.of(
+                "operationId", operationId,
+                "dietId", dietId,
+                "phase", "meal-create",
+                "attempt", 1,
+                "durationMs", 100,
+                "httpStatus", 503,
+                "errorType", "network-error"));
+        var ready = new CountDownLatch(2);
+        var start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            var report = (java.util.concurrent.Callable<Integer>) () -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Concurrent test did not start");
+                return mvc.perform(post("/api/telemetry/sync").header("Authorization", bearer(owner))
+                                .contentType(MediaType.APPLICATION_JSON).content(body))
+                        .andReturn().getResponse().getStatus();
+            };
+            Future<Integer> first = executor.submit(report);
+            Future<Integer> second = executor.submit(report);
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            assertThat(List.of(first.get(10, TimeUnit.SECONDS), second.get(10, TimeUnit.SECONDS)))
+                    .containsOnly(204);
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+        }
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from sync_error_events where operation_id = ? and phase = ? and attempt = ?",
+                Integer.class, operationId, "meal-create", 1)).isEqualTo(1);
+    }
+
+    @Test
+    void simultaneousDietCreationWithSameKeyCreatesOneDietAndCanBeReplayed() throws Exception {
+        JsonNode owner = register("Diet Idempotency Owner", "diet-idempotency-" + UUID.randomUUID() + "@example.com");
+        UUID operationId = UUID.randomUUID();
+        String body = """
+                {"name":"Idempotent Diet","startDate":"2026-09-01","endDate":"2026-09-30","competitiveMode":false}
+                """;
+        var ready = new CountDownLatch(2);
+        var start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        List<MvcResult> results;
+        try {
+            var create = (java.util.concurrent.Callable<MvcResult>) () -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Concurrent test did not start");
+                return mvc.perform(post("/api/diets")
+                                .header("Authorization", bearer(owner))
+                                .header("Idempotency-Key", operationId.toString())
+                                .contentType(MediaType.APPLICATION_JSON).content(body))
+                        .andReturn();
+            };
+            Future<MvcResult> first = executor.submit(create);
+            Future<MvcResult> second = executor.submit(create);
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            results = List.of(first.get(10, TimeUnit.SECONDS), second.get(10, TimeUnit.SECONDS));
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+        }
+
+        assertThat(results).allMatch(result -> result.getResponse().getStatus() == 201
+                || result.getResponse().getStatus() == 409);
+        String replay = mvc.perform(post("/api/diets")
+                        .header("Authorization", bearer(owner))
+                        .header("Idempotency-Key", operationId.toString())
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        String dietId = objectMapper.readTree(replay).get("id").asText();
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from diets where creation_operation_id = ?", Integer.class, operationId))
+                .isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from diet_members where diet_id = ? and role = 'OWNER'", Integer.class,
+                UUID.fromString(dietId))).isEqualTo(1);
+        mvc.perform(post("/api/diets")
+                        .header("Authorization", bearer(owner))
+                        .header("Idempotency-Key", operationId.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body.replace("Idempotent Diet", "Different Diet")))
+                .andExpect(status().isConflict());
     }
 
     @Test
@@ -2130,6 +2361,110 @@ class ApiIntegrationTest {
     }
 
     @Test
+    void nudgeSendConcurrentWithPreferenceDisableIsSerializedByRecipient() throws Exception {
+        String ownerEmail = "nudge-pref-owner-" + UUID.randomUUID() + "@example.com";
+        String recipientEmail = "nudge-pref-recipient-" + UUID.randomUUID() + "@example.com";
+        JsonNode owner = register("Nudge Preference Owner", ownerEmail);
+        JsonNode recipient = register("Nudge Preference Recipient", recipientEmail);
+        LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+        String dietJson = mvc.perform(post("/api/diets")
+                        .header("Authorization", bearer(owner)).contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("name", "Nudge Preference Diet",
+                                "startDate", today.minusDays(1).toString(), "endDate", today.plusDays(2).toString()))))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        String dietId = objectMapper.readTree(dietJson).get("id").asText();
+        joinDiet(owner, recipient, dietId, recipientEmail);
+        String nudgeBody = objectMapper.writeValueAsString(Map.of(
+                "recipientId", recipient.get("userId").asText(), "mealType", "LUNCH"));
+        var ready = new CountDownLatch(2);
+        var start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            var sendNudge = (java.util.concurrent.Callable<Integer>) () -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Concurrent test did not start");
+                return mvc.perform(post("/api/diets/{dietId}/meal-nudges", dietId)
+                                .header("Authorization", bearer(owner)).contentType(MediaType.APPLICATION_JSON)
+                                .content(nudgeBody))
+                        .andReturn().getResponse().getStatus();
+            };
+            var disablePreference = (java.util.concurrent.Callable<Integer>) () -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Concurrent test did not start");
+                return mvc.perform(put("/api/profile/meal-nudges")
+                                .header("Authorization", bearer(recipient)).contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"enabled\":false}"))
+                        .andReturn().getResponse().getStatus();
+            };
+            Future<Integer> send = executor.submit(sendNudge);
+            Future<Integer> disable = executor.submit(disablePreference);
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            int sendStatus = send.get(10, TimeUnit.SECONDS);
+            assertThat(disable.get(10, TimeUnit.SECONDS)).isEqualTo(200);
+            assertThat(sendStatus).isIn(201, 409);
+            assertThat(users.findById(UUID.fromString(recipient.get("userId").asText()))
+                    .orElseThrow().isReceivingMealNudges()).isFalse();
+            assertThat(jdbcTemplate.queryForObject(
+                    "select count(*) from meal_nudges where diet_id = ? and recipient_id = ? and meal_type = 'LUNCH'",
+                    Integer.class, UUID.fromString(dietId), UUID.fromString(recipient.get("userId").asText())))
+                    .isEqualTo(sendStatus == 201 ? 1 : 0);
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void concurrentNudgeAndPreferenceDisableRespectTheSerializedPreference() throws Exception {
+        String ownerEmail = "nudge-preference-owner-" + UUID.randomUUID() + "@example.com";
+        String recipientEmail = "nudge-preference-recipient-" + UUID.randomUUID() + "@example.com";
+        JsonNode owner = register("Nudge Preference Owner", ownerEmail);
+        JsonNode recipient = register("Nudge Preference Recipient", recipientEmail);
+        String dietId = createDiet(owner, "Nudge Preference Diet");
+        joinDiet(owner, recipient, dietId, recipientEmail);
+        String sendBody = objectMapper.writeValueAsString(Map.of(
+                "recipientId", recipient.get("userId").asText(), "mealType", "LUNCH"));
+        var ready = new CountDownLatch(2);
+        var start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            var sendNudge = (java.util.concurrent.Callable<Integer>) () -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Concurrent test did not start");
+                return mvc.perform(post("/api/diets/{dietId}/meal-nudges", dietId)
+                                .header("Authorization", bearer(owner)).contentType(MediaType.APPLICATION_JSON)
+                                .content(sendBody))
+                        .andReturn().getResponse().getStatus();
+            };
+            var disablePreference = (java.util.concurrent.Callable<Integer>) () -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Concurrent test did not start");
+                return mvc.perform(put("/api/profile/meal-nudges")
+                                .header("Authorization", bearer(recipient)).contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"enabled\":false}"))
+                        .andReturn().getResponse().getStatus();
+            };
+            Future<Integer> send = executor.submit(sendNudge);
+            Future<Integer> disable = executor.submit(disablePreference);
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            int sendStatus = send.get(10, TimeUnit.SECONDS);
+            assertThat(disable.get(10, TimeUnit.SECONDS)).isEqualTo(200);
+            assertThat(sendStatus).isIn(201, 409);
+            assertThat(users.findById(UUID.fromString(recipient.get("userId").asText()))
+                    .orElseThrow().isReceivingMealNudges()).isFalse();
+            assertThat(jdbcTemplate.queryForObject(
+                    "select count(*) from meal_nudges where diet_id = ? and recipient_id = ? and meal_type = 'LUNCH'",
+                    Integer.class, UUID.fromString(dietId), UUID.fromString(recipient.get("userId").asText())))
+                    .isEqualTo(sendStatus == 201 ? 1 : 0);
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
     void commentNotificationsAreHiddenAfterMealAuthorLeavesDiet() throws Exception {
         String authorEmail = "former-author-" + UUID.randomUUID() + "@example.com";
         String commenterEmail = "remaining-commenter-" + UUID.randomUUID() + "@example.com";
@@ -2161,6 +2496,49 @@ class ApiIntegrationTest {
         mvc.perform(put("/api/notifications/{id}/read", notificationId)
                         .header("Authorization", bearer(author)))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void simultaneousCommentRetriesWithSameKeyCreateOneCommentAndNotification() throws Exception {
+        String ownerEmail = "comment-idempotency-owner-" + UUID.randomUUID() + "@example.com";
+        String commenterEmail = "comment-idempotency-member-" + UUID.randomUUID() + "@example.com";
+        JsonNode owner = register("Comment Idempotency Owner", ownerEmail);
+        JsonNode commenter = register("Comment Idempotency Member", commenterEmail);
+        String dietId = createDiet(owner, "Comment Idempotency Diet");
+        joinDiet(owner, commenter, dietId, commenterEmail);
+        String mealId = createMeal(owner, dietId, "Meal for one comment");
+        UUID operationId = UUID.randomUUID();
+        String authorization = bearer(commenter);
+        String body = objectMapper.writeValueAsString(Map.of("content", "One logical comment"));
+        var ready = new CountDownLatch(2);
+        var start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            var createComment = (java.util.concurrent.Callable<Integer>) () -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Concurrent test did not start");
+                return mvc.perform(post("/api/diets/{dietId}/meals/{mealId}/comments", dietId, mealId)
+                                .header("Authorization", authorization)
+                                .header("Idempotency-Key", operationId.toString())
+                                .contentType(MediaType.APPLICATION_JSON).content(body))
+                        .andReturn().getResponse().getStatus();
+            };
+            Future<Integer> first = executor.submit(createComment);
+            Future<Integer> second = executor.submit(createComment);
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            assertThat(List.of(first.get(10, TimeUnit.SECONDS), second.get(10, TimeUnit.SECONDS)))
+                    .allMatch(status -> status == 201 || status == 409);
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+        }
+
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from meal_comments where operation_id = ?", Integer.class, operationId)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from notifications where comment_id in " +
+                        "(select id from meal_comments where operation_id = ?)", Integer.class, operationId)).isEqualTo(1);
     }
 
     @Test
@@ -2536,6 +2914,50 @@ class ApiIntegrationTest {
     }
 
     @Test
+    void concurrentInvitationLinkCreationWithSameKeyReturnsTheSameActiveLink() throws Exception {
+        JsonNode owner = register("Link Idempotency Owner", "link-idempotency-" + UUID.randomUUID() + "@example.com");
+        String dietId = createDiet(owner, "Link Idempotency Diet");
+        UUID operationId = UUID.randomUUID();
+        var ready = new CountDownLatch(2);
+        var start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        List<String> bodies;
+        try {
+            var createLink = (java.util.concurrent.Callable<MvcResult>) () -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Concurrent test did not start");
+                return mvc.perform(post("/api/diets/{dietId}/invitation-link", dietId)
+                                .header("Authorization", bearer(owner))
+                                .header("Idempotency-Key", operationId.toString()))
+                        .andReturn();
+            };
+            Future<MvcResult> first = executor.submit(createLink);
+            Future<MvcResult> second = executor.submit(createLink);
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            MvcResult firstResult = first.get(10, TimeUnit.SECONDS);
+            MvcResult secondResult = second.get(10, TimeUnit.SECONDS);
+            assertThat(List.of(firstResult.getResponse().getStatus(), secondResult.getResponse().getStatus()))
+                    .containsOnly(201);
+            bodies = List.of(firstResult.getResponse().getContentAsString(),
+                    secondResult.getResponse().getContentAsString());
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+        }
+
+        String firstToken = objectMapper.readTree(bodies.get(0)).get("token").asText();
+        String secondToken = objectMapper.readTree(bodies.get(1)).get("token").asText();
+        assertThat(secondToken).isEqualTo(firstToken);
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from diet_invitation_links where diet_id = ? and revoked_at is null",
+                Integer.class, UUID.fromString(dietId))).isEqualTo(1);
+        mvc.perform(get("/api/invitation-links/{token}", firstToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.dietId").value(dietId));
+    }
+
+    @Test
     void memberLeavesWithoutDeletingMealHistoryOrAuthorship() throws Exception {
         String memberEmail = "leaving-member-" + UUID.randomUUID() + "@example.com";
         JsonNode owner = register("Leave Owner", "leave-owner-" + UUID.randomUUID() + "@example.com");
@@ -2663,6 +3085,16 @@ class ApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(response);
+    }
+
+    private MockHttpServletRequestBuilder post(String uriTemplate, Object... uriVariables) {
+        return org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(uriTemplate, uriVariables)
+                .with(request -> {
+                    if (request.getHeader("Idempotency-Key") == null) {
+                        request.addHeader("Idempotency-Key", UUID.randomUUID().toString());
+                    }
+                    return request;
+                });
     }
 
     private JsonNode login(String email, String password) throws Exception {

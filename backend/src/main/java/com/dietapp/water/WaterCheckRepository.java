@@ -6,9 +6,12 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface WaterCheckRepository extends JpaRepository<WaterCheck, UUID> {
+    Optional<WaterCheck> findByOperationId(UUID operationId);
+
     boolean existsByUserId(UUID userId);
 
     boolean existsByUserIdAndCheckDate(UUID userId, LocalDate checkDate);
