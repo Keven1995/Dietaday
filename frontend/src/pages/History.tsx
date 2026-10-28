@@ -378,17 +378,17 @@ export function History() {
                        {floatingReaction?.mealId === meal.id && <FloatingEmoji emoji={floatingReaction.emoji} onComplete={() => setFloatingReaction(null)} />}
                       <button type="button" className="meal-comments-button" disabled={Boolean(meal.syncStatus)} aria-label={`Abrir comentários, ${mealCommentCount(meal)} ${mealCommentCount(meal) === 1 ? 'comentário' : 'comentários'}`} onClick={() => setCommentsMealId(meal.id)}><MessageCircle /><b>{mealCommentCount(meal)}</b></button>
                     </div>
-                    {shownSocialHintMeal?.id === meal.id && <FeatureHint
-                      title="Converse sobre esta refeição"
-                      description="Você pode reagir ou deixar um comentário nesta refeição."
-                      actionLabel="Entendi"
-                      onVisible={featureDiscovery.onVisible}
-                      onAction={featureDiscovery.onClicked}
-                      onDismiss={featureDiscovery.onDismissed}
-                    />}
-                    {pickerMealId === meal.id && <ReactionPicker onClose={() => setPickerMealId(null)} onSelect={(emoji) => void react(meal, emoji)} />}
+                     {pickerMealId === meal.id && <ReactionPicker onClose={() => setPickerMealId(null)} onSelect={(emoji) => void react(meal, emoji)} />}
+                   </div>
                   </div>
-                 </div>
+                  {shownSocialHintMeal?.id === meal.id && <FeatureHint
+                    title="Converse sobre esta refeição"
+                    description="Você pode reagir ou deixar um comentário nesta refeição."
+                    actionLabel="Entendi"
+                    onVisible={featureDiscovery.onVisible}
+                    onAction={featureDiscovery.onClicked}
+                    onDismiss={featureDiscovery.onDismissed}
+                  />}
                 </AnimatedCard>
               </article>
             )

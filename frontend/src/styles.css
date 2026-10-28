@@ -216,6 +216,9 @@ label, .field-label { display: grid; gap: 7px; color: #34433f; font-size: .86rem
 .meal-content { min-width: 0; }
 .first-meal-guidance { margin: 0 0 13px; padding: 11px 13px; border-left: 3px solid var(--orange); border-radius: 0 11px 11px 0; background: #fff4ed; color: #69584f; font-size: .82rem; line-height: 1.5; }
 .feature-hint { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; margin: 20px 0; padding: 18px; border: 1px solid var(--line); border-radius: 17px; background: #f7f8f2; }
+.feature-hint-copy { min-width: 0; }
+.feature-hint-actions { min-width: 0; }
+.timeline-card-motion > .feature-hint { width: 100%; min-width: 0; margin: 0 0 16px; }
 .feature-hint h2 { margin: 0 0 5px; color: var(--green); font-size: 1.05rem; }
 .feature-hint p { margin: 0; color: var(--muted); font-size: .82rem; line-height: 1.5; }
 .feature-hint-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
