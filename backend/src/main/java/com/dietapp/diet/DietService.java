@@ -122,11 +122,14 @@ public class DietService {
     }
 
     private Diet requireOwner(UUID dietId) {
-        DietMember membership = requireMembership(dietId);
+        Diet diet = diets.findForUpdateById(dietId)
+                .orElseThrow(() -> new NotFoundException("Diet not found"));
+        DietMember membership = members.findByDietIdAndUserId(dietId, currentUser.id())
+                .orElseThrow(() -> new NotFoundException("Diet not found"));
         if (membership.getRole() != DietMember.Role.OWNER) {
             throw new ForbiddenException("Only the diet owner can perform this action");
         }
-        return membership.getDiet();
+        return diet;
     }
 
     private DietMember requireMembership(UUID dietId) {

@@ -13,6 +13,16 @@ import org.springframework.data.repository.query.Param;
 public interface RefreshTokenRepository extends JpaRepository<RefreshToken, UUID> {
     Optional<RefreshToken> findByTokenHash(String tokenHash);
 
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query(value = "UPDATE refresh_tokens SET last_used_at = :now, revoked_at = :now " +
+            "WHERE token_hash = :tokenHash AND revoked_at IS NULL AND expires_at > :now", nativeQuery = true)
+    int rotateIfActive(@Param("tokenHash") String tokenHash, @Param("now") Instant now);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query(value = "UPDATE refresh_tokens SET revoked_at = :now " +
+            "WHERE token_hash = :tokenHash AND revoked_at IS NULL AND expires_at > :now", nativeQuery = true)
+    int revokeIfActive(@Param("tokenHash") String tokenHash, @Param("now") Instant now);
+
     long deleteByExpiresAtBefore(Instant cutoff);
 
     List<RefreshToken> findByUserIdOrderByCreatedAtDesc(UUID userId);

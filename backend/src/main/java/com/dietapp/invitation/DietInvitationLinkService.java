@@ -5,6 +5,7 @@ import com.dietapp.common.ForbiddenException;
 import com.dietapp.common.NotFoundException;
 import com.dietapp.diet.DietMember;
 import com.dietapp.diet.DietMemberRepository;
+import com.dietapp.diet.DietRepository;
 import com.dietapp.security.CurrentUser;
 import com.dietapp.security.SecurityAuditService;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -31,15 +32,17 @@ public class DietInvitationLinkService {
     private final DietInvitationLinkRepository links;
     private final InvitationRepository invitations;
     private final DietMemberRepository members;
+    private final DietRepository diets;
     private final CurrentUser currentUser;
     private final SecurityAuditService audit;
 
     public DietInvitationLinkService(DietInvitationLinkRepository links, InvitationRepository invitations,
-                                     DietMemberRepository members,
+                                     DietMemberRepository members, DietRepository diets,
                                      CurrentUser currentUser, SecurityAuditService audit) {
         this.links = links;
         this.invitations = invitations;
         this.members = members;
+        this.diets = diets;
         this.currentUser = currentUser;
         this.audit = audit;
     }
@@ -47,6 +50,8 @@ public class DietInvitationLinkService {
     @Transactional
     public CreatedDietInvitationLink create(UUID dietId) {
         var actor = currentUser.require();
+        diets.findForUpdateById(dietId)
+                .orElseThrow(() -> new NotFoundException("Diet not found"));
         var ownerMembership = requireOwnerMembership(dietId, actor.getId());
         Instant now = Instant.now();
         links.findAllByDietIdAndRevokedAtIsNull(dietId).forEach(link -> link.revoke(now));
@@ -67,6 +72,8 @@ public class DietInvitationLinkService {
     @Transactional
     public void revoke(UUID dietId) {
         var actor = currentUser.require();
+        diets.findForUpdateById(dietId)
+                .orElseThrow(() -> new NotFoundException("Diet not found"));
         requireOwnerMembership(dietId, actor.getId());
         Instant now = Instant.now();
         var activeLinks = links.findAllByDietIdAndRevokedAtIsNull(dietId);
@@ -87,13 +94,17 @@ public class DietInvitationLinkService {
 
     @Transactional
     public UUID accept(String token) {
+        DietInvitationLink observed = links.findByTokenHashAndRevokedAtIsNull(hashToken(token))
+                .orElseThrow(this::invalidLink);
+        UUID dietId = observed.getDiet().getId();
+        diets.findForUpdateById(dietId).orElseThrow(this::invalidLink);
         DietInvitationLink link = links.findForUpdateByTokenHashAndRevokedAtIsNull(hashToken(token))
                 .orElseThrow(this::invalidLink);
         Instant now = Instant.now();
         if (link.isExpired(now)) throw invalidLink();
 
         var user = currentUser.require();
-        UUID dietId = link.getDiet().getId();
+        dietId = link.getDiet().getId();
         if (members.existsByDietIdAndUserId(dietId, user.getId())) {
             throw new ConflictException("You are already a member of this diet");
         }

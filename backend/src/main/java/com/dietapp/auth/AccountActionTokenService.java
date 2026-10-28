@@ -1,6 +1,7 @@
 package com.dietapp.auth;
 
 import com.dietapp.user.User;
+import com.dietapp.user.UserRepository;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -19,9 +20,11 @@ public class AccountActionTokenService {
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final String INVALID_TOKEN = "Invalid or expired account token";
     private final AccountActionTokenRepository tokens;
+    private final UserRepository users;
 
-    public AccountActionTokenService(AccountActionTokenRepository tokens) {
+    public AccountActionTokenService(AccountActionTokenRepository tokens, UserRepository users) {
         this.tokens = tokens;
+        this.users = users;
     }
 
     @Transactional
@@ -38,13 +41,15 @@ public class AccountActionTokenService {
         if (value == null || value.isBlank()) {
             throw new BadCredentialsException(INVALID_TOKEN);
         }
-        AccountActionToken token = tokens.findByTokenHashAndType(hash(value), type)
-                .orElseThrow(() -> new BadCredentialsException(INVALID_TOKEN));
-        if (!token.isActive(Instant.now())) {
+        String tokenHash = hash(value);
+        Instant now = Instant.now();
+        if (tokens.consumeIfActive(tokenHash, type, now) != 1) {
             throw new BadCredentialsException(INVALID_TOKEN);
         }
-        token.use();
-        return token.getUser();
+        AccountActionToken consumed = tokens.findByTokenHashAndType(tokenHash, type)
+                .orElseThrow(() -> new BadCredentialsException(INVALID_TOKEN));
+        return users.findForUpdateById(consumed.getUser().getId())
+                .orElseThrow(() -> new BadCredentialsException(INVALID_TOKEN));
     }
 
     @Scheduled(cron = "0 35 3 * * *", zone = "America/Sao_Paulo")

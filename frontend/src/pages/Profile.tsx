@@ -55,6 +55,7 @@ export function Profile() {
   const [mealNudgesMessage, setMealNudgesMessage] = useState('')
   const [mealNudgesError, setMealNudgesError] = useState('')
   const [verificationMessage, setVerificationMessage] = useState('')
+  const [verificationLoading, setVerificationLoading] = useState(false)
   const [bmiInfoOpen, setBmiInfoOpen] = useState(false)
   const [goalReviewOpen, setGoalReviewOpen] = useState(false)
   const [goalReviewDeferred, setGoalReviewDeferred] = useState(false)
@@ -162,11 +163,15 @@ export function Profile() {
   }
 
   async function resendVerification() {
+    if (!token || verificationLoading) return
+    setVerificationLoading(true)
     try {
       await api('/auth/verification/resend', { method: 'POST', token })
       setVerificationMessage('Se o envio estiver configurado, um novo link será enviado.')
     } catch (requestError) {
       setVerificationMessage(getErrorMessage(requestError, 'Não foi possível solicitar o e-mail.'))
+    } finally {
+      setVerificationLoading(false)
     }
   }
 
@@ -255,7 +260,7 @@ export function Profile() {
       {user?.emailVerified === false && <section className="card profile-form">
         <h2><Shield /> E-mail não verificado</h2>
         <p>Confirme seu e-mail para proteger melhor sua conta.</p>
-        <Button type="button" className="outline" onClick={() => void resendVerification()}>Reenviar confirmação</Button>
+        <Button type="button" className="outline" loading={verificationLoading} onClick={() => void resendVerification()}>Reenviar confirmação</Button>
         {verificationMessage && <div className="success-message" role="status">{verificationMessage}</div>}
       </section>}
       {hasPendingGoalReview && !goalReviewOpen && (

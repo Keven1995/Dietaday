@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Button, PageTitle } from '../components/Ui'
 import { api, getErrorMessage } from '../lib/api'
@@ -61,17 +61,26 @@ export function VerifyEmailPage() {
   const token = params.get('token')
   const [message, setMessage] = useState('Confirmando seu e-mail...')
   const [error, setError] = useState('')
+  const requestRef = useRef<{ token: string; promise: Promise<void> } | null>(null)
 
   useEffect(() => {
     if (!token) {
       setError('Link de verificação inválido.')
       return
     }
-    void api('/auth/verify-email', { method: 'POST', body: JSON.stringify({ token }) })
-      .then(() => setMessage('E-mail confirmado com sucesso.'))
+    let active = true
+    if (requestRef.current?.token !== token) {
+      requestRef.current = {
+        token,
+        promise: api<void>('/auth/verify-email', { method: 'POST', body: JSON.stringify({ token }) }),
+      }
+    }
+    void requestRef.current.promise
+      .then(() => { if (active) setMessage('E-mail confirmado com sucesso.') })
       .catch((requestError) => {
-        setError(getErrorMessage(requestError, 'Não foi possível confirmar o e-mail.'))
+        if (active) setError(getErrorMessage(requestError, 'Não foi possível confirmar o e-mail.'))
       })
+    return () => { active = false }
   }, [token])
 
   return (

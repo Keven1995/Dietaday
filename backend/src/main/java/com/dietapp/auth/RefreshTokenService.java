@@ -41,7 +41,7 @@ public class RefreshTokenService {
 
     @Transactional
     public IssuedToken issue(UUID userId, String userAgent, String ipAddress) {
-        User user = users.findById(userId)
+        User user = users.findForUpdateById(userId)
                 .orElseThrow(() -> new BadCredentialsException(INVALID_REFRESH_TOKEN));
         byte[] raw = new byte[32];
         RANDOM.nextBytes(raw);
@@ -62,14 +62,15 @@ public class RefreshTokenService {
         if (value == null || value.isBlank()) {
             throw new BadCredentialsException(INVALID_REFRESH_TOKEN);
         }
-        RefreshToken current = tokens.findByTokenHash(hash(value))
+        RefreshToken observed = tokens.findByTokenHash(hash(value))
                 .orElseThrow(() -> new BadCredentialsException(INVALID_REFRESH_TOKEN));
-        if (!current.isActive(Instant.now())) {
+        User user = users.findForUpdateById(observed.getUser().getId())
+                .orElseThrow(() -> new BadCredentialsException(INVALID_REFRESH_TOKEN));
+        Instant now = Instant.now();
+        if (tokens.rotateIfActive(hash(value), now) != 1) {
             throw new BadCredentialsException(INVALID_REFRESH_TOKEN);
         }
-        current.markUsed();
-        current.revoke();
-        return issue(current.getUser().getId(), userAgent, ipAddress);
+        return issue(user.getId(), userAgent, ipAddress);
     }
 
     @Transactional
@@ -77,18 +78,26 @@ public class RefreshTokenService {
         if (value == null || value.isBlank()) {
             return null;
         }
-        var token = tokens.findByTokenHash(hash(value));
-        token.ifPresent(RefreshToken::revoke);
-        return token.map(refreshToken -> refreshToken.getUser().getId()).orElse(null);
+        var observed = tokens.findByTokenHash(hash(value));
+        if (observed.isEmpty()) return null;
+        UUID userId = observed.get().getUser().getId();
+        users.findForUpdateById(userId)
+                .orElseThrow(() -> new BadCredentialsException(INVALID_REFRESH_TOKEN));
+        tokens.revokeIfActive(hash(value), Instant.now());
+        return userId;
     }
 
     @Transactional
     public int revokeAll(UUID userId) {
+        users.findForUpdateById(userId)
+                .orElseThrow(() -> new BadCredentialsException(INVALID_REFRESH_TOKEN));
         return tokens.revokeAllByUserId(userId);
     }
 
     @Transactional
     public int revokeOne(UUID userId, UUID sessionId) {
+        users.findForUpdateById(userId)
+                .orElseThrow(() -> new BadCredentialsException(INVALID_REFRESH_TOKEN));
         return tokens.revokeByIdAndUserId(sessionId, userId);
     }
 
