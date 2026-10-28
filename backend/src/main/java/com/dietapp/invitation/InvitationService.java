@@ -6,6 +6,7 @@ import com.dietapp.common.NotFoundException;
 import com.dietapp.diet.Diet;
 import com.dietapp.diet.DietMember;
 import com.dietapp.diet.DietMemberRepository;
+import com.dietapp.diet.DietRepository;
 import com.dietapp.security.CurrentUser;
 import com.dietapp.security.SecurityAuditService;
 import com.dietapp.user.User;
@@ -25,20 +26,25 @@ public class InvitationService {
     private final InvitationRepository invitations;
     private final DietMemberRepository members;
     private final UserRepository users;
+    private final DietRepository diets;
     private final CurrentUser currentUser;
     private final SecurityAuditService audit;
 
     public InvitationService(InvitationRepository invitations, DietMemberRepository members,
-                             UserRepository users, CurrentUser currentUser, SecurityAuditService audit) {
+                             UserRepository users, DietRepository diets,
+                             CurrentUser currentUser, SecurityAuditService audit) {
         this.invitations = invitations;
         this.members = members;
         this.users = users;
+        this.diets = diets;
         this.currentUser = currentUser;
         this.audit = audit;
     }
 
     @Transactional
     public Invitation create(UUID dietId, String email) {
+        diets.findForUpdateById(dietId)
+                .orElseThrow(() -> new NotFoundException("Diet not found"));
         User inviter = currentUser.require();
         DietMember ownerMembership = members.findByDietIdAndUserId(dietId, inviter.getId())
                 .orElseThrow(() -> new NotFoundException("Diet not found"));
@@ -73,6 +79,10 @@ public class InvitationService {
 
     @Transactional
     public void accept(UUID invitationId) {
+        Invitation observed = invitations.findById(invitationId)
+                .orElseThrow(() -> new NotFoundException("Invitation not found"));
+        diets.findForUpdateById(observed.getDiet().getId())
+                .orElseThrow(() -> new NotFoundException("Invitation not found"));
         Invitation invitation = requirePendingForCurrentUser(invitationId);
         try {
             members.saveAndFlush(new DietMember(

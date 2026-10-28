@@ -10,6 +10,7 @@ import com.dietapp.meal.MealRepository;
 import com.dietapp.security.CurrentUser;
 import com.dietapp.security.SecurityAuditService;
 import com.dietapp.user.User;
+import com.dietapp.user.UserRepository;
 import com.dietapp.water.PushNotificationService;
 import com.dietapp.water.PushSubscriptionRepository;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -32,6 +33,7 @@ public class MealNudgeService {
     private final MealRepository meals;
     private final DietService diets;
     private final DietMemberRepository members;
+    private final UserRepository users;
     private final CurrentUser currentUser;
     private final SecurityAuditService audit;
     private final PushSubscriptionRepository pushSubscriptions;
@@ -41,11 +43,12 @@ public class MealNudgeService {
     public MealNudgeService(MealNudgeRepository nudges, MealRepository meals, DietService diets,
                             DietMemberRepository members, CurrentUser currentUser,
                             SecurityAuditService audit, PushSubscriptionRepository pushSubscriptions,
-                            PushNotificationService push, Clock clock) {
+                            PushNotificationService push, Clock clock, UserRepository users) {
         this.nudges = nudges;
         this.meals = meals;
         this.diets = diets;
         this.members = members;
+        this.users = users;
         this.currentUser = currentUser;
         this.audit = audit;
         this.pushSubscriptions = pushSubscriptions;
@@ -111,7 +114,8 @@ public class MealNudgeService {
         }
         DietMember recipientMembership = members.findByDietIdAndUserId(dietId, request.recipientId())
                 .orElseThrow(() -> new NotFoundException("Diet member not found"));
-        User recipient = recipientMembership.getUser();
+        User recipient = users.findForUpdateById(recipientMembership.getUser().getId())
+                .orElseThrow(() -> new NotFoundException("Diet member not found"));
         MealNudgeType mealType = MealNudgeType.fromApiValue(request.mealType());
         LocalDate today = LocalDate.now(clock);
 

@@ -3,6 +3,8 @@ package com.dietapp;
 import com.dietapp.user.User;
 import com.dietapp.user.UserRepository;
 import com.dietapp.user.UserSex;
+import com.dietapp.auth.AccountActionToken;
+import com.dietapp.auth.AccountActionTokenService;
 import com.dietapp.diet.DietRepository;
 import com.dietapp.ranking.RankingPointEventRepository;
 import com.dietapp.ranking.RankingPointEvent;
@@ -30,6 +32,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.time.Duration;
 import java.sql.Timestamp;
 import java.util.HexFormat;
 import java.util.Map;
@@ -61,6 +64,7 @@ class ApiIntegrationTest {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper objectMapper;
     @Autowired UserRepository users;
+    @Autowired AccountActionTokenService accountActionTokens;
     @Autowired DietRepository diets;
     @Autowired PasswordEncoder passwordEncoder;
     @Autowired RankingPointEventRepository rankingEvents;
@@ -1231,6 +1235,119 @@ class ApiIntegrationTest {
     }
 
     @Test
+    void simultaneousRefreshRequestsRotateOneTokenOnlyOnce() throws Exception {
+        String email = "refresh-race-" + UUID.randomUUID() + "@example.com";
+        MvcResult registration = mvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new RegisterRequest("Refresh Race", email,
+                                "password123", "MALE", LocalDate.of(1990, 1, 1)))))
+                .andExpect(status().isOk()).andReturn();
+        var cookie = registration.getResponse().getCookie("dietaday_refresh");
+        UUID userId = UUID.fromString(objectMapper.readTree(registration.getResponse().getContentAsString())
+                .get("userId").asText());
+        var ready = new CountDownLatch(2);
+        var start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            var rotate = (java.util.concurrent.Callable<Integer>) () -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Concurrent test did not start");
+                return mvc.perform(post("/api/auth/refresh").cookie(cookie)
+                                .header("X-Requested-With", "Dietaday"))
+                        .andReturn().getResponse().getStatus();
+            };
+            Future<Integer> first = executor.submit(rotate);
+            Future<Integer> second = executor.submit(rotate);
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+
+            assertThat(List.of(first.get(10, TimeUnit.SECONDS), second.get(10, TimeUnit.SECONDS)))
+                    .containsExactlyInAnyOrder(200, 401);
+            assertThat(jdbcTemplate.queryForObject(
+                    "select count(*) from refresh_tokens where user_id = ? and revoked_at is null and expires_at > current_timestamp",
+                    Integer.class, userId)).isEqualTo(1);
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void simultaneousPasswordResetRequestsConsumeTheActionTokenOnce() throws Exception {
+        String email = "reset-race-" + UUID.randomUUID() + "@example.com";
+        JsonNode registered = register("Reset Race", email);
+        User user = users.findById(UUID.fromString(registered.get("userId").asText())).orElseThrow();
+        String token = accountActionTokens.issue(user, AccountActionToken.Type.PASSWORD_RESET,
+                Duration.ofMinutes(10)).value();
+        String body = objectMapper.writeValueAsString(Map.of("token", token, "password", "new-password-123"));
+        var ready = new CountDownLatch(2);
+        var start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            var reset = (java.util.concurrent.Callable<Integer>) () -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Concurrent test did not start");
+                return mvc.perform(post("/api/auth/password-reset/confirm")
+                                .contentType(MediaType.APPLICATION_JSON).content(body))
+                        .andReturn().getResponse().getStatus();
+            };
+            Future<Integer> first = executor.submit(reset);
+            Future<Integer> second = executor.submit(reset);
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+
+            assertThat(List.of(first.get(10, TimeUnit.SECONDS), second.get(10, TimeUnit.SECONDS)))
+                    .containsExactlyInAnyOrder(204, 401);
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void profileUpdateConcurrentWithWaterGoalChangePreservesBothWrites() throws Exception {
+        JsonNode registered = register("Profile Race User", "profile-race-" + UUID.randomUUID() + "@example.com");
+        String authorization = bearer(registered);
+        var ready = new CountDownLatch(2);
+        var start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            var updateProfile = (java.util.concurrent.Callable<Integer>) () -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Concurrent test did not start");
+                return mvc.perform(put("/api/profile").header("Authorization", authorization)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                        {"fullName":"Profile Race Updated","weightKg":70.0,"heightCm":175,
+                                         "sex":"MALE","birthDate":"1990-01-01"}
+                                        """))
+                        .andReturn().getResponse().getStatus();
+            };
+            var updateWaterGoal = (java.util.concurrent.Callable<Integer>) () -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Concurrent test did not start");
+                return mvc.perform(put("/api/water/goal").header("Authorization", authorization)
+                                .contentType(MediaType.APPLICATION_JSON).content("{\"goalMl\":2500}"))
+                        .andReturn().getResponse().getStatus();
+            };
+            Future<Integer> profile = executor.submit(updateProfile);
+            Future<Integer> goal = executor.submit(updateWaterGoal);
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            assertThat(profile.get(10, TimeUnit.SECONDS)).isEqualTo(200);
+            assertThat(goal.get(10, TimeUnit.SECONDS)).isEqualTo(200);
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+        }
+
+        mvc.perform(get("/api/profile").header("Authorization", authorization))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.fullName").value("Profile Race Updated"));
+        mvc.perform(get("/api/water/today").header("Authorization", authorization))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.goalMl").value(2500));
+    }
+
+    @Test
     void loginRejectsUnknownEmailAndWrongPasswordWithoutLeakingWhichCredentialFailed() throws Exception {
         String email = "login-" + UUID.randomUUID() + "@example.com";
         register("Login User", email);
@@ -2215,6 +2332,58 @@ class ApiIntegrationTest {
         mvc.perform(delete("/api/diets/{dietId}/meals/{mealId}", dietId, mealId)
                         .header("Authorization", bearer(member)))
                 .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void simultaneousInviteCreationAndAcceptanceDoNotLeaveAnInvitationForAnExistingMember() throws Exception {
+        String ownerEmail = "invite-race-owner-" + UUID.randomUUID() + "@example.com";
+        String memberEmail = "invite-race-member-" + UUID.randomUUID() + "@example.com";
+        JsonNode owner = register("Invite Race Owner", ownerEmail);
+        JsonNode member = register("Invite Race Member", memberEmail);
+        String dietId = createDiet(owner, "Invite Race Diet");
+        String invitationJson = mvc.perform(post("/api/diets/{id}/invitations", dietId)
+                        .header("Authorization", bearer(owner)).contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new EmailRequest(memberEmail))))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        String invitationId = objectMapper.readTree(invitationJson).get("id").asText();
+        var ready = new CountDownLatch(2);
+        var start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            var createInvitation = (java.util.concurrent.Callable<Integer>) () -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Concurrent test did not start");
+                return mvc.perform(post("/api/diets/{id}/invitations", dietId)
+                                .header("Authorization", bearer(owner)).contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(new EmailRequest(memberEmail))))
+                        .andReturn().getResponse().getStatus();
+            };
+            var acceptInvitation = (java.util.concurrent.Callable<Integer>) () -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Concurrent test did not start");
+                return mvc.perform(post("/api/invitations/{id}/accept", invitationId)
+                                .header("Authorization", bearer(member)))
+                        .andReturn().getResponse().getStatus();
+            };
+            Future<Integer> create = executor.submit(createInvitation);
+            Future<Integer> accept = executor.submit(acceptInvitation);
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+
+            assertThat(create.get(10, TimeUnit.SECONDS)).isEqualTo(409);
+            assertThat(accept.get(10, TimeUnit.SECONDS)).isEqualTo(204);
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+        }
+        UUID dietUuid = UUID.fromString(dietId);
+        UUID memberUuid = UUID.fromString(member.get("userId").asText());
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from diet_members where diet_id = ? and user_id = ?", Integer.class,
+                dietUuid, memberUuid)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from diet_invitations where diet_id = ? and invitee_id = ? and status = 'PENDING'",
+                Integer.class, dietUuid, memberUuid)).isZero();
     }
 
     @Test

@@ -2,6 +2,7 @@ package com.dietapp.user;
 
 import com.dietapp.common.BadRequestException;
 import com.dietapp.common.ConflictException;
+import com.dietapp.diet.DietRepository;
 import com.dietapp.security.CurrentUser;
 import com.dietapp.security.SecurityAuditService;
 import com.dietapp.water.WaterGoalSuggestionService;
@@ -18,16 +19,18 @@ public class ProfileService {
     private final SecurityAuditService audit;
     private final Clock clock;
     private final UserRepository users;
+    private final DietRepository diets;
     private final WaterGoalSuggestionService goalSuggestions;
     private final WaterTrackingService waterTracking;
 
     public ProfileService(CurrentUser currentUser, SecurityAuditService audit, Clock clock,
                           UserRepository users, WaterGoalSuggestionService goalSuggestions,
-                          WaterTrackingService waterTracking) {
+                          WaterTrackingService waterTracking, DietRepository diets) {
         this.currentUser = currentUser;
         this.audit = audit;
         this.clock = clock;
         this.users = users;
+        this.diets = diets;
         this.goalSuggestions = goalSuggestions;
         this.waterTracking = waterTracking;
     }
@@ -39,7 +42,7 @@ public class ProfileService {
 
     @Transactional
     public ProfileResponse update(UpdateProfileRequest request) {
-        User user = currentUser.require();
+        User user = users.findForUpdateById(currentUser.id()).orElseThrow();
         boolean addingFirstBirthDate = user.getBirthDate() == null && request.birthDate() != null;
         if (request.birthDate() != null && request.birthDate().isAfter(LocalDate.now(clock))) {
             throw new BadRequestException("A data de nascimento não pode ser no futuro.");
@@ -57,6 +60,12 @@ public class ProfileService {
 
     @Transactional
     public ProfileResponse decideWaterGoalSuggestion(WaterGoalSuggestionDecisionRequest request) {
+        // Competitive water writes lock diet then user. Keep the same order here
+        // to avoid a user<->diet deadlock while applying the recommendation.
+        if (request.decision() == WaterGoalSuggestionDecisionRequest.Decision.APPLY_RECOMMENDATION
+                && request.dietId() != null) {
+            diets.findForUpdateById(request.dietId());
+        }
         User user = users.findForUpdateById(currentUser.id()).orElseThrow();
         if (user.getWaterGoalSuggestionReviewStatus() != WaterGoalSuggestionReviewStatus.PENDING) {
             return responseFor(user);
@@ -78,7 +87,7 @@ public class ProfileService {
 
     @Transactional
     public ProfileResponse updateMealNudgePreference(MealNudgePreferenceRequest request) {
-        User user = currentUser.require();
+        User user = users.findForUpdateById(currentUser.id()).orElseThrow();
         user.setReceiveMealNudges(request.enabled());
         audit.profileUpdated(user.getId());
         return responseFor(user);

@@ -29,6 +29,11 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Base64;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -70,6 +75,39 @@ class WaterReminderDeliveryProcessorTest {
 
         processor.sendDueReminders(REMINDER_INSTANT, REMINDER_SLOT);
         processor.sendDueReminders(REMINDER_INSTANT, REMINDER_SLOT);
+
+        assertThat(deliveries.existsByUserIdAndReminderDateAndReminderSlot(
+                user.getId(), REMINDER_DATE, REMINDER_SLOT)).isTrue();
+        verify(pushService, times(1)).send(any(Notification.class));
+    }
+
+    @Test
+    void simultaneousProcessorsSendOnlyOneReminderForAUserAndSlot() throws Exception {
+        deliveries.deleteAll();
+        subscriptions.deleteAll();
+        User user = createUser();
+        subscriptions.saveAndFlush(createSubscription(user));
+        PushService pushService = mockPushService(response(201, ""));
+        var ready = new CountDownLatch(2);
+        var start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            var send = (java.util.concurrent.Callable<Void>) () -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Concurrent test did not start");
+                processor.sendDueReminders(REMINDER_INSTANT, REMINDER_SLOT);
+                return null;
+            };
+            Future<Void> first = executor.submit(send);
+            Future<Void> second = executor.submit(send);
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            first.get(10, TimeUnit.SECONDS);
+            second.get(10, TimeUnit.SECONDS);
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+        }
 
         assertThat(deliveries.existsByUserIdAndReminderDateAndReminderSlot(
                 user.getId(), REMINDER_DATE, REMINDER_SLOT)).isTrue();

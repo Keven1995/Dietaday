@@ -8,6 +8,7 @@ import com.dietapp.meal.MealRepository;
 import com.dietapp.security.CurrentUser;
 import com.dietapp.security.SecurityAuditService;
 import com.dietapp.user.User;
+import com.dietapp.user.UserRepository;
 import com.dietapp.user.UserSex;
 import com.dietapp.water.PushNotificationService;
 import com.dietapp.water.PushSubscription;
@@ -46,6 +47,7 @@ class MealNudgeServiceTest {
         MealRepository meals = mock(MealRepository.class);
         DietService diets = mock(DietService.class);
         DietMemberRepository members = mock(DietMemberRepository.class);
+        UserRepository users = mock(UserRepository.class);
         CurrentUser currentUser = mock(CurrentUser.class);
         SecurityAuditService audit = mock(SecurityAuditService.class);
         PushSubscriptionRepository pushSubscriptions = mock(PushSubscriptionRepository.class);
@@ -57,7 +59,7 @@ class MealNudgeServiceTest {
         when(nudges.findSentTypes(dietId, senderId, recipientId, localDate)).thenReturn(List.of());
 
         MealNudgeService service = new MealNudgeService(nudges, meals, diets, members, currentUser, audit,
-                pushSubscriptions, push, clock);
+                pushSubscriptions, push, clock, users);
         MealNudgeEligibilityResponse eligibility = service.eligibility(dietId, recipientId);
 
         assertThat(eligibility.mealDate()).isEqualTo(localDate);
@@ -86,12 +88,14 @@ class MealNudgeServiceTest {
         MealRepository meals = mock(MealRepository.class);
         DietService diets = mock(DietService.class);
         DietMemberRepository members = mock(DietMemberRepository.class);
+        UserRepository users = mock(UserRepository.class);
         CurrentUser currentUser = mock(CurrentUser.class);
         SecurityAuditService audit = mock(SecurityAuditService.class);
         when(currentUser.id()).thenReturn(senderId);
         when(currentUser.require()).thenReturn(sender);
         when(diets.requireMemberForUpdate(dietId)).thenReturn(diet);
         when(members.findByDietIdAndUserId(dietId, recipientId)).thenReturn(Optional.of(recipientMembership));
+        when(users.findForUpdateById(recipientId)).thenReturn(Optional.of(recipient));
         when(meals.existsByDiet_IdAndAuthor_IdAndMealDateAndMealTypeIn(
                 dietId, recipientId, date, MealNudgeType.LUNCH.storedMealTypeValues())).thenReturn(false);
         when(nudges.findByDietIdAndSenderIdAndRecipientIdAndMealDateAndMealType(
@@ -100,7 +104,7 @@ class MealNudgeServiceTest {
         when(pushSubscriptions.findByUserIdAndEnabledTrue(recipientId)).thenReturn(List.of(subscription));
 
         MealNudgeService service = new MealNudgeService(nudges, meals, diets, members, currentUser, audit,
-                pushSubscriptions, push, clock);
+                pushSubscriptions, push, clock, users);
 
         service.send(dietId, new MealNudgeRequest(recipientId, "LUNCH"));
 
