@@ -39,11 +39,12 @@ describe('competitive water endpoints', () => {
   beforeEach(() => apiMock.mockResolvedValue({}))
 
   it('uses the diet-scoped endpoint for competitive checks', async () => {
-    await addWaterCheck('token', 'user-id', 500, 'diet-id')
+    await addWaterCheck('token', 'user-id', 500, 'diet-id', 'operation-1')
 
     expect(apiMock).toHaveBeenCalledWith('/diets/diet-id/water/checks', {
       method: 'POST',
       token: 'token',
+      headers: { 'Idempotency-Key': 'operation-1' },
       body: JSON.stringify({ amountMl: 500 }),
     })
   })

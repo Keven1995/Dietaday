@@ -8,6 +8,10 @@ Authorization: Bearer <jwt>
 
 URL de produção: `https://nutrivia-api.onrender.com/api`.
 
+As operações de criação idempotentes exigem o header `Idempotency-Key` com um UUID. Reenvie
+o mesmo valor ao repetir a mesma operação; reutilizá-lo com outro conteúdo retorna `409 Conflict`.
+Uma nova ação intencional deve receber uma nova chave.
+
 ## Autenticação
 
 ```text
@@ -102,6 +106,8 @@ Uma resposta de dieta inclui `competitiveMode`:
 ```
 
 `competitiveMode` só é definido na criação. Tentativas de alterá-lo depois retornam conflito.
+`POST /diets` exige `Idempotency-Key`; repetir a mesma chave e o mesmo conteúdo retorna a dieta
+criada originalmente, sem criar outra dieta.
 
 ## Refeições
 
@@ -124,6 +130,9 @@ o usuário seja membro da dieta.
 comentou ou reagiu a uma refeição de outro membro dessa dieta. O status considera
 todo o histórico de interações da dieta e exige que o usuário seja membro.
 
+`POST /diets/{dietId}/meals` exige `Idempotency-Key`. A chave deve ser mantida nas tentativas
+de sincronização da mesma refeição; o servidor também valida se o conteúdo reenviado é igual.
+
 Comentários e reações usam os recursos abaixo:
 
 ```text
@@ -134,6 +143,9 @@ DELETE /diets/{dietId}/meals/{mealId}/comments/{commentId}
 PUT    /diets/{dietId}/meals/{mealId}/reaction
 DELETE /diets/{dietId}/meals/{mealId}/reaction
 ```
+
+`POST /diets/{dietId}/meals/{mealId}/comments` exige `Idempotency-Key`. Reenviar a mesma
+operação não cria outro comentário nem outra notificação.
 
 ## Notificações no aplicativo
 
@@ -164,7 +176,7 @@ GET /diets/{dietId}/progress
 }
 ```
 
-O envio de refeições sincronizadas pode incluir `operationId` para garantir idempotência.
+O envio de refeições sincronizadas usa o valor do header `Idempotency-Key` como `operationId`.
 
 O `POST /diets/{dietId}/meals` retorna a refeição criada com o campo
 `pointsEarned`. Esse valor é calculado pelo backend, vale `0` fora do modo
@@ -181,6 +193,9 @@ PUT  /water/goal
 POST /water/checks
 ```
 
+Os endpoints `POST .../water/checks` exigem `Idempotency-Key`. Use a mesma chave ao repetir
+um check cuja resposta tenha sido perdida; a repetição não consome a meta novamente.
+
 `GET /water/has-checks` retorna `true` se o usuário autenticado já registrou
 algum check de hidratação, em qualquer data ou dieta; `false` significa que
 nenhum check histórico foi encontrado.
@@ -195,6 +210,9 @@ POST /diets/{dietId}/water/checks
 ```
 
 Esses endpoints exigem que o usuário seja membro da dieta. A meta continua sendo do usuário, mas os checks competitivos são associados à dieta. Dietas não competitivas continuam usando os endpoints gerais acima. O histórico competitivo também valida que a dieta seja competitiva e permite consulta após o encerramento, enquanto o usuário mantiver membership.
+
+`POST /diets/{dietId}/invitation-link` exige `Idempotency-Key`: repetir a geração com a mesma
+chave retorna o mesmo link ativo. Uma chave nova gera um link e revoga o anterior.
 
 Metas e checks são enviados em mililitros e têm validações distintas. Metas válidas vão de
 `2000` a `4000`, em intervalos de `50` (por exemplo, `2450`). Checks válidos vão de

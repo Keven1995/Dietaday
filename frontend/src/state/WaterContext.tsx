@@ -1,10 +1,11 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { getErrorMessage, isDemoMode } from '../lib/api'
 import { addWaterCheck, getWaterToday, readCachedWater, updateWaterGoal, WATER_CACHE_RESOURCE } from '../lib/water'
 import { writeCachedResource } from '../lib/resourceCache'
 import { emitCompetitivePoints, emitCompetitiveRankingInvalidated } from '../lib/competitiveFeedback'
 import { reportUxEvent } from '../lib/uxTelemetry'
 import { completeFeatureCampaign } from '../lib/featureDiscoveryTelemetry'
+import { createUuid } from '../lib/uuid'
 import { useCompetitiveMode } from '../hooks/useCompetitiveMode'
 import { useAuth } from './AuthContext'
 import type { WaterToday } from '../types'
@@ -29,6 +30,7 @@ export function WaterProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const pendingCheckRef = useRef<{ amountMl: number; scope: string; operationId: string } | null>(null)
 
   async function refresh() {
     if (!user) {
@@ -71,10 +73,17 @@ export function WaterProvider({ children }: { children: ReactNode }) {
 
   async function addCheck(amountMl: number) {
     if (!user) throw new Error('Sua sessão expirou. Entre novamente.')
+    const scope = competitiveDietId ?? 'general'
+    const pendingCheck = pendingCheckRef.current
+    if (!pendingCheck || pendingCheck.amountMl !== amountMl || pendingCheck.scope !== scope) {
+      pendingCheckRef.current = { amountMl, scope, operationId: createUuid() }
+    }
+    const operationId = pendingCheckRef.current!.operationId
     setSaving(true)
     setError('')
     try {
-      const next = await addWaterCheck(token, user.id, amountMl, competitiveDietId)
+      const next = await addWaterCheck(token, user.id, amountMl, competitiveDietId, operationId)
+      if (pendingCheckRef.current?.operationId === operationId) pendingCheckRef.current = null
       if (!isDemoMode) writeCachedResource(user.id, cacheResource, next)
       setWater(next)
       completeFeatureCampaign(token, user.id, 'discover_hydration', 1, {

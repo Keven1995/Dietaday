@@ -40,6 +40,7 @@ export function CommentsModal({ dietId, meal, highlightedCommentId, onClose, onC
   const titleRef = useRef<HTMLHeadingElement>(null)
   const submittingRef = useRef(submitting)
   const processingIdsRef = useRef(processingIds)
+  const commentOperationRef = useRef<{ content: string; id: string } | null>(null)
   const mutationRevisionRef = useRef(0)
   const closeRef = useRef(onClose)
   closeRef.current = onClose
@@ -146,6 +147,11 @@ export function CommentsModal({ dietId, meal, highlightedCommentId, onClose, onC
     event.preventDefault()
     const content = draft.trim()
     if (!token || !user || !canWrite || !content || submitting) return
+    const pendingOperation = commentOperationRef.current
+    if (!pendingOperation || pendingOperation.content !== content) {
+      commentOperationRef.current = { content, id: createUuid() }
+    }
+    const operationId = commentOperationRef.current!.id
     const temporaryId = `pending-${createUuid()}`
     const temporary: MealComment = {
       id: temporaryId,
@@ -163,8 +169,11 @@ export function CommentsModal({ dietId, meal, highlightedCommentId, onClose, onC
     updateComments((current) => [...current, temporary])
     onCommentCountChange(1)
     try {
-      const created = await api<MealComment>(commentsPath(dietId, meal.id), { method: 'POST', token, body: JSON.stringify({ content }) })
+      const created = await api<MealComment>(commentsPath(dietId, meal.id), {
+        method: 'POST', token, headers: { 'Idempotency-Key': operationId }, body: JSON.stringify({ content }),
+      })
       updateComments((current) => chronologicalComments(current.map((comment) => comment.id === temporaryId ? { ...created, reactions: created.reactions ?? [] } : comment)))
+      if (commentOperationRef.current?.id === operationId) commentOperationRef.current = null
       setDraft('')
       onCommentCreated?.()
       onCommentsSettled()
