@@ -1,5 +1,5 @@
 import { ArrowRight, Camera, Check, ImagePlus, X } from 'lucide-react'
-import { useEffect, useEffectEvent, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useEffect, useEffectEvent, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { AnimatedCheck, type AnimatedCheckStatus } from '../components/motion/AnimatedCheck'
 import { AnimatedError } from '../components/motion/AnimatedError'
@@ -7,6 +7,7 @@ import { Button, EmptyState, PageTitle } from '../components/Ui'
 import { getErrorMessage, isDemoMode } from '../lib/api'
 import { compressPhoto, isPhotoUploadConfigured, validatePhoto } from '../lib/cloudinary'
 import { isDietPeriodEnded } from '../lib/dietPeriod'
+import { dietMealTypesForDate } from '../lib/dietMealTypes'
 import { localDateKey } from '../lib/date'
 import { isMealNudgeMealType, mealLabelForApiType } from '../lib/mealNudges'
 import { createUuid } from '../lib/uuid'
@@ -62,6 +63,11 @@ export function MealForm() {
     ? diets.find((diet) => diet.id === editedOperation.dietId) ?? null
     : activeDiet
   const formDietEnded = Boolean(formDiet && isDietPeriodEnded(formDiet.endDate))
+  const mealDateForConfiguration = editedOperation?.request.mealDate ?? requestedMealDate ?? localDateKey()
+  const availableMealTypes = useMemo(
+    () => dietMealTypesForDate(formDiet?.mealTypeSchedule, mealDateForConfiguration),
+    [formDiet?.id, formDiet?.mealTypeSchedule, mealDateForConfiguration],
+  )
   const [formSessionId] = useState(() => createUuid())
   const initializedEditRef = useRef<string | null>(null)
   const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -152,6 +158,13 @@ export function MealForm() {
     if (editedOperation || !requestedMealLabel) return
     setForm((current) => ({ ...current, mealType: requestedMealLabel }))
   }, [editedOperation, requestedMealLabel])
+
+  useEffect(() => {
+    if (!availableMealTypes.length) return
+    setForm((current) => availableMealTypes.some((mealType) => mealType === current.mealType)
+      ? current
+      : { ...current, mealType: availableMealTypes[0] })
+  }, [availableMealTypes, form.mealType])
 
   function choosePhoto(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null
@@ -273,8 +286,7 @@ export function MealForm() {
         <label>
           Tipo de refeição
           <select value={form.mealType} onChange={(event) => setForm({ ...form, mealType: event.target.value })}>
-            <option>Café da manhã</option><option>Lanche da manhã</option><option>Almoço</option>
-            <option>Lanche da tarde</option><option>Jantar</option><option>Ceia</option>
+            {availableMealTypes.map((mealType) => <option key={mealType}>{mealType}</option>)}
           </select>
         </label>
         <label>

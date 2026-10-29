@@ -5,6 +5,7 @@ import { useCelebration } from '../state/CelebrationContext'
 import { useAuth } from '../state/AuthContext'
 import { reportUxEvent } from '../lib/uxTelemetry'
 import type { DailyProgress } from '../types'
+import { DIET_MEAL_TYPES } from '../lib/dietMealTypes'
 
 type DailyGoalCardProps = {
   progress: DailyProgress
@@ -31,12 +32,13 @@ export function DailyGoalCard({ progress }: DailyGoalCardProps) {
   }, [progress.dailyGoalCompleted, progress.dietId, progress.date, token])
 
   const percentage = progress.dailyGoal ? progress.completedMeals * 100 / progress.dailyGoal : 0
+  const mealTypes = progress.mealTypes?.length ? progress.mealTypes : DIET_MEAL_TYPES
   return <section className="daily-goal-card card">
-    <div className="section-heading"><div><span>META DO DIA</span><h2>Seis refeições</h2></div><strong><AnimatedCounter value={progress.completedMeals} />/{progress.dailyGoal}</strong></div>
+    <div className="section-heading"><div><span>META DO DIA</span><h2>{progress.dailyGoal} {progress.dailyGoal === 1 ? 'refeição' : 'refeições'}</h2></div><strong><AnimatedCounter value={progress.completedMeals} />/{progress.dailyGoal}</strong></div>
     <AnimatedProgress className="daily-goal-progress" value={percentage} label="Progresso da meta diária" />
     <p>{progress.dailyGoalCompleted ? 'Meta diária concluída. Muito bem!' : `Registre ${Math.max(0, progress.dailyGoal - progress.completedMeals)} ${progress.dailyGoal - progress.completedMeals === 1 ? 'refeição' : 'refeições'} para concluir.`}</p>
     <div className="daily-meal-types" aria-label="Refeições concluídas">
-      {['Café da manhã', 'Lanche da manhã', 'Almoço', 'Lanche da tarde', 'Jantar', 'Ceia'].map((mealType) => <span className={progress.completedMealTypes.includes(mealType) ? 'completed' : ''} key={mealType}>{progress.completedMealTypes.includes(mealType) ? '✓' : '○'} {mealType}</span>)}
+      {mealTypes.map((mealType) => <span className={progress.completedMealTypes.includes(mealType) ? 'completed' : ''} key={mealType}>{progress.completedMealTypes.includes(mealType) ? '✓' : '○'} {mealType}</span>)}
     </div>
   </section>
 }

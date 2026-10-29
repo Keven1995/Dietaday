@@ -5,6 +5,7 @@ import com.dietapp.common.ConflictException;
 import com.dietapp.common.ForbiddenException;
 import com.dietapp.common.NotFoundException;
 import com.dietapp.diet.Diet;
+import com.dietapp.diet.DietMealTypeService;
 import com.dietapp.diet.DietService;
 import com.dietapp.security.CurrentUser;
 import com.dietapp.upload.PhotoUrlPolicy;
@@ -34,16 +35,18 @@ public class MealService {
     private final CurrentUser currentUser;
     private final PhotoUrlPolicy photoUrlPolicy;
     private final RankingPointEventService rankingEvents;
+    private final DietMealTypeService dietMealTypes;
 
     public MealService(MealRepository meals, MealSyncOperationRepository syncOperations,
                        DietService diets, CurrentUser currentUser, PhotoUrlPolicy photoUrlPolicy,
-                       RankingPointEventService rankingEvents) {
+                       RankingPointEventService rankingEvents, DietMealTypeService dietMealTypes) {
         this.meals = meals;
         this.syncOperations = syncOperations;
         this.diets = diets;
         this.currentUser = currentUser;
         this.photoUrlPolicy = photoUrlPolicy;
         this.rankingEvents = rankingEvents;
+        this.dietMealTypes = dietMealTypes;
     }
 
     @Transactional
@@ -56,6 +59,7 @@ public class MealService {
         Diet diet = diets.requireMemberForUpdate(dietId);
         User author = currentUser.require();
         ensureDietWriteAllowed(diet);
+        dietMealTypes.requireMealTypeConfigured(dietId, mealDate, mealType);
         String requestHash = requestHash(mealType, description, mealDate, photoUrl);
         var existing = syncOperations.findById(operationId);
         if (existing.isPresent()) {
@@ -118,6 +122,7 @@ public class MealService {
                 .orElseThrow(() -> new NotFoundException("Meal not found"));
         requireAuthor(meal);
         ensureDietWriteAllowed(meal.getDiet());
+        dietMealTypes.requireMealTypeConfigured(dietId, mealDate, mealType);
         meal.update(mealType, description, mealDate, photoUrl);
         return meal;
     }

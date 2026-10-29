@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.UUID;
+import java.time.LocalDate;
 
 @Service
 public class SecurityAuditService {
@@ -40,6 +41,11 @@ public class SecurityAuditService {
 
     public void dietDeleted(UUID userId, UUID dietId) {
         audit("diet_deleted", userId, dietId, null, null);
+    }
+
+    public void dietMealTypesUpdated(UUID userId, UUID dietId, LocalDate effectiveFrom, int mealTypeCount) {
+        audit("diet_meal_types_updated", userId, dietId, null,
+                "effectiveFrom=" + effectiveFrom + ",count=" + mealTypeCount);
     }
 
     public void pointEventCreated(UUID userId, UUID dietId, UUID eventId, String sourceType) {

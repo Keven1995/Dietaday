@@ -202,6 +202,90 @@ class ApiIntegrationTest {
     }
 
     @Test
+    void configuredDietMealTypesControlCreationValidationAndDailyProgressFromEffectiveDate() throws Exception {
+        JsonNode owner = register("Meal Type Owner", "meal-type-owner-" + UUID.randomUUID() + "@example.com");
+        JsonNode member = register("Meal Type Member", "meal-type-member-" + UUID.randomUUID() + "@example.com");
+        LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+        String dietJson = mvc.perform(post("/api/diets")
+                        .header("Authorization", bearer(owner))
+                        .header("Idempotency-Key", UUID.randomUUID())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "name", "Custom Meal Type Diet",
+                                "startDate", today.toString(),
+                                "endDate", today.plusDays(7).toString(),
+                                "competitiveMode", true,
+                                "mealTypes", List.of("Café da manhã", "Almoço")))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.canManageMealTypes").value(true))
+                .andExpect(jsonPath("$.mealTypeSchedule[0].mealTypes.length()").value(2))
+                .andReturn().getResponse().getContentAsString();
+        String dietId = objectMapper.readTree(dietJson).get("id").asText();
+
+        for (String mealType : List.of("Café da manhã", "Almoço")) {
+            mvc.perform(post("/api/diets/{dietId}/meals", dietId)
+                            .header("Authorization", bearer(owner))
+                            .header("Idempotency-Key", UUID.randomUUID())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of(
+                                    "mealType", mealType,
+                                    "description", mealType,
+                                    "mealDate", today.toString()))))
+                    .andExpect(status().isCreated());
+        }
+
+        mvc.perform(post("/api/diets/{dietId}/meals", dietId)
+                        .header("Authorization", bearer(owner))
+                        .header("Idempotency-Key", UUID.randomUUID())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "mealType", "Jantar",
+                                "description", "Not selected",
+                                "mealDate", today.toString()))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Este tipo de refeição não está configurado para a dieta nesta data."));
+
+        mvc.perform(get("/api/diets/{dietId}/progress", dietId).header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.dailyGoal").value(2))
+                .andExpect(jsonPath("$.completedMeals").value(2))
+                .andExpect(jsonPath("$.dailyGoalCompleted").value(true))
+                .andExpect(jsonPath("$.mealTypes.length()").value(2));
+
+        String invitationId = invite(owner, dietId, member.get("email").asText());
+        mvc.perform(post("/api/invitations/{id}/accept", invitationId).header("Authorization", bearer(member)))
+                .andExpect(status().isNoContent());
+        mvc.perform(get("/api/diets/{dietId}", dietId).header("Authorization", bearer(member)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.canManageMealTypes").value(false));
+        mvc.perform(put("/api/diets/{dietId}/meal-types", dietId)
+                        .header("Authorization", bearer(member))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"mealTypes\":[\"Almoço\"]}"))
+                .andExpect(status().isForbidden());
+
+        String updatedSchedule = mvc.perform(put("/api/diets/{dietId}/meal-types", dietId)
+                        .header("Authorization", bearer(owner))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"mealTypes\":[\"Almoço\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[1].effectiveFrom").value(today.plusDays(1).toString()))
+                .andExpect(jsonPath("$[1].mealTypes[0]").value("Almoço"))
+                .andReturn().getResponse().getContentAsString();
+        assertThat(objectMapper.readTree(updatedSchedule).size()).isEqualTo(2);
+
+        mvc.perform(get("/api/diets/{dietId}/progress", dietId).header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.dailyGoal").value(2))
+                .andExpect(jsonPath("$.dailyGoalCompleted").value(true));
+
+        String legacyDietId = createDiet(owner, "Legacy default meals");
+        mvc.perform(get("/api/diets/{dietId}", legacyDietId).header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.mealTypeSchedule[0].mealTypes.length()").value(6));
+    }
+
+    @Test
     void listEndpointsRejectOversizedPages() throws Exception {
         JsonNode user = register("Pagination User", "pagination-" + UUID.randomUUID() + "@example.com");
         String dietId = createDiet(user, "Pagination Diet");

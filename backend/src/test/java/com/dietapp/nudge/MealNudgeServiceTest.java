@@ -3,6 +3,7 @@ package com.dietapp.nudge;
 import com.dietapp.diet.Diet;
 import com.dietapp.diet.DietMember;
 import com.dietapp.diet.DietMemberRepository;
+import com.dietapp.diet.DietMealTypeService;
 import com.dietapp.diet.DietService;
 import com.dietapp.meal.MealRepository;
 import com.dietapp.security.CurrentUser;
@@ -24,6 +25,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -48,6 +50,7 @@ class MealNudgeServiceTest {
         DietService diets = mock(DietService.class);
         DietMemberRepository members = mock(DietMemberRepository.class);
         UserRepository users = mock(UserRepository.class);
+        DietMealTypeService dietMealTypes = mock(DietMealTypeService.class);
         CurrentUser currentUser = mock(CurrentUser.class);
         SecurityAuditService audit = mock(SecurityAuditService.class);
         PushSubscriptionRepository pushSubscriptions = mock(PushSubscriptionRepository.class);
@@ -57,9 +60,10 @@ class MealNudgeServiceTest {
         when(members.findByDietIdAndUserId(dietId, recipientId)).thenReturn(Optional.of(recipientMembership));
         when(meals.findDailyMealEntries(dietId, recipientId, localDate, localDate)).thenReturn(List.of());
         when(nudges.findSentTypes(dietId, senderId, recipientId, localDate)).thenReturn(List.of());
+        when(dietMealTypes.mealTypesForDate(dietId, localDate)).thenReturn(DietMealTypeService.DEFAULT_MEAL_TYPES);
 
         MealNudgeService service = new MealNudgeService(nudges, meals, diets, members, currentUser, audit,
-                pushSubscriptions, push, clock, users);
+                pushSubscriptions, push, clock, users, dietMealTypes);
         MealNudgeEligibilityResponse eligibility = service.eligibility(dietId, recipientId);
 
         assertThat(eligibility.mealDate()).isEqualTo(localDate);
@@ -89,6 +93,7 @@ class MealNudgeServiceTest {
         DietService diets = mock(DietService.class);
         DietMemberRepository members = mock(DietMemberRepository.class);
         UserRepository users = mock(UserRepository.class);
+        DietMealTypeService dietMealTypes = mock(DietMealTypeService.class);
         CurrentUser currentUser = mock(CurrentUser.class);
         SecurityAuditService audit = mock(SecurityAuditService.class);
         when(currentUser.id()).thenReturn(senderId);
@@ -96,6 +101,7 @@ class MealNudgeServiceTest {
         when(diets.requireMemberForUpdate(dietId)).thenReturn(diet);
         when(members.findByDietIdAndUserId(dietId, recipientId)).thenReturn(Optional.of(recipientMembership));
         when(users.findForUpdateById(recipientId)).thenReturn(Optional.of(recipient));
+        when(dietMealTypes.mealTypesForDate(dietId, date)).thenReturn(DietMealTypeService.DEFAULT_MEAL_TYPES);
         when(meals.existsByDiet_IdAndAuthor_IdAndMealDateAndMealTypeIn(
                 dietId, recipientId, date, MealNudgeType.LUNCH.storedMealTypeValues())).thenReturn(false);
         when(nudges.findByDietIdAndSenderIdAndRecipientIdAndMealDateAndMealType(
@@ -104,11 +110,52 @@ class MealNudgeServiceTest {
         when(pushSubscriptions.findByUserIdAndEnabledTrue(recipientId)).thenReturn(List.of(subscription));
 
         MealNudgeService service = new MealNudgeService(nudges, meals, diets, members, currentUser, audit,
-                pushSubscriptions, push, clock, users);
+                pushSubscriptions, push, clock, users, dietMealTypes);
 
         service.send(dietId, new MealNudgeRequest(recipientId, "LUNCH"));
 
         verify(push).send(eq(subscription), eq("Você recebeu uma cutucada 👀"), eq("Sender perguntou: 👀 Cadê o almoço?"),
                 eq("/refeicoes/nova?mealType=LUNCH&mealDate=2026-10-08"), any(String.class));
+    }
+
+    @Test
+    void onlyOffersAndAcceptsNudgesForMealTypesConfiguredInTheDiet() {
+        UUID dietId = UUID.randomUUID();
+        LocalDate date = LocalDate.of(2026, 10, 8);
+        Clock clock = Clock.fixed(Instant.parse("2026-10-08T15:00:00Z"), ZoneId.of("UTC"));
+        Diet diet = new Diet("Diet", date, date, false);
+        User sender = new User("sender-configured@example.com", "hash", "Sender", UserSex.NEUTRAL);
+        User recipient = new User("recipient-configured@example.com", "hash", "Recipient", UserSex.NEUTRAL);
+        DietMember recipientMembership = new DietMember(diet, recipient, DietMember.Role.MEMBER);
+        MealNudgeRepository nudges = mock(MealNudgeRepository.class);
+        MealRepository meals = mock(MealRepository.class);
+        DietService diets = mock(DietService.class);
+        DietMemberRepository members = mock(DietMemberRepository.class);
+        UserRepository users = mock(UserRepository.class);
+        DietMealTypeService dietMealTypes = mock(DietMealTypeService.class);
+        CurrentUser currentUser = mock(CurrentUser.class);
+        SecurityAuditService audit = mock(SecurityAuditService.class);
+        PushSubscriptionRepository pushSubscriptions = mock(PushSubscriptionRepository.class);
+        PushNotificationService push = mock(PushNotificationService.class);
+
+        when(currentUser.id()).thenReturn(sender.getId());
+        when(currentUser.require()).thenReturn(sender);
+        when(diets.requireMember(dietId)).thenReturn(diet);
+        when(diets.requireMemberForUpdate(dietId)).thenReturn(diet);
+        when(members.findByDietIdAndUserId(dietId, recipient.getId())).thenReturn(Optional.of(recipientMembership));
+        when(users.findForUpdateById(recipient.getId())).thenReturn(Optional.of(recipient));
+        when(dietMealTypes.mealTypesForDate(dietId, date)).thenReturn(List.of("Almoço"));
+        when(meals.findDailyMealEntries(dietId, recipient.getId(), date, date)).thenReturn(List.of());
+        when(nudges.findSentTypes(dietId, sender.getId(), recipient.getId(), date)).thenReturn(List.of());
+
+        MealNudgeService service = new MealNudgeService(nudges, meals, diets, members, currentUser, audit,
+                pushSubscriptions, push, clock, users, dietMealTypes);
+
+        MealNudgeEligibilityResponse eligibility = service.eligibility(dietId, recipient.getId());
+        assertThat(eligibility.meals()).extracting(MealNudgeEligibilityResponse.MealEligibility::mealType)
+                .containsExactly("LUNCH");
+        assertThatThrownBy(() -> service.send(dietId, new MealNudgeRequest(recipient.getId(), "DINNER")))
+                .isInstanceOf(com.dietapp.common.ConflictException.class)
+                .hasMessage("Esta refeição não está configurada nesta dieta.");
     }
 }

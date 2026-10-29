@@ -14,7 +14,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.LocalDate;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -30,24 +33,29 @@ public class DietService {
     private final UserRepository users;
     private final SecurityAuditService audit;
     private final RankingPointEventService rankingEvents;
+    private final DietMealTypeService dietMealTypes;
 
     public DietService(DietRepository diets, DietMemberRepository members, CurrentUser currentUser,
-                       UserRepository users, SecurityAuditService audit, RankingPointEventService rankingEvents) {
+                       UserRepository users, SecurityAuditService audit, RankingPointEventService rankingEvents,
+                       DietMealTypeService dietMealTypes) {
         this.diets = diets;
         this.members = members;
         this.currentUser = currentUser;
         this.users = users;
         this.audit = audit;
         this.rankingEvents = rankingEvents;
+        this.dietMealTypes = dietMealTypes;
     }
 
     @Transactional
     public Diet create(String name, LocalDate startDate, LocalDate endDate, boolean competitiveMode,
-                       UUID operationId) {
+                       UUID operationId, List<String> requestedMealTypes) {
         validateDates(startDate, endDate);
         User owner = users.findForUpdateById(currentUser.id()).orElseThrow();
         String normalizedName = name.trim();
-        String requestHash = creationRequestHash(normalizedName, startDate, endDate, competitiveMode);
+        List<String> selectedMealTypes = DietMealTypeService.normalize(requestedMealTypes, true);
+        String requestHash = creationRequestHash(normalizedName, startDate, endDate, competitiveMode,
+                requestedMealTypes == null ? null : selectedMealTypes);
         Diet existing = diets.findByCreationOperationId(operationId).orElse(null);
         if (existing != null) {
             boolean sameOwner = members.findByDietIdAndUserId(existing.getId(), owner.getId())
@@ -66,6 +74,7 @@ public class DietService {
             throw new ConflictException("Idempotency key has already been used for another request", exception);
         }
         members.save(new DietMember(diet, owner, DietMember.Role.OWNER));
+        dietMealTypes.initialize(diet, owner.getId(), selectedMealTypes);
         audit.dietCreated(owner.getId(), diet.getId());
         return diet;
     }
@@ -73,6 +82,19 @@ public class DietService {
     @Transactional(readOnly = true)
     public Page<Diet> list(Pageable pageable) {
         return diets.findAllForUser(currentUser.id(), pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public Set<UUID> ownedDietIds(Collection<UUID> dietIds) {
+        if (dietIds.isEmpty()) return Set.of();
+        return new HashSet<>(members.findOwnedDietIds(currentUser.id(), DietMember.Role.OWNER, dietIds));
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isOwner(UUID dietId) {
+        return members.findByDietIdAndUserId(dietId, currentUser.id())
+                .filter(membership -> membership.getRole() == DietMember.Role.OWNER)
+                .isPresent();
     }
 
     @Transactional(readOnly = true)
@@ -171,8 +193,10 @@ public class DietService {
     }
 
     private String creationRequestHash(String name, LocalDate startDate, LocalDate endDate,
-                                       boolean competitiveMode) {
+                                       boolean competitiveMode, List<String> mealTypes) {
         String value = name + "\u0000" + startDate + "\u0000" + endDate + "\u0000" + competitiveMode;
+        // Preserve idempotency for requests from older clients that do not send mealTypes.
+        if (mealTypes != null) value += "\u0000" + String.join("\u0000", mealTypes);
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
                     .digest(value.getBytes(StandardCharsets.UTF_8)));

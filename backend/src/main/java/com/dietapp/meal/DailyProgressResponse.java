@@ -11,4 +11,5 @@ public record DailyProgressResponse(
         int completedMeals,
         List<String> completedMealTypes,
         boolean dailyGoalCompleted,
-        int streakDays) {}
+        int streakDays,
+        List<String> mealTypes) {}

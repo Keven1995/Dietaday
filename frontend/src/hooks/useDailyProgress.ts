@@ -1,6 +1,8 @@
-import { useEffect, useEffectEvent } from 'react'
+import { useEffect, useEffectEvent, useMemo } from 'react'
 import { useDietResource } from './useDietResource'
 import { DAILY_PROGRESS_INVALIDATED_EVENT } from '../lib/dailyProgress'
+import { brazilDateKey } from '../lib/date'
+import { dietMealTypesForDate } from '../lib/dietMealTypes'
 import { useDiets } from '../state/DietContext'
 import type { DailyProgress } from '../types'
 
@@ -12,13 +14,23 @@ const EMPTY_PROGRESS: DailyProgress = {
   completedMealTypes: [],
   dailyGoalCompleted: false,
   streakDays: 0,
+  mealTypes: [],
 }
-
-const DEMO_PROGRESS: DailyProgress = EMPTY_PROGRESS
 
 export function useDailyProgress() {
   const { activeDiet } = useDiets()
-  const resource = useDietResource<DailyProgress>('progress', DEMO_PROGRESS, EMPTY_PROGRESS, 'Não foi possível carregar o progresso diário.')
+  const demoProgress = useMemo(() => {
+    const date = brazilDateKey()
+    const mealTypes = dietMealTypesForDate(activeDiet?.mealTypeSchedule, date)
+    return {
+      ...EMPTY_PROGRESS,
+      dietId: activeDiet?.id ?? '',
+      date,
+      dailyGoal: mealTypes.length,
+      mealTypes,
+    }
+  }, [activeDiet?.id, activeDiet?.mealTypeSchedule])
+  const resource = useDietResource<DailyProgress>('progress', demoProgress, EMPTY_PROGRESS, 'Não foi possível carregar o progresso diário.')
   const reload = useEffectEvent(resource.reload)
 
   useEffect(() => {

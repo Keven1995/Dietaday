@@ -1,25 +1,34 @@
-import { ArrowRight, Check, CheckCircle2, Info, Plus, Salad, Trash2, X } from 'lucide-react'
+import { ArrowRight, Check, CheckCircle2, Info, ListChecks, Plus, Salad, Trash2, Utensils, X } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, EmptyState, PageTitle } from '../components/Ui'
 import { initialMembers } from '../data'
 import { useDietResource } from '../hooks/useDietResource'
 import { getErrorMessage } from '../lib/api'
+import { brazilDateKey, parseLocalDate } from '../lib/date'
+import { DIET_MEAL_TYPES, dietMealTypesForDate, type DietMealType, type DietMealTypeScheduleEntry } from '../lib/dietMealTypes'
 import { createUuid } from '../lib/uuid'
-import { parseLocalDate } from '../lib/date'
 import { isDietPeriodEnded } from '../lib/dietPeriod'
 import { useAuth } from '../state/AuthContext'
 import { useDiets } from '../state/DietContext'
 import type { CreateDietRequest, Diet, Member } from '../types'
 
-const EMPTY_FORM: CreateDietRequest = { name: '', startDate: '', endDate: '', competitiveMode: false }
+const EMPTY_FORM: CreateDietRequest = { name: '', startDate: '', endDate: '', competitiveMode: false, mealTypes: [...DIET_MEAL_TYPES] }
 const NO_MEMBERS: Member[] = []
 
 function formatDate(value: string) {
   return parseLocalDate(value).toLocaleDateString('pt-BR')
 }
 
-function DietCard({ diet, index, selected, canDelete, onSelect, onDelete }: { diet: Diet; index: number; selected: boolean; canDelete: boolean; onSelect: () => void; onDelete: () => void }) {
+function DietCard({ diet, index, selected, canDelete, onSelect, onDelete, onEditMealTypes }: {
+  diet: Diet
+  index: number
+  selected: boolean
+  canDelete: boolean
+  onSelect: () => void
+  onDelete: () => void
+  onEditMealTypes: () => void
+}) {
   const completed = isDietPeriodEnded(diet.endDate)
 
   return (
@@ -41,6 +50,7 @@ function DietCard({ diet, index, selected, canDelete, onSelect, onDelete }: { di
       </div>
       <div className="diet-card-actions">
         {!selected && <Button className="outline" onClick={onSelect}>Selecionar dieta</Button>}
+        {diet.canManageMealTypes && <Button className="outline" onClick={onEditMealTypes}><ListChecks size={17} /> Refeições da dieta</Button>}
         {selected && canDelete && <Button className="danger" onClick={onDelete}><Trash2 size={17} /> Excluir dieta</Button>}
       </div>
     </article>
@@ -119,6 +129,10 @@ function CreateDietModal({ onClose, onCreate, onCreated }: { onClose: () => void
       setError('Informe um nome para a dieta.')
       return
     }
+    if (!request.mealTypes.length) {
+      setError('Selecione pelo menos uma refeição para esta dieta.')
+      return
+    }
     setSaving(true)
     try {
       const fingerprint = JSON.stringify(request)
@@ -157,6 +171,25 @@ function CreateDietModal({ onClose, onCreate, onCreated }: { onClose: () => void
             <label>Data inicial<input required type="date" value={form.startDate} onChange={(event) => setForm({ ...form, startDate: event.target.value })} /></label>
             <label>Data final<input required min={form.startDate} type="date" value={form.endDate} onChange={(event) => setForm({ ...form, endDate: event.target.value })} /></label>
           </div>
+          <fieldset className="diet-meal-type-picker">
+            <legend>Refeições desta dieta</legend>
+            <p>Escolha quais refeições estarão disponíveis no grupo.</p>
+            <div className="diet-meal-type-options">
+              {DIET_MEAL_TYPES.map((mealType) => <label key={mealType}>
+                <input
+                  type="checkbox"
+                  checked={form.mealTypes.includes(mealType)}
+                  onChange={(event) => setForm((current) => ({
+                    ...current,
+                    mealTypes: event.target.checked
+                      ? DIET_MEAL_TYPES.filter((type) => current.mealTypes.includes(type) || type === mealType)
+                      : current.mealTypes.filter((type) => type !== mealType),
+                  }))}
+                />
+                <span>{mealType}</span>
+              </label>)}
+            </div>
+          </fieldset>
           <div className={`competitive-option${form.competitiveMode ? ' selected' : ''}`}>
             <label className="competitive-option-main">
               <input type="checkbox" checked={form.competitiveMode} onChange={(event) => setForm({ ...form, competitiveMode: event.target.checked })} />
@@ -182,13 +215,113 @@ function CreateDietModal({ onClose, onCreate, onCreated }: { onClose: () => void
   )
 }
 
+function nextBrazilDate(today: string) {
+  const next = new Date(`${today}T12:00:00.000Z`)
+  next.setUTCDate(next.getUTCDate() + 1)
+  return next.toISOString().slice(0, 10)
+}
+
+function MealTypesModal({ diet, onClose, onSave }: {
+  diet: Diet
+  onClose: () => void
+  onSave: (dietId: string, mealTypes: DietMealType[]) => Promise<DietMealTypeScheduleEntry[]>
+}) {
+  const [schedule, setSchedule] = useState<DietMealTypeScheduleEntry[]>(() => diet.mealTypeSchedule ?? [])
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const today = brazilDateKey()
+  const titleRef = useRef<HTMLHeadingElement>(null)
+  const currentTypes = dietMealTypesForDate(schedule, today)
+  const pending = schedule
+    .filter((entry) => entry.effectiveFrom > today)
+    .sort((left, right) => left.effectiveFrom.localeCompare(right.effectiveFrom))[0]
+  const effectiveFrom = pending?.effectiveFrom ?? (today < diet.startDate ? diet.startDate : nextBrazilDate(today))
+  const [selectedTypes, setSelectedTypes] = useState<DietMealType[]>(() => pending?.mealTypes ?? currentTypes)
+
+  useEffect(() => {
+    titleRef.current?.focus()
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !saving) onClose()
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [onClose, saving])
+
+  function beginEditing() {
+    setSelectedTypes(pending?.mealTypes ?? currentTypes)
+    setError('')
+    setEditing(true)
+  }
+
+  async function save() {
+    if (!selectedTypes.length) {
+      setError('Selecione pelo menos uma refeição para a dieta.')
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      setSchedule(await onSave(diet.id, selectedTypes))
+      setEditing(false)
+    } catch (saveError) {
+      setError(getErrorMessage(saveError, 'Não foi possível salvar as refeições da dieta.'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function toggleMealType(mealType: DietMealType, checked: boolean) {
+    setSelectedTypes((current) => checked
+      ? DIET_MEAL_TYPES.filter((type) => current.includes(type) || type === mealType)
+      : current.filter((type) => type !== mealType))
+  }
+
+  return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && !saving && onClose()}>
+    <section className="modal diet-meal-types-modal" role="dialog" aria-modal="true" aria-labelledby="diet-meal-types-title">
+      <button type="button" className="close" onClick={onClose} disabled={saving} aria-label="Fechar"><X /></button>
+      <Utensils className="diet-meal-types-icon" aria-hidden="true" />
+      <span className="overline">CONFIGURAÇÃO DA DIETA</span>
+      <h2 id="diet-meal-types-title" ref={titleRef} tabIndex={-1}>Refeições de {diet.name}</h2>
+      {editing ? <>
+        <p>As alterações passam a valer em {parseLocalDate(effectiveFrom).toLocaleDateString('pt-BR')} e preservam os dias anteriores.</p>
+        <fieldset className="diet-meal-type-picker">
+          <legend>Selecione as refeições disponíveis</legend>
+          <div className="diet-meal-type-options">
+            {DIET_MEAL_TYPES.map((mealType) => <label key={mealType}>
+              <input type="checkbox" checked={selectedTypes.includes(mealType)} onChange={(event) => toggleMealType(mealType, event.target.checked)} />
+              <span>{mealType}</span>
+            </label>)}
+          </div>
+        </fieldset>
+        {error && <div className="error-message" role="alert">{error}</div>}
+        <div className="diet-meal-types-actions">
+          <Button type="button" loading={saving} onClick={() => void save()}>Salvar lista de refeições</Button>
+          <Button type="button" className="outline" disabled={saving} onClick={() => { setEditing(false); setError('') }}>Cancelar</Button>
+        </div>
+      </> : <>
+        <div className="diet-meal-types-summary">
+          <strong>Em vigor hoje</strong>
+          <div>{currentTypes.map((mealType) => <span key={mealType}>{mealType}</span>)}</div>
+        </div>
+        {pending && <p className="diet-meal-types-pending">Próxima configuração em {parseLocalDate(pending.effectiveFrom).toLocaleDateString('pt-BR')}: {pending.mealTypes.join(', ')}.</p>}
+        <div className="diet-meal-types-actions">
+          <Button type="button" onClick={beginEditing}><ListChecks aria-hidden="true" /> Editar lista de refeições</Button>
+          <Button type="button" className="outline" onClick={onClose}>Fechar</Button>
+        </div>
+      </>}
+    </section>
+  </div>
+}
+
 export function Diets() {
   const { user } = useAuth()
-  const { diets, activeDiet, activeDietId, loading, error, selectDiet, createDiet, deleteDiet } = useDiets()
+  const { diets, activeDiet, activeDietId, loading, error, selectDiet, createDiet, updateDietMealTypes, deleteDiet } = useDiets()
   const navigate = useNavigate()
   const membersResource = useDietResource('members', initialMembers, NO_MEMBERS, 'Não foi possível verificar sua permissão.')
   const [modalOpen, setModalOpen] = useState(false)
   const [dietToDelete, setDietToDelete] = useState<Diet | null>(null)
+  const [dietToEditMealTypes, setDietToEditMealTypes] = useState<Diet | null>(null)
   const [createdDiet, setCreatedDiet] = useState<Diet | null>(null)
   const activeMembership = membersResource.data.find((member) => member.userId === user?.id)
   const canDeleteActiveDiet = activeMembership?.role === 'OWNER'
@@ -214,10 +347,11 @@ export function Diets() {
       {(error || membersResource.error) && <div className="error-message" role="alert">{error || membersResource.error}</div>}
       {loading ? <p className="loading-text">Carregando dietas...</p> : diets.length ? (
         <div className="diet-grid">
-          {diets.map((diet, index) => <DietCard key={diet.id} diet={diet} index={index} selected={activeDietId === diet.id} canDelete={activeDiet?.id === diet.id && canDeleteActiveDiet} onSelect={() => { selectDiet(diet.id); setCreatedDiet(null) }} onDelete={() => setDietToDelete(diet)} />)}
+          {diets.map((diet, index) => <DietCard key={diet.id} diet={diet} index={index} selected={activeDietId === diet.id} canDelete={activeDiet?.id === diet.id && canDeleteActiveDiet} onSelect={() => { selectDiet(diet.id); setCreatedDiet(null) }} onDelete={() => setDietToDelete(diet)} onEditMealTypes={() => setDietToEditMealTypes(diet)} />)}
         </div>
       ) : <EmptyState icon={<Salad />} title="Nenhuma dieta criada" text="Crie uma dieta para definir seu período alimentar." />}
       {modalOpen && <CreateDietModal onClose={() => setModalOpen(false)} onCreate={createDiet} onCreated={setCreatedDiet} />}
+      {dietToEditMealTypes && <MealTypesModal diet={dietToEditMealTypes} onClose={() => setDietToEditMealTypes(null)} onSave={updateDietMealTypes} />}
       {dietToDelete && <DeleteDietModal diet={dietToDelete} onClose={() => setDietToDelete(null)} onDelete={deleteDiet} />}
     </div>
   )

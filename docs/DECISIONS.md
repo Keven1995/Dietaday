@@ -32,7 +32,7 @@ Alterações de banco são feitas com Flyway. Migrations já aplicadas não deve
 
 O modo competitivo é uma configuração definida na criação da dieta e não pode ser alterado depois. Isso evita que o significado histórico de uma dieta mude após o início de registros e pontuações.
 
-Uma dieta competitiva reconhece somente seis tipos oficiais de refeição: Café da manhã, Lanche da manhã, Almoço, Lanche da tarde, Jantar e Ceia. Cada tipo pode gerar no máximo uma pontuação por usuário e dia, com valor fixo de 5 pontos.
+Uma dieta reconhece os seis tipos oficiais de refeição (Café da manhã, Lanche da manhã, Almoço, Lanche da tarde, Jantar e Ceia), todos selecionados por padrão. O responsável pode escolher um subconjunto; alterações passam a valer no dia seguinte e a configuração efetiva por data preserva metas e constância históricas. Em dietas competitivas, somente tipos selecionados podem ser registrados e cada tipo pode gerar no máximo uma pontuação por usuário e dia, com valor fixo de 5 pontos.
 
 Checks competitivos de hidratação pertencem explicitamente a uma dieta. Cada check elegível vale 2 pontos e somente o volume restante até a meta diária pode gerar pontuação. Dietas não competitivas continuam usando o fluxo de hidratação existente, sem gerar eventos competitivos.
 

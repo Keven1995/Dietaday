@@ -389,6 +389,20 @@ label, .field-label { display: grid; gap: 7px; color: #34433f; font-size: .86rem
 .diet-created-next-step h2 { margin: 0 0 6px; color: var(--green); font-size: 1.1rem; }
 .diet-created-next-step p { margin: 0; color: #526b45; font-size: .85rem; line-height: 1.5; }
 .diet-created-next-step .button { flex: 0 0 auto; }
+.diet-meal-type-picker { min-width: 0; margin: 7px 0 0; padding: 13px; border: 1px solid var(--line); border-radius: 15px; background: #fbfaf6; }
+.diet-meal-type-picker legend { padding: 0 5px; color: var(--green); font-size: .82rem; font-weight: 800; }
+.diet-meal-type-picker > p { margin: 0 0 10px; color: var(--muted); font-size: .72rem; line-height: 1.4; }
+.diet-meal-type-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.diet-meal-type-options label { display: flex; min-width: 0; align-items: center; gap: 8px; padding: 9px 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--white); color: #46534f; font-size: .72rem; line-height: 1.3; cursor: pointer; }
+.diet-meal-type-options input { flex: 0 0 18px; width: 18px; height: 18px; margin: 0; padding: 0; accent-color: var(--green-2); }
+.diet-meal-types-modal > .diet-meal-types-icon { width: 27px; margin-bottom: 5px; color: var(--orange); }
+.diet-meal-types-modal h2:focus { outline: none; }
+.diet-meal-types-summary { display: grid; gap: 9px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: #faf8f2; }
+.diet-meal-types-summary > strong { color: var(--green); font-size: .8rem; }
+.diet-meal-types-summary > div { display: flex; flex-wrap: wrap; gap: 7px; }
+.diet-meal-types-summary span { padding: 6px 9px; border-radius: 20px; background: #e8efe6; color: var(--green); font-size: .7rem; font-weight: 700; }
+.diet-meal-types-pending { margin: 0; color: var(--muted); font-size: .75rem; line-height: 1.5; }
+.diet-meal-types-actions { display: grid; gap: 9px; margin-top: 18px; }
 .delete-diet-modal .delete-diet-icon { width: 27px; color: #a74732; }
 .delete-diet-modal h2:focus { outline: none; }
 .delete-diet-warning { margin-top: -4px; color: #8b4a3a !important; font-size: .82rem; }
