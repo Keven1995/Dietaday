@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
-import { deleteDemoDiet, getDemoDiets } from '../data'
+import { deleteDemoDiet, getDemoDiets, setDemoDietMealTypeSchedule } from '../data'
 import { api, getErrorMessage, isDemoMode } from '../lib/api'
+import { brazilDateKey } from '../lib/date'
+import type { DietMealType, DietMealTypeScheduleEntry } from '../lib/dietMealTypes'
 import { clearDietCache, readCachedResource, writeCachedResource } from '../lib/resourceCache'
 import type { CreateDietRequest, Diet } from '../types'
 import { createUuid } from '../lib/uuid'
@@ -14,6 +16,7 @@ type DietContextValue = {
   error: string
   selectDiet: (id: string) => void
   createDiet: (data: CreateDietRequest, operationId: string) => Promise<Diet>
+  updateDietMealTypes: (dietId: string, mealTypes: DietMealType[]) => Promise<DietMealTypeScheduleEntry[]>
   deleteDiet: (id: string) => Promise<void>
   reload: () => Promise<void>
 }
@@ -49,6 +52,9 @@ export function DietProvider({ children }: { children: ReactNode }) {
     }
     const cached = isDemoMode ? null : readCachedResource<Diet[]>(user.id, 'diets')
     const cachedHasActiveDiet = !activeDietId || Boolean(cached?.data.some((diet) => diet.id === activeDietId))
+    const cachedHasMealTypeSettings = Boolean(cached?.data.every((diet) =>
+      typeof diet.canManageMealTypes === 'boolean' && Array.isArray(diet.mealTypeSchedule)))
+    const cacheReady = Boolean(cached && cachedHasActiveDiet && cachedHasMealTypeSettings)
     if (cached) {
       setDiets(cached.data)
       setDietsUserId(user.id)
@@ -57,9 +63,9 @@ export function DietProvider({ children }: { children: ReactNode }) {
       setDiets([])
       setDietsUserId(user.id)
     }
-    setLoading(!cached)
+    setLoading(!cacheReady)
     setError('')
-    if (!force && cached?.fresh && cachedHasActiveDiet) return
+    if (!force && cached?.fresh && cacheReady) return
     try {
       const data = isDemoMode ? getDemoDiets() : await api<Diet[]>('/diets', { token, signal })
       if (signal?.aborted || requestId !== requestIdRef.current) return
@@ -93,7 +99,12 @@ export function DietProvider({ children }: { children: ReactNode }) {
     if (!token || !user) throw new Error('Sua sessão expirou. Entre novamente.')
     requestIdRef.current += 1
     const created = isDemoMode
-      ? { id: createUuid(), ...data }
+      ? {
+        id: createUuid(),
+        ...data,
+        canManageMealTypes: true,
+        mealTypeSchedule: [{ effectiveFrom: data.startDate, mealTypes: [...data.mealTypes] }],
+      }
       : await api<Diet>('/diets', {
         method: 'POST', token, headers: { 'Idempotency-Key': operationId }, body: JSON.stringify(data),
       })
@@ -105,6 +116,36 @@ export function DietProvider({ children }: { children: ReactNode }) {
     setDietsUserId(user.id)
     selectDiet(created.id)
     return created
+  }
+
+  async function updateDietMealTypes(dietId: string, mealTypes: DietMealType[]) {
+    if (!token || !user) throw new Error('Sua sessão expirou. Entre novamente.')
+    let schedule: DietMealTypeScheduleEntry[]
+    if (isDemoMode) {
+      const diet = diets.find((item) => item.id === dietId)
+      if (!diet) throw new Error('Dieta não encontrada.')
+      const today = brazilDateKey()
+      const tomorrow = new Date(`${today}T12:00:00Z`)
+      tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
+      const effectiveFrom = today < diet.startDate ? diet.startDate : tomorrow.toISOString().slice(0, 10)
+      schedule = [
+        ...(diet.mealTypeSchedule ?? []).filter((item) => item.effectiveFrom < effectiveFrom),
+        { effectiveFrom, mealTypes: [...mealTypes] },
+      ]
+      setDemoDietMealTypeSchedule(dietId, schedule)
+    } else {
+      schedule = await api<DietMealTypeScheduleEntry[]>(`/diets/${dietId}/meal-types`, {
+        method: 'PUT', token, body: JSON.stringify({ mealTypes }),
+      })
+      clearDietCache(user.id, dietId)
+    }
+
+    setDiets((current) => {
+      const next = current.map((diet) => diet.id === dietId ? { ...diet, mealTypeSchedule: schedule } : diet)
+      if (!isDemoMode) writeCachedResource(user.id, 'diets', next)
+      return next
+    })
+    return schedule
   }
 
   async function deleteDiet(id: string) {
@@ -125,7 +166,7 @@ export function DietProvider({ children }: { children: ReactNode }) {
   const activeDiet = visibleDiets.find((diet) => diet.id === activeDietId) ?? null
   const visibleLoading = loading || Boolean(user && dietsUserId !== user.id)
   return (
-    <DietContext.Provider value={{ diets: visibleDiets, activeDiet, activeDietId, loading: visibleLoading, error, selectDiet, createDiet, deleteDiet, reload }}>
+    <DietContext.Provider value={{ diets: visibleDiets, activeDiet, activeDietId, loading: visibleLoading, error, selectDiet, createDiet, updateDietMealTypes, deleteDiet, reload }}>
       {children}
     </DietContext.Provider>
   )

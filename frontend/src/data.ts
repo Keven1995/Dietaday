@@ -1,13 +1,17 @@
 import type { Diet, Invitation, Meal, Member } from './types'
+import { DIET_MEAL_TYPES, type DietMealTypeScheduleEntry } from './lib/dietMealTypes'
 
 export const initialDiets: Diet[] = [
-  { id: '1', name: 'Equilíbrio diário', startDate: '2026-09-01', endDate: '2026-09-30', competitiveMode: false },
-  { id: '2', name: 'Mais energia', startDate: '2026-10-01', endDate: '2026-10-21', competitiveMode: false },
+  { id: '1', name: 'Equilíbrio diário', startDate: '2026-09-01', endDate: '2026-09-30', competitiveMode: false,
+    canManageMealTypes: true, mealTypeSchedule: [{ effectiveFrom: '2026-09-01', mealTypes: [...DIET_MEAL_TYPES] }] },
+  { id: '2', name: 'Mais energia', startDate: '2026-10-01', endDate: '2026-10-21', competitiveMode: false,
+    canManageMealTypes: true, mealTypeSchedule: [{ effectiveFrom: '2026-10-01', mealTypes: [...DIET_MEAL_TYPES] }] },
 ]
 
 const invitedDemoDiet: Diet = { id: '3', name: 'Hábitos em família', startDate: '2026-09-05', endDate: '2026-10-05', competitiveMode: false }
 let demoInvitationResponse: 'accepted' | 'declined' | null = null
 const leftDemoDietIds = new Set<string>()
+const demoMealTypeSchedules = new Map<string, DietMealTypeScheduleEntry[]>()
 
 export const initialInvitations: Invitation[] = [
   { id: 'demo-invitation-1', dietId: invitedDemoDiet.id, dietName: invitedDemoDiet.name, inviterId: '2', inviterName: 'Rafael Lima', createdAt: '2026-09-05T09:00:00Z' },
@@ -15,7 +19,15 @@ export const initialInvitations: Invitation[] = [
 
 export function getDemoDiets() {
   const diets = demoInvitationResponse === 'accepted' ? [...initialDiets, invitedDemoDiet] : initialDiets
-  return diets.filter((diet) => !leftDemoDietIds.has(diet.id))
+  return diets.filter((diet) => !leftDemoDietIds.has(diet.id)).map((diet) => ({
+    ...diet,
+    canManageMealTypes: diet.id !== invitedDemoDiet.id,
+    mealTypeSchedule: demoMealTypeSchedules.get(diet.id) ?? diet.mealTypeSchedule,
+  }))
+}
+
+export function setDemoDietMealTypeSchedule(dietId: string, schedule: DietMealTypeScheduleEntry[]) {
+  demoMealTypeSchedules.set(dietId, schedule)
 }
 
 export function leaveDemoDiet(dietId: string) {
@@ -24,6 +36,7 @@ export function leaveDemoDiet(dietId: string) {
 
 export function deleteDemoDiet(dietId: string) {
   leftDemoDietIds.add(dietId)
+  demoMealTypeSchedules.delete(dietId)
 }
 
 export function getDemoInvitations() {

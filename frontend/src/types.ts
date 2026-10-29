@@ -1,3 +1,5 @@
+import type { DietMealType, DietMealTypeScheduleEntry } from './lib/dietMealTypes'
+
 export type User = {
   id: string
   email: string
@@ -22,6 +24,8 @@ export type Diet = {
   startDate: string
   endDate: string
   competitiveMode: boolean
+  canManageMealTypes?: boolean
+  mealTypeSchedule?: DietMealTypeScheduleEntry[]
 }
 
 export type MealReaction = {
@@ -133,7 +137,7 @@ export type AuthResponse = {
 
 export type LoginRequest = { email: string; password: string }
 export type RegisterRequest = LoginRequest & { fullName: string; sex: UserSex; birthDate: string }
-export type CreateDietRequest = Omit<Diet, 'id'>
+export type CreateDietRequest = Omit<Diet, 'id' | 'canManageMealTypes' | 'mealTypeSchedule'> & { mealTypes: DietMealType[] }
 export type CreateMealRequest = Pick<Meal, 'mealType' | 'description' | 'mealDate' | 'photoUrl'>
 export type InviteMemberRequest = Pick<User, 'email'>
 export type LeaveDietRequest = { successorId: string | null }
@@ -176,6 +180,7 @@ export type DailyProgress = {
   completedMealTypes: string[]
   dailyGoalCompleted: boolean
   streakDays: number
+  mealTypes?: DietMealType[]
 }
 
 export type RankingParticipant = {

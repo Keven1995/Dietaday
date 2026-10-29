@@ -76,6 +76,8 @@ GET    /diets
 POST   /diets
 PUT    /diets/{dietId}
 DELETE /diets/{dietId}
+GET    /diets/{dietId}/meal-types
+PUT    /diets/{dietId}/meal-types
 POST   /diets/{dietId}/invitations
 POST   /diets/{dietId}/invitation-link
 DELETE /diets/{dietId}/invitation-link
@@ -108,6 +110,13 @@ Uma resposta de dieta inclui `competitiveMode`:
 `competitiveMode` só é definido na criação. Tentativas de alterá-lo depois retornam conflito.
 `POST /diets` exige `Idempotency-Key`; repetir a mesma chave e o mesmo conteúdo retorna a dieta
 criada originalmente, sem criar outra dieta.
+
+`POST /diets` aceita `mealTypes`, uma lista não vazia dos tipos oficiais. Se omitida por um cliente
+antigo, as seis refeições são selecionadas por padrão. A resposta inclui o agendamento versionado
+`mealTypeSchedule` e `canManageMealTypes`, que indica se o usuário autenticado é o responsável atual.
+O `GET /diets/{dietId}/meal-types` retorna as versões; o `PUT` substitui a lista futura e só pode ser
+usado pelo responsável. Alterações passam a valer no dia seguinte (ou na data de início de uma
+dieta que ainda não começou), preservando metas e constância das datas anteriores.
 
 ## Refeições
 
@@ -172,9 +181,13 @@ GET /diets/{dietId}/progress
   "completedMeals": 4,
   "completedMealTypes": ["Café da manhã", "Almoço", "Jantar", "Ceia"],
   "dailyGoalCompleted": false,
-  "streakDays": 3
+  "streakDays": 3,
+  "mealTypes": ["Café da manhã", "Lanche da manhã", "Almoço", "Lanche da tarde", "Jantar", "Ceia"]
 }
 ```
+
+`dailyGoal` e `streakDays` usam a lista de refeições vigente para cada data; dietas personalizadas
+podem ter uma meta diária diferente de seis.
 
 O envio de refeições sincronizadas usa o valor do header `Idempotency-Key` como `operationId`.
 

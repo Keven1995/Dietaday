@@ -5,6 +5,7 @@ import com.dietapp.common.NotFoundException;
 import com.dietapp.diet.Diet;
 import com.dietapp.diet.DietMember;
 import com.dietapp.diet.DietMemberRepository;
+import com.dietapp.diet.DietMealTypeService;
 import com.dietapp.diet.DietService;
 import com.dietapp.meal.MealRepository;
 import com.dietapp.security.CurrentUser;
@@ -39,11 +40,13 @@ public class MealNudgeService {
     private final PushSubscriptionRepository pushSubscriptions;
     private final PushNotificationService push;
     private final Clock clock;
+    private final DietMealTypeService dietMealTypes;
 
     public MealNudgeService(MealNudgeRepository nudges, MealRepository meals, DietService diets,
                             DietMemberRepository members, CurrentUser currentUser,
                             SecurityAuditService audit, PushSubscriptionRepository pushSubscriptions,
-                            PushNotificationService push, Clock clock, UserRepository users) {
+                            PushNotificationService push, Clock clock, UserRepository users,
+                            DietMealTypeService dietMealTypes) {
         this.nudges = nudges;
         this.meals = meals;
         this.diets = diets;
@@ -54,6 +57,7 @@ public class MealNudgeService {
         this.pushSubscriptions = pushSubscriptions;
         this.push = push;
         this.clock = clock;
+        this.dietMealTypes = dietMealTypes;
     }
 
     @Transactional(readOnly = true)
@@ -67,8 +71,10 @@ public class MealNudgeService {
         boolean activeDiet = isActiveToday(diet, today);
         Set<MealNudgeType> registeredTypes = registeredTypes(dietId, recipientId, today);
         Set<MealNudgeType> alreadySent = new HashSet<>(nudges.findSentTypes(dietId, senderId, recipientId, today));
+        Set<String> configuredTypes = Set.copyOf(dietMealTypes.mealTypesForDate(dietId, today));
 
         List<MealNudgeEligibilityResponse.MealEligibility> mealsForToday = Arrays.stream(MealNudgeType.values())
+                .filter(type -> configuredTypes.contains(type.label()))
                 .map(type -> eligibilityFor(type, senderId, recipientId, recipient, activeDiet,
                         registeredTypes.contains(type), alreadySent.contains(type)))
                 .toList();
@@ -81,6 +87,7 @@ public class MealNudgeService {
         UUID senderId = currentUser.id();
         LocalDate today = LocalDate.now(clock);
         boolean activeDiet = isActiveToday(diet, today);
+        Set<String> configuredTypes = Set.copyOf(dietMealTypes.mealTypesForDate(dietId, today));
         var memberList = members.findAllByDietId(dietId);
 
         var registeredByMember = meals.findDietDailyMealEntries(dietId, today).stream()
@@ -95,6 +102,7 @@ public class MealNudgeService {
             Set<MealNudgeType> registered = toOfficialTypes(registeredByMember.getOrDefault(recipient.getId(), Set.of()));
             Set<MealNudgeType> sent = sentByMember.getOrDefault(recipient.getId(), Set.of());
             List<MealNudgeEligibilityResponse.MealEligibility> memberMeals = Arrays.stream(MealNudgeType.values())
+                    .filter(type -> configuredTypes.contains(type.label()))
                     .map(type -> eligibilityFor(type, senderId, recipient.getId(), recipient, activeDiet,
                             registered.contains(type), sent.contains(type)))
                     .toList();
@@ -118,6 +126,9 @@ public class MealNudgeService {
                 .orElseThrow(() -> new NotFoundException("Diet member not found"));
         MealNudgeType mealType = MealNudgeType.fromApiValue(request.mealType());
         LocalDate today = LocalDate.now(clock);
+        if (!dietMealTypes.mealTypesForDate(dietId, today).contains(mealType.label())) {
+            throw new ConflictException("Esta refeição não está configurada nesta dieta.");
+        }
 
         if (!isActiveToday(diet, today)) {
             throw new ConflictException("Esta dieta não está ativa hoje.");

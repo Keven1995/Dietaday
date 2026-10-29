@@ -12,7 +12,8 @@ const flow = vi.hoisted(() => ({
   api: vi.fn(),
   uploadPhoto: vi.fn(),
   user: { id: 'offline-flow-user', fullName: 'Pessoa Offline', email: 'offline@example.com' },
-  diet: { id: 'offline-flow-diet', name: 'Dieta offline', startDate: '2026-10-01', endDate: '2026-10-31', competitiveMode: false },
+  diet: { id: 'offline-flow-diet', name: 'Dieta offline', startDate: '2026-10-01', endDate: '2026-10-31', competitiveMode: false,
+    mealTypeSchedule: undefined as Array<{ effectiveFrom: string; mealTypes: string[] }> | undefined },
   online: false,
   scenario: 'lost-create-response',
   postAttempts: [] as string[],
@@ -119,7 +120,7 @@ async function retryAfterConnection() {
 describe('offline meal flow from form to history', () => {
   beforeEach(() => {
     flow.user = { id: `offline-user-${Date.now()}-${Math.random()}`, fullName: 'Pessoa Offline', email: 'offline@example.com' }
-    flow.diet = { id: `offline-diet-${Date.now()}-${Math.random()}`, name: 'Dieta offline', startDate: '2026-10-01', endDate: '2026-10-31', competitiveMode: false }
+    flow.diet = { id: `offline-diet-${Date.now()}-${Math.random()}`, name: 'Dieta offline', startDate: '2026-10-01', endDate: '2026-10-31', competitiveMode: false, mealTypeSchedule: undefined }
     flow.online = false
     flow.scenario = 'lost-create-response'
     flow.postAttempts = []
@@ -213,6 +214,18 @@ describe('offline meal flow from form to history', () => {
     expect(queued).toHaveLength(1)
     expect(queued[0].request.mealType).toBe('Almoço')
     expect(queued[0].request.mealDate).toBe('2026-10-08')
+  })
+
+  it('only offers meal types configured for the registration date', () => {
+    flow.diet.mealTypeSchedule = [
+      { effectiveFrom: '2026-10-01', mealTypes: ['Almoço', 'Ceia'] },
+      { effectiveFrom: '2026-10-09', mealTypes: ['Ceia'] },
+    ]
+    renderMealFlow('/refeicoes/nova?mealDate=2026-10-08')
+
+    const mealTypeSelect = screen.getByLabelText('Tipo de refeição') as HTMLSelectElement
+    expect(Array.from(mealTypeSelect.options).map((option) => option.text)).toEqual(['Almoço', 'Ceia'])
+    expect(mealTypeSelect.value).toBe('Almoço')
   })
 
   it('retains a locally saved meal in history and retries an ambiguous create once by idempotency key', async () => {

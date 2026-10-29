@@ -18,6 +18,7 @@ import { completeFeatureCampaign } from '../lib/featureDiscoveryTelemetry'
 import { useDailyProgress } from '../hooks/useDailyProgress'
 import { localDateKey, mealDateKey, mealTime, parseLocalDate } from '../lib/date'
 import { isDietPeriodEnded } from '../lib/dietPeriod'
+import { dietMealTypesForDate } from '../lib/dietMealTypes'
 import { getCalendarMealStatus } from '../lib/dailyCalendar'
 import { useAuth } from '../state/AuthContext'
 import { useDiets } from '../state/DietContext'
@@ -27,12 +28,20 @@ import { useCelebration } from '../state/CelebrationContext'
 import { HalloweenMessage } from '../seasonal/halloween'
 import { useHalloween } from '../seasonal/halloween'
 import type { FeatureDiscoveryContext, FeatureDiscoveryResource } from '../lib/featureDiscovery'
-import type { Meal, Member, WaterToday } from '../types'
+import type { Diet, Meal, Member, WaterToday } from '../types'
 
 const NO_MEALS: Meal[] = []
 const NO_MEMBERS: Member[] = []
 
-function WeekCalendar({ dates, meals, todayKey, selectedKey, periodStart, onSelect }: { dates: Date[]; meals: Meal[]; todayKey: string; selectedKey: string; periodStart: Date; onSelect: (dateKey: string) => void }) {
+function WeekCalendar({ dates, meals, todayKey, selectedKey, periodStart, mealTypeSchedule, onSelect }: {
+  dates: Date[]
+  meals: Meal[]
+  todayKey: string
+  selectedKey: string
+  periodStart: Date
+  mealTypeSchedule: Diet['mealTypeSchedule']
+  onSelect: (dateKey: string) => void
+}) {
   return (
     <section className="calendar-card">
       <div className="section-heading">
@@ -42,7 +51,7 @@ function WeekCalendar({ dates, meals, todayKey, selectedKey, periodStart, onSele
         {dates.map((date) => {
           const key = localDateKey(date)
           const dayMeals = meals.filter((meal) => mealDateKey(meal.mealDate) === key)
-          const status = getCalendarMealStatus(dayMeals)
+          const status = getCalendarMealStatus(dayMeals, dietMealTypesForDate(mealTypeSchedule, key))
           const isSelected = key === selectedKey
           const isToday = key === todayKey
           return (
@@ -342,7 +351,7 @@ export function Dashboard() {
               onDiscoverHydration={openWaterPage}
             /></AnimatedCard>
            {showCompetitiveProgress && <div className="daily-progress-grid"><AnimatedCard delay={2}><DailyGoalCard progress={dailyProgress.data} /></AnimatedCard><AnimatedCard delay={3}><StreakAnimation days={dailyProgress.data.streakDays} dietId={dailyProgress.data.dietId} eventDate={dailyProgress.data.date} /></AnimatedCard></div>}
-            <AnimatedCard delay={showCompetitiveProgress ? 4 : 2}><WeekCalendar dates={days} meals={meals} todayKey={todayKey} selectedKey={selectedDate} periodStart={start} onSelect={setSelectedDate} /></AnimatedCard>
+             <AnimatedCard delay={showCompetitiveProgress ? 4 : 2}><WeekCalendar dates={days} meals={meals} todayKey={todayKey} selectedKey={selectedDate} periodStart={start} mealTypeSchedule={activeDiet.mealTypeSchedule} onSelect={setSelectedDate} /></AnimatedCard>
             <div className="dashboard-grid">
               <AnimatedCard delay={showCompetitiveProgress ? 5 : 3}><TodayMeals meals={selectedMeals} loading={mealsResource.loading} dateKey={selectedDate} firstOwnMeal={needsFirstMealPrompt} readOnly={dietReadOnly} /></AnimatedCard>
               <AnimatedCard delay={showCompetitiveProgress ? 6 : 4}><MembersSummary
