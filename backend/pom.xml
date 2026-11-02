@@ -15,7 +15,7 @@
     <properties>
         <java.version>17</java.version>
         <jjwt.version>0.12.6</jjwt.version>
-        <postgresql.version>42.7.12</postgresql.version>
+        <postgresql.version>42.7.14</postgresql.version>
         <bouncycastle.version>1.86</bouncycastle.version>
         <jose4j.version>0.9.7</jose4j.version>
     </properties>
