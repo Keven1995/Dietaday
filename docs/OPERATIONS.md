@@ -87,6 +87,13 @@ O endpoint de teste manual deve permanecer desativado em produção:
 APP_PUSH_TEST_ENABLED=false
 ```
 
+## Memória da JVM
+
+A imagem do backend define `JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=50"`. Na instância
+de 512 MB do Render, isso limita o heap a aproximadamente 256 MB e deixa o restante
+para metaspace, threads, code cache e buffers nativos. Se o plano de instância mudar,
+revise esse percentual e acompanhe o consumo de memória no Render.
+
 ## Pool de conexões PostgreSQL
 
 O pool Hikari usa limites conservadores para o backend do Render e permite sobrescrita por

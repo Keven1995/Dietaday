@@ -2255,6 +2255,31 @@ class ApiIntegrationTest {
     }
 
     @Test
+    void notificationSummaryReturnsNotificationsUnreadCountAndPendingInvitations() throws Exception {
+        String ownerEmail = "summary-owner-" + UUID.randomUUID() + "@example.com";
+        String memberEmail = "summary-member-" + UUID.randomUUID() + "@example.com";
+        JsonNode owner = register("Summary Owner", ownerEmail);
+        JsonNode member = register("Summary Member", memberEmail);
+        String dietId = createDiet(owner, "Summary Diet");
+        joinDiet(owner, member, dietId, memberEmail);
+        String mealId = createMeal(member, dietId, "Summary meal");
+        createComment(owner, dietId, mealId, "Summary notification");
+        String invitationDietId = createDiet(owner, "Summary Invitation Diet");
+        invite(owner, invitationDietId, memberEmail);
+
+        mvc.perform(get("/api/notifications/summary").header("Authorization", bearer(member)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.notifications.length()").value(1))
+                .andExpect(jsonPath("$.notifications[0].type").value("MEAL_COMMENTED"))
+                .andExpect(jsonPath("$.notifications[0].dietId").value(dietId))
+                .andExpect(jsonPath("$.unreadCount").value(1))
+                .andExpect(jsonPath("$.invitations.length()").value(1))
+                .andExpect(jsonPath("$.invitations[0].dietId").value(invitationDietId))
+                .andExpect(jsonPath("$.invitations[0].dietName").value("Summary Invitation Diet"))
+                .andExpect(jsonPath("$.invitations[0].inviterName").value("Summary Owner"));
+    }
+
+    @Test
     void mealNudgesSupportEveryOfficialMealAndAppearInTheUnifiedNotificationFeed() throws Exception {
         String ownerEmail = "nudge-owner-" + UUID.randomUUID() + "@example.com";
         String recipientEmail = "nudge-recipient-" + UUID.randomUUID() + "@example.com";

@@ -112,6 +112,12 @@ export type Invitation = {
   createdAt: string
 }
 
+export type NotificationSummary = {
+  notifications: NotificationFeedItem[]
+  unreadCount: number
+  invitations: Invitation[]
+}
+
 export type CreatedDietInvitationLink = {
   token: string
   expiresAt: string

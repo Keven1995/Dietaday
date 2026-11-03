@@ -4,7 +4,7 @@ import { useCompetitiveMode } from './useCompetitiveMode'
 import { useAuth } from '../state/AuthContext'
 import type { RankingActivity } from '../types'
 
-const POLL_INTERVAL_MS = 5_000
+const POLL_INTERVAL_MS = 30_000
 
 function seenKey(userId: string, dietId: string) {
   return `Dietaday_ranking_activity_seen:${userId}:${dietId}`
@@ -32,6 +32,7 @@ export function useCompetitiveRankingActivity() {
     let cancelled = false
     let controller: AbortController | null = null
     const checkActivity = async () => {
+      if (document.visibilityState !== 'visible' || !navigator.onLine) return
       controller?.abort()
       controller = new AbortController()
       try {
@@ -41,12 +42,17 @@ export function useCompetitiveRankingActivity() {
         // The ranking widget remains available when activity polling is temporarily unavailable.
       }
     }
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void checkActivity()
+    }
     void checkActivity()
-    const timer = window.setInterval(() => void checkActivity(), POLL_INTERVAL_MS)
+    const timer = window.setInterval(refreshWhenVisible, POLL_INTERVAL_MS)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
     return () => {
       cancelled = true
       controller?.abort()
       window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
     }
   }, [activeDiet?.id, enabled, token, user?.id])
 

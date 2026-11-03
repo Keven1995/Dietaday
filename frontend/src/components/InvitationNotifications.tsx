@@ -3,10 +3,10 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getDemoInvitations, respondToDemoInvitation } from '../data'
 import { api, getErrorMessage, isDemoMode } from '../lib/api'
-import { notificationAction, notificationDeepLink, notificationMessage, unreadNotifications } from '../lib/notifications'
+import { notificationAction, notificationDeepLink, notificationMessage } from '../lib/notifications'
 import { useAuth } from '../state/AuthContext'
 import { useDiets } from '../state/DietContext'
-import type { Invitation, NotificationFeedItem } from '../types'
+import type { Invitation, NotificationFeedItem, NotificationSummary } from '../types'
 import { Button } from './Ui'
 
 export function InvitationNotifications() {
@@ -44,29 +44,22 @@ export function InvitationNotifications() {
       requestRef.current = { id, controller }
       setLoading(true)
       try {
-        const [invitationResult, notificationResult, unreadResult] = await Promise.allSettled([
-          isDemoMode ? Promise.resolve(getDemoInvitations()) : api<Invitation[]>('/invitations', { token, signal: controller.signal }),
-          isDemoMode ? Promise.resolve([] as NotificationFeedItem[]) : api<NotificationFeedItem[]>('/notifications', { token, signal: controller.signal }),
-          isDemoMode ? Promise.resolve({ count: 0 }) : api<{ count: number }>('/notifications/unread-count', { token, signal: controller.signal }),
-        ])
+        const summary = isDemoMode
+          ? {
+              notifications: [] as NotificationFeedItem[],
+              unreadCount: 0,
+              invitations: getDemoInvitations(),
+            }
+          : await api<NotificationSummary>('/notifications/summary', { token, signal: controller.signal })
         if (!controller.signal.aborted && requestRef.current?.id === id) {
-          const errors: string[] = []
-          if (invitationResult.status === 'fulfilled') setInvitations(invitationResult.value)
-          else errors.push(getErrorMessage(invitationResult.reason, 'Não foi possível carregar os convites.'))
-          if (notificationResult.status === 'fulfilled') {
-            setNotifications(notificationResult.value)
-            setUnreadCount(unreadResult.status === 'fulfilled'
-              ? unreadResult.value.count
-              : unreadNotifications(notificationResult.value))
-          } else {
-            errors.push(getErrorMessage(notificationResult.reason, 'Não foi possível carregar as notificações.'))
-            if (unreadResult.status === 'fulfilled') setUnreadCount(unreadResult.value.count)
-          }
-          setError(errors.join(' '))
+          setInvitations(summary.invitations)
+          setNotifications(summary.notifications)
+          setUnreadCount(summary.unreadCount)
+          setError('')
         }
       } catch (loadError) {
         if (!controller.signal.aborted && requestRef.current?.id === id) {
-          setError(getErrorMessage(loadError, 'Não foi possível carregar os convites.'))
+          setError(getErrorMessage(loadError, 'Não foi possível carregar convites e notificações.'))
         }
       } finally {
         if (!controller.signal.aborted && requestRef.current?.id === id) setLoading(false)
@@ -77,7 +70,7 @@ export function InvitationNotifications() {
     const refreshWhenVisible = () => {
       if (document.visibilityState === 'visible' && navigator.onLine) void load()
     }
-    const timer = window.setInterval(refreshWhenVisible, 30_000)
+    const timer = window.setInterval(refreshWhenVisible, 60_000)
     document.addEventListener('visibilitychange', refreshWhenVisible)
     return () => {
       window.clearInterval(timer)
