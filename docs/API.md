@@ -161,9 +161,14 @@ operação não cria outro comentário nem outra notificação.
 ```text
 GET /notifications
 GET /notifications/unread-count
+GET /notifications/summary
 PUT /notifications/{id}/read
 PUT /notifications/read-all
 ```
+
+`GET /notifications/summary` consolida, em uma única resposta, o feed de notificações,
+a contagem de não lidas e os convites pendentes. O frontend usa esse endpoint para
+evitar três requisições periódicas separadas.
 
 O progresso diário da dieta considera os seis tipos oficiais de refeição
 (`Café da manhã`, `Lanche da manhã`, `Almoço`, `Lanche da tarde`, `Jantar` e
@@ -304,7 +309,7 @@ GET /diets/{dietId}/ranking/activity
 
 Enquanto a dieta está ativa, `officialPoints` e `position` incluem imediatamente os eventos pendentes não revogados. O fechamento diário consolida esses eventos em `ranking_scores`, sem alterar o resultado exibido nem duplicar pontos. `pendingPoints` indica a parcela ainda não consolidada. A resposta canônica contém o período da dieta, o status do ranking, a data do último fechamento, o usuário atual, os participantes e a paginação. O endpoint `/ranking/me` aceita os mesmos parâmetros `page` e `size`:
 
-`/ranking/activity` exige membership e retorna a pontuação mais recente registrada por outro participante. O frontend consulta esse recurso periodicamente para destacar o acesso ao ranking até que o usuário clique no ícone. O autor da própria pontuação não recebe essa notificação.
+`/ranking/activity` exige membership e retorna a pontuação mais recente registrada por outro participante. O frontend consulta esse recurso a cada 30 segundos, somente com a aba visível, para destacar o acesso ao ranking até que o usuário clique no ícone. O autor da própria pontuação não recebe essa notificação.
 
 ```json
 {

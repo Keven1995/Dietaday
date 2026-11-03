@@ -7,5 +7,6 @@ RUN mvn -B -DskipTests package
 FROM eclipse-temurin:17-jre
 WORKDIR /app
 COPY --from=build /app/target/backend-*.jar app.jar
+ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=50"
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]

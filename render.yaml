@@ -31,3 +31,5 @@ services:
         sync: false
       - key: VAPID_SUBJECT
         value: mailto:dev@dietaday.com.br
+      - key: JAVA_TOOL_OPTIONS
+        value: "-XX:MaxRAMPercentage=50"

@@ -51,9 +51,13 @@ public class RankingService {
         if (!diet.isCompetitiveMode()) throw new ConflictException("This diet is not competitive");
         UUID currentUserId = currentUser.id();
         RankingFinalization finalization = finalizations.findByDietId(dietId).orElse(null);
-        List<RankingParticipant> ordered = rankingParticipants(dietId, finalization == null);
+        List<DietMember> dietMembers = members.findAllByDietId(dietId);
+        Map<UUID, String> memberNames = dietMembers.stream()
+                .collect(Collectors.toMap(member -> member.getUser().getId(),
+                        member -> member.getUser().getFullName()));
         Map<UUID, RankingScore> scoreByUser = scores.findAllByDietId(dietId).stream()
                 .collect(Collectors.toMap(score -> score.getUser().getId(), score -> score));
+        List<RankingParticipant> ordered = rankingParticipants(dietId, finalization == null, dietMembers, scoreByUser);
         int from = Math.min((int) pageable.getOffset(), ordered.size());
         int to = Math.min(from + pageable.getPageSize(), ordered.size());
         List<RankingParticipantResponse> participants = new ArrayList<>();
@@ -61,7 +65,7 @@ public class RankingService {
             RankingParticipant participant = ordered.get(index);
             RankingScore score = scoreByUser.get(participant.userId());
             participants.add(new RankingParticipantResponse(index + 1, participant.userId(),
-                    score == null ? memberName(dietId, participant.userId()) : score.getUser().getFullName(),
+                    score == null ? memberNames.getOrDefault(participant.userId(), "") : score.getUser().getFullName(),
                     participant.points(), participant.activeDays(), participant.firstReachedAt()));
         }
 
@@ -126,9 +130,9 @@ public class RankingService {
                 .orElseGet(RankingActivityResponse::empty);
     }
 
-    private List<RankingParticipant> rankingParticipants(UUID dietId, boolean includePending) {
-        Map<UUID, RankingScore> scoreByUser = scores.findAllByDietId(dietId).stream()
-                .collect(Collectors.toMap(score -> score.getUser().getId(), score -> score));
+    private List<RankingParticipant> rankingParticipants(UUID dietId, boolean includePending,
+                                                         List<DietMember> dietMembers,
+                                                         Map<UUID, RankingScore> scoreByUser) {
         Map<UUID, List<RankingPointEvent>> pendingByUser = new HashMap<>();
         if (includePending) {
             events.findAllByDietIdAndStatus(dietId, RankingPointEvent.Status.PENDING)
@@ -136,7 +140,7 @@ public class RankingService {
                             .add(event));
         }
         List<RankingParticipant> participants = new ArrayList<>();
-        for (DietMember member : members.findAllByDietId(dietId)) {
+        for (DietMember member : dietMembers) {
             RankingScore score = scoreByUser.get(member.getUser().getId());
             List<RankingPointEvent> pending = pendingByUser.getOrDefault(member.getUser().getId(), List.of());
             int points = score == null ? 0 : score.getPoints();
@@ -169,14 +173,6 @@ public class RankingService {
                         dietId, userId, RankingPointEvent.Status.PENDING).stream()
                 .filter(event -> lastClosedDate == null || event.getEventDate().isAfter(lastClosedDate))
                 .toList();
-    }
-
-    private String memberName(UUID dietId, UUID userId) {
-        return members.findAllByDietId(dietId).stream()
-                .map(DietMember::getUser)
-                .filter(user -> user.getId().equals(userId))
-                .map(User::getFullName)
-                .findFirst().orElse("");
     }
 
     private UUID id(User user) {
